@@ -47,6 +47,24 @@ These controls prove emulator proxy forwarding, not true-device VPN authorizatio
 or full interoperability with every VLESS extension. Host-side OpenSSL tests
 separately verify accepted CA chains, SNI, malformed frames and HTTPS destinations.
 
+## Subscription device verification
+
+`GET /test-admin/subscription/source` supplies a public local starter profile with HTTP **18890**, SOCKS disabled,
+the public `subscription-fixture` / `public-proxy-password` account and a hosts override for `subscription.device.test`.
+After importing it, add `http://subscription.device.test:18088/public-subscription.yaml` with a blank name,
+server interval enabled and the internal HTTP download route. Direct SDK DNS fails; the authenticated internal
+HTTP route resolves the app's hosts override and returns the profile, UTF-8 name, quota, expiry and homepage.
+
+`/test-admin/subscription/mode/{ready,custom,bad-http,invalid-config,slow,no-metadata,port-conflict}` controls responses.
+`custom` requires User-Agent `clash-public-fixture/2`, changes quota from 8 KB to 16 KB and suggests four hours;
+manual interval zero must remain off. `slow` responds after four seconds, allowing a three-second deadline control.
+`port-conflict` returns a valid profile using port 18088, already occupied by this independent fixture: active-update
+failure must restore prior file/metadata and reload HTTP18890. The other failure modes must not replace prior data.
+`/test-admin/subscription/state` exposes public counters and a custom-agent boolean, without recording origin request URLs or credentials.
+The right-click homepage opens `/public-home` in the system browser; `homeRequests` proves the visit.
+Verify cold startup, selected-profile-only backup/restore and preserved request settings, then restore the user's
+original runtime/selections/window and remove every owned public profile, backup, download, test app and forward.
+
 ## HTTP / SOCKS device verification
 
 `POST /test-admin/forward/start` starts the same optional plain/TLS fixture ports.

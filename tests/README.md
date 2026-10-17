@@ -181,6 +181,7 @@ export CLAHSOS_TYPESCRIPT=/tmp/clashos-test-tools/node_modules/typescript
 node tests/controller_access_test.cjs
 node tests/session_lifecycle_test.cjs
 node tests/profile_files_test.cjs
+CLASHOS_NATIVE_TESTS="$PWD/.host-build/native/native_tests" node tests/subscription_test.cjs
 node tests/appearance_test.cjs
 node tests/backup_migration_test.cjs
 node tests/backup_archive_test.cjs
@@ -190,6 +191,9 @@ node tests/group_icons_test.cjs
 ```
 
 归档测试需要先完成上述原生构建；`CLASHOS_NATIVE_TESTS` 可覆盖原生测试程序路径。
+订阅专项执行生产请求/解析/存储/ZIP 转换代码及实际原生配置校验，检查 UA、下载路径、总超时、
+流量单位与到期时间、UTF-8 名称、服务端/手动更新间隔、新修改保护、文件失败与运行配置应用失败撤回。
+其 HTTP SDK 接口由可控响应替代；实际代理认证、端口、系统浏览器和设备生命周期验证见独立设备测试应用说明。
 其余服务测试使用临时文件与系统接口替身，设备验证与主机回归分开进行，临时截图和逐次记录不纳入源码仓库。
 TUN 主机测试采用真实 lwIP 与数据包，但不能替代真机 VPN 授权与保活验证。
 

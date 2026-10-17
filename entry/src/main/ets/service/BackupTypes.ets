@@ -1,6 +1,7 @@
 import { AppearanceSettings } from '../theme/AppearanceTypes';
 import { GroupIconBackup } from './GroupIconBackup';
 import { NetworkBackup } from './NetworkBackupTypes';
+import { SubscriptionData } from './SubscriptionTypes';
 
 export const BACKUP_LIMIT: number = 32 * 1024 * 1024;
 
@@ -25,6 +26,7 @@ export interface BackupResource {
 }
 
 export interface BackupProfile {
+  subscription?: SubscriptionData;
   sequence?: string;
   script?: string;
   merge?: string;

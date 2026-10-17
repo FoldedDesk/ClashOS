@@ -44,13 +44,14 @@ function load(name) {
   if (name === '@kit.AbilityKit') return {};
   if (name === '@kit.CoreFileKit') return {fileIo, picker: {}, fileUri: {}};
   if (name === '@kit.ArkTS') return {util};
+  if (name === '@ohos.url') return {default: {URL}};
   if (name === '@kit.NetworkKit') return {http: {RequestMethod: {GET: 'GET'}, HttpDataType: {STRING: 0}, createHttp: () => ({request: async () => ({responseCode: 200, result: responseBody}), destroy() {}})}};
   if (name === './ClashNativeCore') return {ClashNativeCore: Native};
   if (name === './NativeStyles') return load('../theme/NativeStyles');
   if (modules.has(name)) return modules.get(name);
   const file = path.resolve(__dirname, '../entry/src/main/ets/service', name + '.ets'), m = {exports: {}};
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020}}).outputText;
-  vm.runInNewContext(code, {require: load, module: m, exports: m.exports, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, Date, Number, JSON, Error, Set}, {filename: file});
+  vm.runInNewContext(code, {require: load, module: m, exports: m.exports, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, Date, Number, JSON, Error, Set, setTimeout, clearTimeout}, {filename: file});
   modules.set(name, m.exports); return m.exports;
 }
 (async () => {

@@ -44,6 +44,7 @@ import { ProfileEditorDialog, ProfileInfoDialog } from '../components/ProfileDia
 import { ClashApi, ClashCoreLog, ClashConnection, ClashProxyGroup, ClashProxyNode, ClashProxyProvider, ClashRule, ClashRuleProvider, ClashRulePayload, ClashSnapshot, CoreDiagnostics } from '../service/ClashApi';
 import { ClashNativeCore } from '../service/ClashNativeCore';
 import { ClashProfile, ProfileStore, MergeEditSnapshot, DEFAULT_PROFILE } from '../service/ProfileStore';
+import { SubscriptionOptions, subscriptionTraffic, subscriptionExpiry, subscriptionUrl } from '../service/SubscriptionTypes';
 import { VpnTunnelService } from '../service/VpnTunnelService';
 import { CoreRuntime, VpnState, emptyRuntime } from '../service/CoreSessionTypes';
 import { CoreSessionCoordinator } from '../service/CoreSessionCoordinator';
@@ -538,9 +539,10 @@ struct Index {
     }
   }
 
-  private async activateProfile(profile: ClashProfile): Promise<void> {
-    if (this.tunBusy) { this.notice = '内核正在切换，请稍后重试'; return; }
+  private async activateProfile(profile: ClashProfile, requireApplied: boolean = false): Promise<void> {
+    if (this.tunBusy) { this.notice = '内核正在切换，请稍后重试'; if (requireApplied) throw new Error(this.notice); return; }
     if (!this.coreConnected) {
+      if (requireApplied) throw new Error('内核连接已变化');
       this.activeProfileId = profile.id;
       this.persistSettings();
       this.notice = `已选择「${profile.name}」，将在内核启动后加载`;
@@ -567,6 +569,7 @@ struct Index {
       if(this.selectedTab === 7) await this.refreshDnsStatus();
     } catch (error) {
       this.notice = `加载失败：${(error as Error).message}`;
+      if (requireApplied) throw new Error((error as Error).message || '配置未能应用');
     }
   }
 
@@ -977,19 +980,19 @@ struct Index {
   private openProfileInfo(profile?: ClashProfile): void {
     this.dialogController = new CustomDialogController({
       builder: ProfileInfoDialog({ title: profile === undefined ? '添加远程订阅' : '编辑配置信息',
-        initialName: profile?.name ?? '远程订阅', initialUrl: profile?.sourceUrl ?? this.subscriptionUrl,
+        initialName: profile?.name ?? '', initialUrl: profile?.sourceUrl ?? this.subscriptionUrl,
         initialInterval: profile?.updateInterval ?? 0, requireUrl: profile === undefined,
-        onSave: async (name: string, url: string, interval: number): Promise<void> => {
+        initialOptions: profile?.subscription?.options, initialFollowInterval: profile?.subscription?.followInterval ?? profile === undefined,
+        onSave: async (name: string, url: string, interval: number | undefined, options: SubscriptionOptions): Promise<void> => {
           if (this.profileStore === undefined) throw new Error('配置目录不可用');
           if (profile === undefined) {
-            const created: ClashProfile = await this.profileStore.importSubscription(name, url);
-            const saved: ClashProfile = this.profileStore.updateInfo(created, name, url, interval);
+            const saved: ClashProfile = await this.profileStore.importSubscription(name, url, options, interval);
             this.subscriptionUrl = '';
             this.reloadProfiles();
             await this.activateProfile(saved);
           } else {
             if (this.updatingProfiles.indexOf(profile.id) >= 0 || this.tunBusy) throw new Error('配置正在更新，请稍后重试');
-            const saved: ClashProfile = this.profileStore.updateInfo(profile, name, url, interval);
+            const saved: ClashProfile = this.profileStore.updateInfo(profile, name, url, interval, options);
             if (saved.name !== profile.name && this.activeProfileId === profile.id && this.coreConnected && this.internalCore &&
               (this.profileStore.globalScriptText() || this.profileStore.profileScriptText(saved))) {
               this.updatingProfiles = [...this.updatingProfiles, profile.id]; this.mutationVersion++;
@@ -1016,16 +1019,26 @@ struct Index {
   private async updateSubscription(profile: ClashProfile): Promise<void> {
     if (this.profileStore === undefined || this.updatingProfiles.indexOf(profile.id) >= 0) return;
     this.updatingProfiles = [...this.updatingProfiles, profile.id];
+    this.notice = `正在更新「${profile.name}」…`;
     try {
-      const updated: ClashProfile = await this.profileStore.updateSubscription(profile);
+      const active: boolean = this.profileIsActive(profile.id) && this.coreConnected;
+      const updated: ClashProfile = await this.profileStore.updateSubscription(profile, active ? async (updated: ClashProfile): Promise<void> => this.activateProfile(updated, true) : undefined);
       this.reloadProfiles();
-      if (this.profileIsActive(updated.id)) await this.activateProfile(updated);
-      else this.notice = `已更新「${updated.name}」`;
+      if (!active) this.notice = `已更新「${updated.name}」`;
     } catch (error) {
+      this.reloadProfiles();
       this.notice = `更新失败：${(error as Error).message}`;
     } finally {
       this.updatingProfiles = this.updatingProfiles.filter((id: string) => id !== profile.id);
     }
+  }
+
+  private async openSubscriptionHome(profile: ClashProfile): Promise<void> {
+    try {
+      const home: string = subscriptionUrl(profile.subscription?.info?.home ?? '', true);
+      const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      await context.openLink(home);
+    } catch (_) { this.notice = '无法打开订阅主页，请检查系统浏览器'; }
   }
 
   private async autoUpdateSubscriptions(): Promise<void> {
@@ -1930,6 +1943,9 @@ struct Index {
           .enabled(profile.sourceUrl.length > 0 && this.updatingProfiles.indexOf(profile.id) < 0)
           .onClick(() => this.updateSubscription(profile));
         MenuItem({ content: '编辑信息', startIcon: $r('app.media.verge_info') }).onClick(() => this.openProfileInfo(profile));
+        if (profile.sourceUrl.length > 0 && profile.subscription?.info?.home) {
+          MenuItem({ content: '订阅主页', startIcon: $r('app.media.verge_connections') }).onClick(() => this.openSubscriptionHome(profile));
+        }
         MenuItem({ content: '编辑配置文件', startIcon: $r('app.media.verge_file') }).onClick(() => this.openEditor(profile));
         MenuItem({ content: '编辑规则', startIcon: $r('app.media.verge_rules') }).onClick(() => this.openRuleEditor(profile));
         MenuItem({ content: '编辑节点', startIcon: $r('app.media.verge_proxies') }).onClick(() => this.openObjectEditor(profile, 0));
@@ -3173,6 +3189,13 @@ struct Index {
         Text(this.formatBytes(profile.size)).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).layoutWeight(1);
         Text(`更新于 ${profile.updatedAt}`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
       }.width('100%');
+      if (profile.sourceUrl.length > 0 && subscriptionTraffic(profile.subscription)) {
+        Text(subscriptionTraffic(profile.subscription)).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
+      }
+      if (profile.sourceUrl.length > 0 && subscriptionExpiry(profile.subscription)) {
+        Text(subscriptionExpiry(profile.subscription)).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily)
+          .fontColor((profile.subscription?.info?.usage?.expire ?? 0) * 1000 <= Date.now() ? this.theme.warning : this.theme.textMuted).width('100%');
+      }
       Divider().color(this.theme.divider);
       Row({ space: 10 }) {
         Button({ type: ButtonType.Normal }) {

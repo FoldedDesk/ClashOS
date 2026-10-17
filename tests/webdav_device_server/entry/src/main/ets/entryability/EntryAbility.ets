@@ -9,6 +9,7 @@ import { probeVlessUdp } from './VlessFixtureProbe';
 import { probeNetworkHttps } from './NetworkFixtureProbe';
 import { HttpIngressFixtureServer } from './HttpIngressFixtureServer';
 import { OsSsReference } from './OsSsReference';
+import { SubscriptionFixture } from './SubscriptionFixture';
 
 interface FixtureFile { text: string; revision: number; }
 
@@ -25,6 +26,7 @@ export default class EntryAbility extends UIAbility {
   private vless: VlessFixtureServer = new VlessFixtureServer();
   private httpIngress: HttpIngressFixtureServer = new HttpIngressFixtureServer();
   private ssReference: OsSsReference = new OsSsReference();
+  private subscription: SubscriptionFixture = new SubscriptionFixture();
 
   onCreate(): void {
     this.server.on('connect', (client: socket.TCPSocketConnection): void => this.accept(client));
@@ -80,6 +82,19 @@ export default class EntryAbility extends UIAbility {
   }
 
   private handle(client: socket.TCPSocketConnection, method: string, path: string, headers: Record<string, string>, body: string): void {
+    if (path === '/test-admin/subscription/state') { this.respond(client, 200, this.subscription.state()); return; }
+    if (path.startsWith('/test-admin/subscription/mode/')) {
+      const mode: string = path.substring('/test-admin/subscription/mode/'.length);
+      if (!['ready', 'custom', 'bad-http', 'invalid-config', 'slow', 'no-metadata', 'port-conflict'].includes(mode)) { this.respond(client, 400, ''); return; }
+      this.subscription.mode = mode; this.respond(client, 200, this.subscription.state()); return;
+    }
+    if (path === '/test-admin/subscription/source') { this.respond(client, 200, this.subscription.source); return; }
+    if (path === '/public-home') { this.subscription.homeRequests++; this.respond(client, 200, '<html><title>ClashOS public subscription fixture</title><body>Public subscription homepage</body></html>', 'Content-Type: text/html\r\n'); return; }
+    if (path === '/public-subscription.yaml' && method === 'GET') {
+      if (!this.subscription.accept(headers['user-agent'] ?? '') || this.subscription.mode === 'bad-http') { this.respond(client, 401, ''); return; }
+      if (this.subscription.mode === 'slow') { setTimeout(() => this.respond(client, 200, this.subscription.source, this.subscription.headers()), 4000); return; }
+      this.respond(client, 200, this.subscription.mode === 'invalid-config' ? 'NOT A CONFIG' : this.subscription.mode === 'port-conflict' ? this.subscription.source.replace('port: 18890', 'port: 18088') : this.subscription.source, this.subscription.headers()); return;
+    }
     if (path === '/test-admin/ss-reference/self-test' && method === 'POST') {
       this.context.resourceManager.getRawFileContent('ss/reference-vectors.json').then((data: Uint8Array) => {
         try { this.respond(client, 200, this.ssReference.selfTest(util.TextDecoder.create('utf-8').decodeToString(data))); }

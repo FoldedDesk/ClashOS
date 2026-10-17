@@ -1,4 +1,5 @@
 import clashCore from 'libclash_core.so';
+import { connection } from '@kit.NetworkKit';
 import { CoreRuntime } from './CoreSessionTypes';
 import { CoreSessionHost } from './CoreSessionCoordinator';
 import { RuleEditorSnapshot } from './RuleEditsTypes';
@@ -9,12 +10,14 @@ import { ControllerAccessStore } from './ControllerAccessStore';
 import { ControllerAccessHost } from './ControllerAccessController';
 import { NetworkBackup, NetworkBackupSnapshot, NetworkBackupResult } from './NetworkBackupTypes';
 interface NetworkBackupValidation extends NetworkBackup { error?: string; }
+interface LocalHttpOptions { address: string; port: number; username: string; password: string; error?: string; }
 
 interface NativeCoreModule {
   startAsync(configPath: string, port: number): Promise<boolean>;
   stopAsync(): Promise<boolean>;
   info(): string;
   localSocksOptions(): string;
+  localHttpOptions(): string;
   editorProviderReferences(profile: string, source: string, query: string): Promise<string>;
   networkBackupSnapshot(directory: string): string;
   validateNetworkBackup(content: string): string;
@@ -87,6 +90,11 @@ export class ClashNativeCore implements CoreSessionHost, ControllerAccessHost {
   }
 
   localSocksOptions(): string { return this.module.localSocksOptions(); }
+  localHttpProxy(): connection.HttpProxy {
+    const options: LocalHttpOptions = JSON.parse(this.module.localHttpOptions()) as LocalHttpOptions;
+    if (options.error || !options.address || options.port <= 0) throw new Error('内置 HTTP 代理不可用，请启动内核并检查端口及共享规则');
+    return { host: options.address, port: options.port, exclusionList: [], username: options.username, password: options.password };
+  }
 
   setMode(mode: string): void {
     if (!this.module.setMode(mode)) throw new Error('代理模式无效');

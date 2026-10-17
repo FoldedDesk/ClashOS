@@ -1,6 +1,5 @@
 import { common } from '@kit.AbilityKit';
 import { fileIo, fileUri, picker } from '@kit.CoreFileKit';
-import { http } from '@kit.NetworkKit';
 import { util } from '@kit.ArkTS';
 import { ClashNativeCore } from './ClashNativeCore';
 import { utf8Bytes } from './TextCodec';
@@ -14,6 +13,8 @@ import { appearanceSettings } from '../theme/AppearanceTypes';
 import { GroupIconStore } from './GroupIconStore';
 import { validateGroupIconBackup } from './GroupIconBackup';
 import { NetworkBackup, NetworkBackupSnapshot, NetworkBackupResult } from './NetworkBackupTypes';
+import { SubscriptionData, SubscriptionOptions, subscriptionData, subscriptionOptions, subscriptionUrl } from './SubscriptionTypes';
+import { SubscriptionClient, SubscriptionDownload } from './SubscriptionClient';
 
 export interface ClashProfile {
   id: string;
@@ -26,6 +27,7 @@ export interface ClashProfile {
   sourceUrl: string;
   updateInterval: number;
   pinned: boolean;
+  subscription?: SubscriptionData;
 }
 
 interface ProfileMetadata {
@@ -34,6 +36,7 @@ interface ProfileMetadata {
   updateInterval: number;
   updatedAt: number;
   pinned: boolean;
+  subscription?: SubscriptionData;
 }
 
 export interface MergeEditSnapshot {
@@ -174,7 +177,7 @@ export class ProfileStore {
     return this.create(fileName.replace(/\.(yaml|yml|json)$/i, ''), content);
   }
 
-  create(name: string, content: string = DEFAULT_PROFILE, sourceUrl: string = '', rules: string = '', objects: string = '', merge: string = '', script: string = '', globals?: BackupGlobals, sequence: string = '', resources: BackupResource[] = []): ClashProfile {
+  create(name: string, content: string = DEFAULT_PROFILE, sourceUrl: string = '', rules: string = '', objects: string = '', merge: string = '', script: string = '', globals?: BackupGlobals, sequence: string = '', resources: BackupResource[] = [], subscription?: SubscriptionData, interval: number = 0): ClashProfile {
     const cleanName: string = this.validName(name);
     this.validateConfig(content, rules, objects, mergeSettingsText(globals?.merge ?? this.globalMergeText(), merge, globals?.script ?? this.globalScriptText(), script, cleanName, sequence), this.providerCacheContext(undefined, resources));
     let id: string;
@@ -183,7 +186,7 @@ export class ProfileStore {
     const format: string = content.trim().startsWith('{') ? 'JSON' : 'YAML';
     const fileName: string = `${id}.${format === 'JSON' ? 'json' : 'yaml'}`;
     const metadata: ProfileMetadata = {
-      name: cleanName, sourceUrl, updateInterval: 0, updatedAt: Date.now(), pinned: false
+      name: cleanName, sourceUrl, updateInterval: interval, updatedAt: Date.now(), pinned: false, subscription: subscriptionData(subscription)
     };
     this.atomicWrite(`${this.profileDir}/${fileName}`, content);
     try {
@@ -482,7 +485,7 @@ export class ProfileStore {
       const sequence: string = this.sequenceText(profile);
       estimated += utf8Bytes(ruleEdits).length + utf8Bytes(objectEdits).length + utf8Bytes(merge).length + utf8Bytes(script).length + utf8Bytes(sequence).length;
       entries.push({ name: profile.name, content, ruleEdits, objectEdits, merge, script, sequence, sourceUrl: profile.sourceUrl, updateInterval: profile.updateInterval,
-        pinned: profile.pinned, selections, resources });
+        pinned: profile.pinned, selections, resources, subscription: profile.subscription });
       if (estimated > BACKUP_LIMIT) throw new Error('备份超过 32 MB');
     });
     const backup: ProfileBackup = { format: 'ClashOS.profile-backup', version: options ? 2 : 1, createdAt: new Date().toISOString(), profiles: entries };
@@ -541,6 +544,7 @@ export class ProfileStore {
         typeof entry.selections !== 'string' || utf8Bytes(entry.selections).length > 65536 ||
         !Array.isArray(entry.resources) || entry.resources.length > 256) throw new Error('备份中的配置信息无效');
       this.validName(entry.name);
+      entry.subscription = subscriptionData(entry.subscription);
       if (entry.ruleEdits !== undefined && typeof entry.ruleEdits !== 'string') throw new Error('备份中的自定义规则无效');
       parseRuleEditsText(entry.ruleEdits ?? '');
       if (entry.objectEdits !== undefined && typeof entry.objectEdits !== 'string') throw new Error('备份中的节点和代理组修改无效');
@@ -586,10 +590,10 @@ export class ProfileStore {
         const entry: BackupProfile = preview.archive.profiles[index];
         const name: string = preview.rows[index].restoreName;
         const profile: ClashProfile = this.create(name, entry.content, entry.sourceUrl, entry.ruleEdits ?? '', entry.objectEdits ?? '', entry.merge ?? '', entry.script ?? '',
-          useArchiveGlobals ? preview.archive.globals : undefined, entry.sequence ?? '', entry.resources);
+          useArchiveGlobals ? preview.archive.globals : undefined, entry.sequence ?? '', entry.resources, entry.subscription, entry.updateInterval);
         created.push(profile);
         this.writeMetadata(profile.id, { name, sourceUrl: entry.sourceUrl, updateInterval: entry.updateInterval,
-          updatedAt: Date.now(), pinned: entry.pinned });
+          updatedAt: Date.now(), pinned: entry.pinned, subscription: entry.subscription });
         if (entry.selections.length > 0) this.atomicWrite(`${profile.path}.selections`, entry.selections);
         entry.resources.forEach((resource: BackupResource) => this.atomicWriteBytes(`${profile.path}${resource.suffix}`, new util.Base64Helper().decodeSync(resource.data)));
       });
@@ -628,22 +632,48 @@ export class ProfileStore {
     const metadata: ProfileMetadata = this.readMetadata(profile.id, profile.fileName);
     metadata.name = this.validName(name);
     metadata.updatedAt = Date.now();
-    this.atomicWrite(this.profilePath(profile), content);
-    this.writeMetadata(profile.id, metadata);
+    this.commitProfile(profile, content, metadata);
     return this.makeProfile(profile.id, profile.fileName, content, metadata);
   }
 
-  updateInfo(profile: ClashProfile, name: string, url: string, interval: number): ClashProfile {
+  private commitProfile(profile: ClashProfile, content: string, metadata: ProfileMetadata): void {
+    this.commitProfileText(profile, content, JSON.stringify(metadata));
+  }
+
+  private metadataText(profile: ClashProfile): string {
+    const path: string = `${this.profileDir}/${profile.id}.meta.json`;
+    return this.exists(path) ? fileIo.readTextSync(path) : '';
+  }
+
+  private commitProfileText(profile: ClashProfile, content: string, metadata: string): void {
+    const previous: string = this.read(profile);
+    this.atomicWrite(this.profilePath(profile), content);
+    try {
+      const path: string = `${this.profileDir}/${profile.id}.meta.json`;
+      if (metadata) this.atomicWrite(path, metadata); else if (this.exists(path)) fileIo.unlinkSync(path);
+    }
+    catch (_) {
+      try {
+        if (this.read(profile) !== content) throw new Error('changed');
+        this.atomicWrite(this.profilePath(profile), previous);
+      } catch (_) { throw new Error('配置信息保存失败，原文未能撤回，请检查存储后重新加载配置'); }
+      throw new Error('配置信息保存失败，原配置已保留');
+    }
+  }
+
+  updateInfo(profile: ClashProfile, name: string, url: string, interval: number | undefined, options?: SubscriptionOptions): ClashProfile {
     if (url.length > 0) this.checkUrl(url);
-    if (!Number.isInteger(interval) || interval < 0 || interval > 10080) {
+    if (interval !== undefined && (!Number.isInteger(interval) || interval < 0 || interval > 10080)) {
       throw new Error('更新间隔必须为 0 至 10080 分钟，0 表示关闭');
     }
     const metadata: ProfileMetadata = this.readMetadata(profile.id, profile.fileName);
     if (name.trim() !== metadata.name && (this.globalScriptText() || this.profileScriptText(profile)))
       this.validateConfig(this.read(profile), this.ruleEditsText(profile), this.objectEditsText(profile), this.mergeSettings(profile, this.validName(name)), this.providerCacheContext(profile));
     metadata.name = this.validName(name);
+    const info = url.trim() === metadata.sourceUrl ? metadata.subscription?.info : undefined;
+    metadata.subscription = url.trim() ? { options: subscriptionOptions(options ?? metadata.subscription?.options), followInterval: interval === undefined, info } : undefined;
     metadata.sourceUrl = url.trim();
-    metadata.updateInterval = interval;
+    metadata.updateInterval = interval ?? info?.suggestedInterval ?? 0;
     this.writeMetadata(profile.id, metadata);
     return this.makeProfile(profile.id, profile.fileName, this.read(profile), metadata);
   }
@@ -652,6 +682,7 @@ export class ProfileStore {
     const metadata: ProfileMetadata = this.readMetadata(profile.id, profile.fileName);
     if (metadata.name !== expectedName) throw new Error('配置信息已被其他操作修改');
     metadata.name = previous.name; metadata.sourceUrl = previous.sourceUrl; metadata.updateInterval = previous.updateInterval;
+    metadata.subscription = previous.subscription;
     this.writeMetadata(profile.id, metadata);
   }
 
@@ -685,15 +716,42 @@ export class ProfileStore {
     return this.makeProfile(profile.id, profile.fileName, this.read(profile), metadata);
   }
 
-  async importSubscription(name: string, url: string): Promise<ClashProfile> {
-    const content: string = await this.download(url, '', '', this.mergeSettings(undefined, this.validName(name.trim() || '远程订阅')));
-    return this.create(name.trim() || '远程订阅', content, url.trim());
+  async importSubscription(name: string, url: string, options?: SubscriptionOptions, interval?: number): Promise<ClashProfile> {
+    if (interval !== undefined && (!Number.isInteger(interval) || interval < 0 || interval > 10080)) throw new Error('更新间隔应为 0 至 10080 分钟');
+    const settings: SubscriptionOptions = subscriptionOptions(options);
+    const download: SubscriptionDownload = await new SubscriptionClient().download(url, settings);
+    const title: string = this.validName(name.trim() || download.info.suggestedName || '远程订阅');
+    const subscription: SubscriptionData = { options: settings, followInterval: interval === undefined, info: download.info };
+    return this.create(title, download.content, url.trim(), '', '', '', '', undefined, '', [], subscription, interval ?? download.info.suggestedInterval ?? 0);
   }
 
-  async updateSubscription(profile: ClashProfile): Promise<ClashProfile> {
-    if (profile.sourceUrl.length === 0) throw new Error('本地配置没有订阅地址');
-    const content: string = await this.download(profile.sourceUrl, this.ruleEditsText(profile), this.objectEditsText(profile), this.mergeSettings(profile), this.providerCacheContext(profile));
-    return this.save(profile, profile.name, content);
+  async updateSubscription(profile: ClashProfile, apply?: (profile: ClashProfile) => Promise<void>): Promise<ClashProfile> {
+    const metadata: ProfileMetadata = this.readMetadata(profile.id, profile.fileName);
+    if (metadata.sourceUrl.length === 0) throw new Error('本地配置没有订阅地址');
+    const before: string = this.metadataText(profile), source: string = this.read(profile), rules: string = this.ruleEditsText(profile), objects: string = this.objectEditsText(profile), merges: string = this.mergeSettings(profile);
+    const previous: ClashProfile = this.makeProfile(profile.id, profile.fileName, source, metadata);
+    const download: SubscriptionDownload = await this.download(metadata.sourceUrl, rules, objects, merges, this.providerCacheContext(profile), metadata.subscription?.options);
+    if (this.read(profile) !== source || this.metadataText(profile) !== before || this.ruleEditsText(profile) !== rules || this.objectEditsText(profile) !== objects || this.mergeSettings(profile) !== merges)
+      throw new Error('配置或订阅信息已变化，本次下载未覆盖原配置');
+    metadata.subscription = { options: subscriptionOptions(metadata.subscription?.options), followInterval: metadata.subscription?.followInterval ?? false, info: download.info };
+    if (metadata.subscription.followInterval) metadata.updateInterval = download.info.suggestedInterval ?? 0;
+    metadata.updatedAt = Date.now();
+    this.commitProfile(profile, download.content, metadata);
+    const updated: ClashProfile = this.makeProfile(profile.id, profile.fileName, download.content, metadata);
+    if (apply) {
+      const committed: string = this.metadataText(profile);
+      try { await apply(updated); }
+      catch (_) {
+        if (this.read(profile) !== download.content || this.metadataText(profile) !== committed || this.ruleEditsText(profile) !== rules || this.objectEditsText(profile) !== objects || this.mergeSettings(profile) !== merges)
+          throw new Error('订阅应用失败，配置已被其他操作修改，请重新加载当前配置');
+        try { this.commitProfileText(profile, source, before); }
+        catch (_) { throw new Error('订阅未能应用，配置文件未能撤回，请检查存储并重新加载配置'); }
+        try { await apply(previous); }
+        catch (_) { throw new Error('订阅原文件已恢复，内核状态未能确认，请重新加载配置'); }
+        throw new Error('订阅未能应用，原配置已恢复');
+      }
+    }
+    return updated;
   }
 
   async exportProfile(profile: ClashProfile): Promise<boolean> {
@@ -747,36 +805,14 @@ export class ProfileStore {
     return Date.now() - metadata.updatedAt >= profile.updateInterval * 60000;
   }
 
-  private async download(url: string, rules: string = '', objects: string = '', merges: string = '', providerContext: string = ''): Promise<string> {
-    this.checkUrl(url);
-    const request = http.createHttp();
-    try {
-      const result = await request.request(url.trim(), {
-        method: http.RequestMethod.GET,
-        header: { 'User-Agent': 'ClashOS/1.0', 'Accept': 'application/yaml, application/json, text/plain' },
-        connectTimeout: 10000,
-        readTimeout: 20000,
-        maxLimit: 8 * 1024 * 1024,
-        expectDataType: http.HttpDataType.STRING
-      });
-      if (result.responseCode < 200 || result.responseCode >= 300) {
-        throw new Error(`订阅服务器返回 HTTP ${result.responseCode}`);
-      }
-      const content: string = result.result.toString();
-      this.validateConfig(content, rules, objects, merges, providerContext);
-      return content;
-    } catch (error) {
-      // Avoid putting token-bearing subscription URLs in logs or error banners.
-      const message: string = (error as Error).message || '';
-      if (message.startsWith('订阅服务器') || message.startsWith('配置')) throw new Error(message);
-      throw new Error('订阅下载或校验失败，原配置已保留');
-    } finally {
-      request.destroy();
-    }
+  private async download(url: string, rules: string = '', objects: string = '', merges: string = '', providerContext: string = '', options?: SubscriptionOptions): Promise<SubscriptionDownload> {
+    const download: SubscriptionDownload = await new SubscriptionClient().download(url, options);
+    this.validateConfig(download.content, rules, objects, merges, providerContext);
+    return download;
   }
 
   private checkUrl(url: string): void {
-    if (!/^https?:\/\/[^\s/]+(?:\/[^\s]*)?$/i.test(url.trim())) throw new Error('请输入完整的 HTTP 或 HTTPS 订阅地址');
+    subscriptionUrl(url);
   }
 
   private validateConfig(text: string, rules: string = '', objects: string = '', merges: string = '', providerContext: string = ''): void {
@@ -807,7 +843,7 @@ export class ProfileStore {
     return { id, name: metadata.name, fileName, path: `${this.profileDir}/${fileName}`,
       format: text.trim().startsWith('{') ? 'JSON' : 'YAML', size: utf8Bytes(text).byteLength,
       updatedAt: this.formatTime(new Date(metadata.updatedAt)), sourceUrl: metadata.sourceUrl,
-      updateInterval: metadata.updateInterval, pinned: metadata.pinned };
+      updateInterval: metadata.updateInterval, pinned: metadata.pinned, subscription: metadata.subscription };
   }
 
   private readMetadata(id: string, fileName: string): ProfileMetadata {
@@ -816,7 +852,7 @@ export class ProfileStore {
       const parsed: ProfileMetadata = JSON.parse(fileIo.readTextSync(path)) as ProfileMetadata;
       return { name: parsed.name || fileName, sourceUrl: parsed.sourceUrl || '',
         updateInterval: parsed.updateInterval || 0, updatedAt: parsed.updatedAt || Number(id.split('-')[0]) || Date.now(),
-        pinned: parsed.pinned === true };
+        pinned: parsed.pinned === true, subscription: subscriptionData(parsed.subscription) };
     }
     return { name: fileName.replace(/\.(yaml|yml|json)$/i, ''), sourceUrl: '', updateInterval: 0,
       updatedAt: Number(id.split('-')[0]) || Date.now(), pinned: false };

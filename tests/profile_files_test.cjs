@@ -33,6 +33,7 @@ const load=name=>{
   if(name==='@kit.CoreFileKit')return{fileIo,picker,fileUri:{FileUri:class{constructor(value){this.path=resolve(value);}}}};
   if(name==='@kit.ArkTS')return{util};
   if(name==='@kit.NetworkKit')return{};
+  if(name==='@ohos.url')return{default:{URL}};
   if(name==='./ClashNativeCore')return{ClashNativeCore:NativeValidator};
   if(name==='./BackupTypes')return loadProduction('BackupTypes.ets');
   if(name==='./AppearanceStore')return loadProduction('AppearanceStore.ets');
@@ -45,6 +46,8 @@ const load=name=>{
   if(name==='./RuleEditsTypes')return loadProduction('RuleEditsTypes.ets');
   if(name==='./ObjectEditsTypes')return loadProduction('ObjectEditsTypes.ets');
   if(name==='./ConfigMergeTypes')return loadProduction('ConfigMergeTypes.ets');
+  if(name==='./SubscriptionTypes')return loadProduction('SubscriptionTypes.ets');
+  if(name==='./SubscriptionClient')return loadProduction('SubscriptionClient.ets');
   if(name==='./BackupArchiveCodec')return loadProduction('BackupArchiveCodec.ets');
   if(name==='./BackupZip')return loadProduction('BackupZip.ets');
   if(name==='./ProfileStore')return moduleObject.exports;

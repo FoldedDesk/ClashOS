@@ -42,6 +42,7 @@ function load(name){
  const requireShim=p=>{
   if(p==='@kit.CoreFileKit')return{fileIo,picker:{DocumentSelectOptions:class{},DocumentViewPicker:class{async select(){return picked;}}},fileUri:{FileUri:class{constructor(p){this.path=p;}}}};
   if(p==='@kit.ArkTS')return{util};if(p==='@kit.NetworkKit')return{};
+  if(p==='@ohos.url')return{default:{URL}};
   if(p==='@kit.AbilityKit')return{ConfigurationConstant:{ColorMode:{COLOR_MODE_NOT_SET:-1,COLOR_MODE_DARK:0,COLOR_MODE_LIGHT:1}}};
   if(p==='@kit.ArkUI')return{ThemeControl:{setDefaultTheme:()=>{if(failTokens)throw Error('injected native theme failure');}}};
   if(p==='./ClashNativeCore')return{ClashNativeCore:Validator};

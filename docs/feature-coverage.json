@@ -1,6 +1,6 @@
 {
   "applicationName": "ClashOS",
-  "reviewedCoreVersion": "0.41",
+  "reviewedCoreVersion": "0.42",
   "objective": "实现 Clash Verge 的大部分功能，包括各类右键菜单，并提供可正常使用的 ClashOS。",
   "brandingDecision": "Follow the user's later explicit spelling correction: ClashOS.",
   "referenceInventory": [
@@ -8,7 +8,8 @@
     "https://www.clashverge.dev/guide/quickstart.html",
     "https://www.clashverge.dev/guide/extend.html",
     "https://www.clashverge.dev/guide/script.html",
-    "https://www.clashverge.dev/guide/css_injection.html"
+    "https://www.clashverge.dev/guide/css_injection.html",
+    "https://www.clashverge.dev/guide/url_schemes.html"
   ],
   "interpretation": "Track the actual upstream feature categories and the user's top-navigation/branding requirements. Partial categories remain incomplete; this record is not a completion claim.",
   "categories": [
@@ -259,10 +260,20 @@
         "Profile duplication validates and writes the same captured cache bytes; archive inspection/restoration validates explicit portable resources independently of live files, including fresh-installation offline restores",
         "257 offline editor checks, 69 native cache assertions, an actual YAML/JSON CodeMirror-to-native insertion/loading pipeline and 21 real-store/native scenarios cover cache boundaries, cycles, cancellation, source changes, copy races and restoration",
         "Core 0.40/0.41 simulator popup comparison verifies downloaded-name assistance and cycle exclusion; actual insertion, undo/redo, native validation, saving and cold startup retain the exact Unicode cache member",
-        "Actual literal-member routes, right-click copies and independently serialized archive imports/restores forward HTTP/SOCKS 204 through an independent device proxy; changed provider path is rejected, undo restores validation and original runtime/all 11 selections are restored"
+        "Actual literal-member routes, right-click copies and independently serialized archive imports/restores forward HTTP/SOCKS 204 through an independent device proxy; changed provider path is rejected, undo restores validation and original runtime/all 11 selections are restored",
+        "Per-subscription User-Agent, bounded total download timeout and explicit system/direct/internal-HTTP routing; internal route uses actual listener address/port/ACL and ephemeral private proxy authentication independently of SOCKS availability",
+        "Case-insensitive standard/object-storage quota headers, safe byte/epoch parsing, UTF-8 Content-Disposition names, hour-based server interval conversion and HTTP(S) homepage validation",
+        "Blank import names use the server suggestion before name-dependent extension validation; explicit user names/manual intervals including zero remain authoritative, with an optional follow-server policy",
+        "Cards display last-successful-download usage/expiry, profile information exposes request settings and right-click subscription homepage opens the system browser",
+        "Asynchronous updates preserve newer source/raw metadata/rules/objects/extensions; file metadata failures roll source back, active runtime apply failures restore exact source/raw metadata and reapply the prior configuration, with separate unconfirmed-recovery reporting and newer-edit guards",
+        "91 production subscription/client/store/codec scenarios with actual native validation and real files, including name-dependent scripts, bounded SDK timeout, request routing, malformed metadata, races, file failures, live apply/recovery failures and JSON/ZIP restoration",
+        "Core 0.42 simulator proves unresolved direct SDK DNS failure versus authenticated internal HTTP18890 with SOCKS disabled; UTF-8 server name, quota/expiry, custom-UA successful update, explicit manual-off and cold persistence of all request settings verified",
+        "Independent device HTTP401/invalid-content/timeout controls retain prior data/runtime; a valid candidate colliding with the independent fixture port18088 triggers confirmed original-file/metadata/runtime recovery to HTTP18890 and retains prior quota",
+        "Actual context-menu homepage opens the expected system-browser page and increments the independent origin counter; a public-profile-only backup restores an independent copy that updates successfully with retained custom UA/internal routing/manual-off/timeout/homepage"
       ],
       "remaining": [
-        "Full Mihomo schema"
+        "Full Mihomo schema",
+        "One-click install-config URL-scheme subscription import; the current EntryAbility reserves but ignores launch URLs"
       ],
       "source": [
         "entry/src/main/ets/service/ProfileStore.ets",
@@ -295,7 +306,11 @@
         "scripts/config-editor/provider-native.test.mjs",
         "tests/editor_provider_references_test.inc",
         "tests/profile_provider_cache_test.cjs",
-        "tests/provider_cache_fixture.cjs"
+        "tests/provider_cache_fixture.cjs",
+        "entry/src/main/ets/service/SubscriptionTypes.ets",
+        "entry/src/main/ets/service/SubscriptionClient.ets",
+        "tests/subscription_test.cjs",
+        "tests/webdav_device_server/entry/src/main/ets/entryability/SubscriptionFixture.ets"
       ]
     },
     {
@@ -364,11 +379,13 @@
         "Live listener/authentication/access-policy changes and both persisted preference files commit together; occupied ports preserve existing listeners/files, and later migration failures restore the previous network preferences",
         "62 native network assertions, 112 production migration checks with actual native preference-file operations, 48 independent Python ZIP checks and 1133 controller/API assertions pass; earlier profile-file tests remain passing",
         "Core 0.40 simulator verifies native network-only backup creation, system-picker archive import with unchecked defaults, exact HTTP 407 without authentication and HTTP/SOCKS5 204 with restored credentials on new ports, occupied-port rollback, stale-preview rejection and right-click restoration of original profile-managed defaults",
-        "Original saved profile, full meaningful runtime, all 11 selections/candidate lists, original backup/profile file lists and window placement restored; test profile/archives/public files/app/extra forwards removed. System proxy settings and clipboard were not changed"
+        "Original saved profile, full meaningful runtime, all 11 selections/candidate lists, original backup/profile file lists and window placement restored; test profile/archives/public files/app/extra forwards removed. System proxy settings and clipboard were not changed",
+        "Native archive serialization preserves per-subscription request options, follow-server policy and quota/expiry/homepage metadata; desktop ZIP members map user_agent, timeout_seconds, with_proxy/self_proxy and account data, while the native sidecar remains lossless",
+        "Unsupported desktop ignore-invalid-subscription-certificate flags retain system trust validation and produce an explicit migration note"
       ],
       "remaining": [
         "Actual Clash Verge desktop restoration and older archive variants",
-        "Cross-client file-provider cache/resource migration and advanced subscription options"
+        "Cross-client file-provider cache/resource migration and subscription TLS certificate overrides beyond system trust"
       ],
       "source": [
         "entry/src/main/ets/service/ProfileStore.ets",
@@ -496,11 +513,12 @@
   ],
   "nextWork": [
     "Improve actual route reliability; a full independent OS crypto/socket HTTPS reference also reproduces early closure, so investigate shared endpoint/network behavior without assuming a production-codec cause",
+    "Implement documented install-config URL schemes in the launch path and review/import UI",
     "Broader routing and ingress configuration, including redir/TProxy",
     "Supported-device TUN proof and broader archive interoperability",
     "Advanced style assets and full Mihomo schema"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 20:32:26 UTC",
-  "verificationNotes": "Status summary only; full goal completion remains unproven. Core 0.39 passes HTTP, SS duplex, forward, VLESS, dialer, TLS, hosts, API and YAML host suites with independent peers, plus final simulator crypto diagnostics and all 12 TCP ingress cases. The earlier offline editor remains covered by 240 tests and 25 controller checks. Original user runtime, all 11 groups/selections and window placement are restored. External Google/GitHub TLS failures remain reproducible after the upload-loss fixes; final successful system-proxy samples do not prove stability. Full real-listener host DNS/inbound/sniffer suites remain unavailable because binds return EPERM and are not reported passing. Per-run evidence and HAPs stay outside Git. The production OS system-proxy check adds 44 service assertions and actual device GUI/network controls. A separate removable OS-crypto Shadowsocks reference passes 287 public-vector assertions and completes full HTTPS exchanges without using the production core; planned matched-endpoint and crossed-endpoint samples retain all failures and distinguish HTTP 403 from connection failures. Secrets and per-run data stay outside Git. Goal completion remains unproven. Core 0.40 adds optional private application-managed network settings migration: 62 native assertions, 112 migration scenarios with actual native persistence, 48 independent ZIP checks and 1133 API assertions, plus actual simulator authentication, bind-failure rollback, stale-preview and original-state restoration proof. Native network snapshots retain passwords only inside the explicitly chosen private archive path; public controller responses and preview summaries do not return them. True-device VPN and existing external-route reliability limitations remain unresolved. Completion remains unproven. Core 0.41 adds source-bound downloaded-provider references and cache-aware editing/copy/backup/loading, verified by independent serialized caches, actual CodeMirror/native/store integration and the simulator including HTTP/SOCKS forwarding, negative source changes, cold startup, context-menu copies and portable restore. The configs host suite stops at unavailable loopback DNS binding and is not reported passing; related API, rule/object edits, extensions/scripts, YAML, backup and editor suites pass. Full-goal completion remains unproven."
+  "reviewedAt": "2026-10-17 21:19:23 UTC",
+  "verificationNotes": "Status summary only; full goal completion remains unproven. Core 0.39 passes HTTP, SS duplex, forward, VLESS, dialer, TLS, hosts, API and YAML host suites with independent peers, plus final simulator crypto diagnostics and all 12 TCP ingress cases. The earlier offline editor remains covered by 240 tests and 25 controller checks. Original user runtime, all 11 groups/selections and window placement are restored. External Google/GitHub TLS failures remain reproducible after the upload-loss fixes; final successful system-proxy samples do not prove stability. Full real-listener host DNS/inbound/sniffer suites remain unavailable because binds return EPERM and are not reported passing. Per-run evidence and HAPs stay outside Git. The production OS system-proxy check adds 44 service assertions and actual device GUI/network controls. A separate removable OS-crypto Shadowsocks reference passes 287 public-vector assertions and completes full HTTPS exchanges without using the production core; planned matched-endpoint and crossed-endpoint samples retain all failures and distinguish HTTP 403 from connection failures. Secrets and per-run data stay outside Git. Goal completion remains unproven. Core 0.40 adds optional private application-managed network settings migration: 62 native assertions, 112 migration scenarios with actual native persistence, 48 independent ZIP checks and 1133 API assertions, plus actual simulator authentication, bind-failure rollback, stale-preview and original-state restoration proof. Native network snapshots retain passwords only inside the explicitly chosen private archive path; public controller responses and preview summaries do not return them. True-device VPN and existing external-route reliability limitations remain unresolved. Completion remains unproven. Core 0.41 adds source-bound downloaded-provider references and cache-aware editing/copy/backup/loading, verified by independent serialized caches, actual CodeMirror/native/store integration and the simulator including HTTP/SOCKS forwarding, negative source changes, cold startup, context-menu copies and portable restore. The configs host suite stops at unavailable loopback DNS binding and is not reported passing; related API, rule/object edits, extensions/scripts, YAML, backup and editor suites pass. Full-goal completion remains unproven. Core 0.42 adds per-subscription request settings, response metadata and guarded active-update rollback. Production integration covers 91 subscription scenarios and 70 native network/private-ingress assertions. Actual simulator controls verify direct-versus-authenticated-internal routing with SOCKS disabled, custom UA, quota/name/expiry, server/manual intervals, homepage launch, negative downloads, occupied-port recovery, cold startup and public-only backup/restore/update. Original configuration, rules/providers, all 11 group selections, file lists and window are restored; owned test artifacts are removed. URL-scheme import is confirmed absent in the current launch handlers and remains explicit pending work. Full-goal completion remains unproven."
 }

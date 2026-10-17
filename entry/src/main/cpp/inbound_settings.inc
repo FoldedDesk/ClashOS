@@ -128,14 +128,18 @@ bool inboundJsonUsers(ControllerConfigJson& json, InboundConfig& config, std::st
 
 // Private NAPI-only bridge for the in-process VPN engine. Never return these
 // credentials through the controller, runtime status, Want or state files.
-std::string localSocksOptions()
+std::string localIngressOptions(bool socks)
 {
     std::lock_guard<std::mutex> lock(g_state.mutex);
     const auto& config = g_state.inbound; const auto address = inboundLocalAddress(config);
-    if (!g_state.running.load() || g_state.socksPort <= 0) return "{\"error\":\"Local SOCKS ingress is not running\"}";
-    if (!inboundClientAllowed(config, address)) return "{\"error\":\"Local SOCKS ingress is excluded by the LAN access rules\"}";
+    const auto protocol = socks ? "SOCKS" : "HTTP";
+    const int port = socks ? g_state.socksPort : g_state.httpPort;
+    if (!g_state.running.load() || port <= 0) return std::string("{\"error\":\"Local ") + protocol + " ingress is not running\"}";
+    if (!inboundClientAllowed(config, address)) return std::string("{\"error\":\"Local ") + protocol + " ingress is excluded by the LAN access rules\"}";
     const bool auth = inboundRequiresAuth(config, address);
-    return "{\"address\":\"" + jsonEscape(address) + "\",\"port\":" + std::to_string(g_state.socksPort) +
+    return "{\"address\":\"" + jsonEscape(address) + "\",\"port\":" + std::to_string(port) +
         ",\"username\":\"" + jsonEscape(auth ? config.users.front().first : "") +
         "\",\"password\":\"" + jsonEscape(auth ? config.users.front().second : "") + "\"}";
 }
+std::string localSocksOptions() { return localIngressOptions(true); }
+std::string localHttpOptions() { return localIngressOptions(false); }

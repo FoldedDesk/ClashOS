@@ -71,4 +71,22 @@ void networkBackupTests(const std::string& directory)
     DIR* entries = opendir(profiles.c_str()); require(entries != nullptr, "Inspect the owned preference directory");
     bool leftover = false; while (const auto* entry = readdir(entries)) if (std::string(entry->d_name).find(".network-") != std::string::npos) leftover = true; closedir(entries);
     require(!leftover, "Successful and rejected operations leave no private staging files");
+    const auto previousPolicy = g_state.inbound;
+    const int previousHttp = g_state.httpPort, previousSocks = g_state.socksPort;
+    g_state.running.store(true); g_state.httpPort = 18890; g_state.socksPort = 0;
+    g_state.inbound = policy; g_state.inbound.skipAuth.clear(); g_state.inbound.skipRanges.clear();
+    const auto http = localHttpOptions();
+    require(http.find("\"port\":18890") != std::string::npos && http.find("PUBLIC-p@ss:colon") != std::string::npos, "Private subscription HTTP options use the actual HTTP port and complete authentication even with SOCKS disabled");
+    require(localSocksOptions().find("error") != std::string::npos, "Disabled SOCKS does not become a fictitious subscription HTTP prerequisite");
+    g_state.inbound.skipAuth = policy.skipAuth; g_state.inbound.skipRanges = policy.skipRanges;
+    require(localHttpOptions().find("PUBLIC-p@ss:colon") == std::string::npos, "Private HTTP options omit credentials when loopback is explicitly authentication-exempt");
+    g_state.inbound.denied = {"127.0.0.0/8"}; require(normalizeInboundConfig(g_state.inbound, error), "Compile an explicit public local HTTP rejection rule");
+    require(localHttpOptions().find("\"port\":18890") != std::string::npos, "Local-only mode retains the same loopback policy as the actual ingress listener");
+    g_state.inbound.allowLan = true;
+    require(localHttpOptions().find("Local HTTP ingress is excluded") != std::string::npos && localHttpOptions().find("PUBLIC-p@ss:colon") == std::string::npos, "Local HTTP download options enforce source ACLs without returning credentials for a denied route");
+    g_state.inbound = policy;
+    g_state.httpPort = 0; require(localHttpOptions().find("error") != std::string::npos, "Subscription download cannot silently bypass a disabled HTTP ingress");
+    g_state.httpPort = 18890; g_state.running.store(false);
+    require(localHttpOptions().find("error") != std::string::npos, "Subscription download cannot use an inactive internal core");
+    g_state.inbound = previousPolicy; g_state.httpPort = previousHttp; g_state.socksPort = previousSocks;
 }

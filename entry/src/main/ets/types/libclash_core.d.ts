@@ -4,6 +4,7 @@ declare module 'libclash_core.so' {
     stopAsync(): Promise<boolean>;
     info(): string;
     localSocksOptions(): string;
+    localHttpOptions(): string;
     editorProviderReferences(profile: string, source: string, query: string): Promise<string>;
     networkBackupSnapshot(directory: string): string;
     validateNetworkBackup(content: string): string;

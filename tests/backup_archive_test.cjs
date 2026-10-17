@@ -13,7 +13,7 @@ const util={TextEncoder:class{encodeInto(s){return new TextEncoder().encode(s);}
 const modules=new Map();function load(name){
  if(modules.has(name))return modules.get(name);const m={exports:{}};modules.set(name,m.exports);
  const source=fs.readFileSync(path.join(root,name+'.ets'),'utf8'),code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
- vm.runInNewContext(code,{module:m,exports:m.exports,require:p=>p==='@kit.ArkTS'?{util}:p==='./ClashNativeCore'?{ClashNativeCore:NativeReader}:load(p.slice(2)),Uint8Array,ArrayBuffer,DataView,TextEncoder,TextDecoder,Set},{filename:name});return m.exports;
+ vm.runInNewContext(code,{module:m,exports:m.exports,require:p=>p==='@kit.ArkTS'?{util}:p==='@ohos.url'?{default:{URL}}:p==='./ClashNativeCore'?{ClashNativeCore:NativeReader}:load(p.slice(2)),Uint8Array,ArrayBuffer,DataView,TextEncoder,TextDecoder,Set},{filename:name});return m.exports;
 }
 (async()=>{try{
  cp.execFileSync('python3',[path.join(__dirname,'fixtures/verge-backup/make_archives.py'),work]);

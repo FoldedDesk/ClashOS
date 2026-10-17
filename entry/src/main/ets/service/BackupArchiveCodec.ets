@@ -4,14 +4,15 @@ import { ObjectEdits, ObjectSequenceEdits, ObjectEditItem, parseObjectEditsText 
 import { parseRuleEditsText } from './RuleEditsTypes';
 import { ZipEntry, readZip, writeZip, zipText } from './BackupZip';
 import { utf8Bytes } from './TextCodec';
+import { SubscriptionData, SubscriptionUsage, subscriptionOptions, subscriptionData, subscriptionUrl } from './SubscriptionTypes';
 
 interface ArchiveObject { name: string; }
 interface ArchiveSequence { prepend: ArchiveObject[]; append: ArchiveObject[]; delete: string[]; }
 interface RuleSequence { prepend: string[]; append: string[]; delete: string[]; }
 interface MigratedSequences { rules: RuleSequence; proxies: ArchiveSequence; groups: ArchiveSequence; }
-interface VergeOption { merge?: string; script?: string; rules?: string; proxies?: string; groups?: string; update_interval?: number; allow_auto_update?: boolean; }
+interface VergeOption { merge?: string; script?: string; rules?: string; proxies?: string; groups?: string; update_interval?: number; allow_auto_update?: boolean; user_agent?: string; timeout_seconds?: number; with_proxy?: boolean; self_proxy?: boolean; danger_accept_invalid_certs?: boolean; }
 interface VergeSelection { name: string; now: string; }
-interface VergeItem { uid: string; type: string; name?: string; file: string; url?: string; option?: VergeOption; selected?: VergeSelection[]; updated?: number; }
+interface VergeItem { uid: string; type: string; name?: string; file: string; url?: string; option?: VergeOption; selected?: VergeSelection[]; updated?: number; extra?: SubscriptionUsage; home?: string; }
 interface VergeIndex { current?: string; items: VergeItem[]; }
 interface VergeAppearance { theme_mode?: string; }
 interface VergeNativeEdits { rules: RuleSequence; proxies: ArchiveSequence; groups: ArchiveSequence; }
@@ -86,6 +87,18 @@ export class BackupArchiveCodec {
         merge: this.reference(index, files, option.merge, 'merge', 'Merge'), script: this.reference(index, files, option.script, 'script', 'Script'), sequence: seq,
         selections: selections.map((selection: VergeSelection) => `${JSON.stringify(selection.name)} ${JSON.stringify(selection.now)}\n`).join('') };
       if (item.type === 'remote' && !entry.sourceUrl) throw new Error('ZIP 远程订阅缺少地址');
+      if (item.type === 'remote') {
+        for (const value of [option.with_proxy, option.self_proxy, option.allow_auto_update, option.danger_accept_invalid_certs]) if (value !== undefined && typeof value !== 'boolean') throw new Error('ZIP 订阅开关无效');
+        const subscription: SubscriptionData = { options: subscriptionOptions({ userAgent: option.user_agent ?? 'clashos/1.0', timeoutSeconds: option.timeout_seconds ?? 20,
+          route: option.self_proxy ? 'core' : option.with_proxy ? 'system' : 'direct' }), followInterval: false };
+        if (item.extra !== undefined || item.home !== undefined) {
+          if (item.home !== undefined && typeof item.home !== 'string') throw new Error('ZIP 订阅主页无效');
+          subscription.info = { checkedAt: typeof item.updated === 'number' && Number.isSafeInteger(item.updated) && item.updated >= 0 && item.updated <= 8640000000000 ? item.updated * 1000 : Date.now(),
+            usage: item.extra, home: item.home ? subscriptionUrl(item.home, true) : undefined };
+        }
+        entry.subscription = subscriptionData(subscription);
+        if (option.danger_accept_invalid_certs && !archive.migrationNotes?.includes('订阅下载仍使用系统证书校验；原客户端的忽略无效证书选项不迁移。')) archive.migrationNotes?.push('订阅下载仍使用系统证书校验；原客户端的忽略无效证书选项不迁移。');
+      }
       archive.profiles.push(entry);
     });
     return JSON.stringify(archive);
@@ -117,6 +130,11 @@ export class BackupArchiveCodec {
     if (archive.globals) { extension('Merge', 'merge', archive.globals.merge); extension('Script', 'script', archive.globals.script); }
     archive.profiles.forEach((entry: BackupProfile, index: number) => {
       const uid: string = `clashos-${index}`, option: VergeOption = { update_interval: entry.updateInterval, allow_auto_update: entry.updateInterval > 0 };
+      const subscription: SubscriptionData | undefined = subscriptionData(entry.subscription);
+      if (subscription) {
+        option.user_agent = subscription.options.userAgent; option.timeout_seconds = subscription.options.timeoutSeconds;
+        option.with_proxy = subscription.options.route === 'system'; option.self_proxy = subscription.options.route === 'core';
+      }
       const file: string = `${uid}.yaml`;
       add(`profiles/${file}`, entry.content);
       option.merge = extension(`${uid}-merge`, 'merge', entry.merge ?? '');
@@ -130,7 +148,9 @@ export class BackupArchiveCodec {
       const pattern: RegExp = /("(?:[^"\\]|\\.)*")\s+("(?:[^"\\]|\\.)*")/g;
       let match: RegExpExecArray | null;
       while ((match = pattern.exec(entry.selections)) !== null) selected.push({ name: JSON.parse(match[1]) as string, now: JSON.parse(match[2]) as string });
-      items.push({ uid, type: entry.sourceUrl ? 'remote' : 'local', name: entry.name, file, url: entry.sourceUrl || undefined, option, selected });
+      items.push({ uid, type: entry.sourceUrl ? 'remote' : 'local', name: entry.name, file, url: entry.sourceUrl || undefined, option, selected,
+        extra: entry.sourceUrl ? subscription?.info?.usage : undefined, home: entry.sourceUrl ? subscription?.info?.home : undefined,
+        updated: subscription?.info ? Math.floor(subscription.info.checkedAt / 1000) : undefined });
     });
     add('profiles.yaml', JSON.stringify({ current: archive.profiles.length ? 'clashos-0' : undefined, items } as VergeIndex));
     add('config.yaml', '{}\n');
