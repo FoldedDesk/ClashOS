@@ -1,0 +1,29 @@
+# PUBLIC: configuration-editor integration fixture, direct-only outbounds.
+port: 7890
+socks-port: 7891
+mode: rule
+proxies:
+  - {name: Public A, type: direct}
+  - {name: "🇯🇵 Public #1", type: direct}
+proxy-providers:
+  PublicNodes:
+    type: inline
+    payload:
+      - {name: Pool A, type: direct}
+    override:
+      additional-prefix: "[P] "
+rule-providers:
+  PublicRules:
+    type: inline
+    behavior: domain
+    payload: [example.com]
+proxy-groups:
+  - name: Main
+    type: select
+    proxies: [DIRECT, Public A]
+  - name: Secondary
+    type: select
+    proxies: [REJECT]
+rules:
+  - RULE-SET,PublicRules,Main
+  - MATCH,Main

@@ -121,10 +121,15 @@
         "Contextual common Clash field/enum completion; native validation/error navigation and stale-source protection",
         "Exact YAML/JSON save/reopen and system-picker export byte comparisons on simulator",
         "Shared YAML/JavaScript code editor for global/per-profile extensions; entry template, language/config completions, retained preview history, scoped native error navigation and actual merged export verification",
-        "Clash Verge ZIP migration preserves separate preprocessing declarations before extensions; native reload and actual subscription update verified"
+        "Clash Verge ZIP migration preserves separate preprocessing declarations before extensions; native reload and actual subscription update verified",
+        "Current-document YAML/JSON node, group, inline-provider and provider-name references, including download routes, group use/default selections, routing targets and RULE-SET names",
+        "Duplicate group-member and direct/indirect cycle exclusion, provider name prefixes/suffixes, safe Unicode/metacharacter quoting and protocol-aware VMess cipher values",
+        "Native LAN/authentication, DNS, provider override, group icon/include-all and HTTP/TLS/QUIC sniffer schema fields; unrelated mappings and secrets excluded",
+        "Cancelable bounded asynchronous parsing for large drafts, per-document reference caches, stale/read-only/composing edit guards and exact CRLF undo",
+        "Actual emulator node/provider/rule-provider/group-target menu selections, undo/redo, native validation, save/reopen and independently inspected system-picker YAML export with exact expected bytes"
       ],
       "remaining": [
-        "Full Mihomo schema and node/provider-reference completion"
+        "Full Mihomo schema, YAML anchor/alias expansion and downloaded remote-provider node-reference completion"
       ],
       "source": [
         "entry/src/main/ets/service/ProfileStore.ets",
@@ -137,7 +142,10 @@
         "scripts/config-editor/editor.mjs",
         "scripts/config-editor/completion.mjs",
         "scripts/config-editor/language.mjs",
-        "scripts/config-editor/script-completion.mjs"
+        "scripts/config-editor/script-completion.mjs",
+        "scripts/config-editor/schema.mjs",
+        "scripts/config-editor/references.mjs",
+        "scripts/config-editor/completion.test.mjs"
       ]
     },
     {
@@ -241,8 +249,8 @@
     {
       "feature": "Daily browser connectivity",
       "status": "verified_with_limits",
-      "latest": "Core 0.30 installed after actual native style editing, font/size/color previews, invalid-range rejection/undo, narrow layouts, right-click reset and appearance backup restoration. Original saved profile, rule mode, all 11 group selections, ports 7890/7891, default typography/layout, system-following appearance and enabled system proxy restored. Explicit Google HTTPS through the device proxy returns 204 / CONNECT 200 / TLS verification 0. Test-created archives/public inputs removed; original backups and window position preserved.",
-      "limit": "Latest check is an explicit HTTP-proxy request. Earlier simulator browser screenshots prove system-proxy browser use. Closing the app with TUN is not proven on this simulator."
+      "latest": "Current HAP includes document-aware reference completion. Actual emulator edits validated, saved, reopened and exported; exported bytes match exactly the selected edits. Original saved profile, rule mode, all 11 group selections, ports 7890/7891 and original window restored; owned test profile and public files removed. Explicit Google HTTPS through the device proxy returns 204 / CONNECT 200 / TLS verification 0.",
+      "limit": "Latest check is an explicit HTTP-proxy request; prior simulator browser evidence proves system-proxy browser use. Intermittent TLS failures on api.github.com remain unresolved through both HTTP and SOCKS. A same-node independent-core control could not listen in this environment because socket binds were denied, so the failure has not been attributed to either core or upstream. Device TUN authorization/background survival remains unproven."
     },
     {
       "feature": "Domain sniffing",
@@ -274,11 +282,12 @@
     }
   ],
   "nextWork": [
+    "Isolate intermittent api.github.com TLS failures with an available independent network control",
     "Broader routing and ingress configuration, including redir/TProxy",
     "Supported-device TUN proof and broader archive interoperability",
-    "Advanced style assets and full-schema/reference completion"
+    "Advanced style assets and full Mihomo schema/alias/downloaded-provider completion"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 09:40:51 UTC",
+  "reviewedAt": "2026-10-17 10:38:04 UTC",
   "verificationNotes": "Status summary only. Historical device screenshots and per-run records are archived outside the source repository. Reproduce host checks with tests/README.md; device and true VPN validation remain separate."
 }

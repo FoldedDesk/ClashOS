@@ -77,8 +77,9 @@ test('Unicode offsets and executable-looking text remain inert document data',()
  assert.equal(serializeDocument(state.doc,state.doc,original),original);
  const source='# PUBLIC 😀\ndns:\n  en¦',f=fixture(source);assert(f.labels.includes('enable'));assert.equal(f.info.from,source.indexOf('en'));
 });
-test('Large document completion at the end remains contextual',()=>{
- const f=fixture('# public\n'.repeat(20000)+'dns:\n  en¦');assert(f.labels.includes('enable'));
+test('Large document completion at the end remains contextual',async()=>{
+ const source='# public\n'.repeat(20000)+'dns:\n  en¦',pos=source.indexOf('¦'),state=EditorState.create({doc:source.replace('¦',''),extensions:[yaml()]});
+ const result=await clashCompletions('yaml')(new CompletionContext(state,pos,true));assert(result.options.some(x=>x.label==='enable'));
 });
 
 function scriptFixture(source) {
