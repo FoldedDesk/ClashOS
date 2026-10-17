@@ -46,6 +46,7 @@
         "label": "$string:app_name",
         "startWindowIcon": "$media:app_icon",
         "startWindowBackground": "$color:app_background",
+        "launchType": "singleton",
         "exported": true,
         "skills": [
           {
@@ -54,6 +55,15 @@
             ],
             "actions": [
               "action.system.home"
+            ]
+          },
+          {
+            "entities": ["entity.system.browsable"],
+            "actions": ["ohos.want.action.viewData"],
+            "uris": [
+              { "scheme": "clash", "host": "install-config" },
+              { "scheme": "clashos", "host": "install-config" },
+              { "scheme": "clash-verge", "host": "install-config" }
             ]
           }
         ]

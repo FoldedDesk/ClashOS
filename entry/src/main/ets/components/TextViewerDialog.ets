@@ -1,10 +1,16 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { VergePalette } from '../theme/VergeTheme';
 @CustomDialog
 export struct TextViewerDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   title: string = '';
   content: string = '';
+
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter(); }
+
+  aboutToDisappear(): void { dialogActivity.leave(this.dialogActivityId); }
 
   build() {
     Column({ space: 20 }) {

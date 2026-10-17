@@ -1,3 +1,4 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { VergePalette } from '../theme/VergeTheme';
 import { ScriptLog, ScriptPreview } from '../service/ConfigMergeTypes';
 import { ConfigCodeEditor } from './ConfigCodeEditor';
@@ -7,6 +8,7 @@ import { ConfigEditorController } from '../service/ConfigEditorController';
 export struct ScriptEditorDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   global: boolean = false;
   profileName: string = '';
   initialContent: string = '';
@@ -22,7 +24,7 @@ export struct ScriptEditorDialog {
   @State editorReady: boolean = false;
   private editor: ConfigEditorController = new ConfigEditorController();
 
-  aboutToAppear(): void { this.text = this.initialContent; }
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter(); this.text = this.initialContent; }
   private async preview(): Promise<void> {
     if (this.saving || !this.editorReady) return;
     this.saving = true; this.error = ''; this.logs = [];
@@ -49,6 +51,8 @@ export struct ScriptEditorDialog {
   private copyLogs(): void {
     this.onCopy([this.error, ...this.logs.map((item: ScriptLog) => `[${item.scope}/${item.level}] ${item.text}`)].filter((line: string) => !!line).join('\n'), '脚本输出');
   }
+  aboutToDisappear(): void { dialogActivity.leave(this.dialogActivityId); }
+
   build() {
     Column({ space: 12 }) {
       Row({ space: 10 }) {

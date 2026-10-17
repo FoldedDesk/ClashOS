@@ -1,3 +1,4 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { VergePalette } from '../theme/VergeTheme';
 import { ConfigCodeEditor } from './ConfigCodeEditor';
 import { ConfigEditorController } from '../service/ConfigEditorController';
@@ -6,6 +7,7 @@ import { ConfigEditorController } from '../service/ConfigEditorController';
 export struct MergeEditorDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   global: boolean = false;
   profileName: string = '';
   initialContent: string = '';
@@ -20,7 +22,7 @@ export struct MergeEditorDialog {
   @State editorReady: boolean = false;
   private editor: ConfigEditorController = new ConfigEditorController();
 
-  aboutToAppear(): void { this.text = this.initialContent; }
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter(); this.text = this.initialContent; }
   private async preview(): Promise<void> {
     if (this.saving || !this.editorReady) return;
     this.saving = true; this.error = '';
@@ -40,6 +42,8 @@ export struct MergeEditorDialog {
     try { await this.editor.command('clear'); this.rendered = ''; this.error = ''; }
     catch (_) { this.error = '未能清除，请保留当前窗口并重试'; }
   }
+  aboutToDisappear(): void { dialogActivity.leave(this.dialogActivityId); }
+
   build() {
     Column({ space: 14 }) {
       Row({ space: 10 }) {

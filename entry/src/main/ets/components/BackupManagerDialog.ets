@@ -1,3 +1,4 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { VergePalette } from '../theme/VergeTheme';
 import { BackupStore } from '../service/BackupStore';
 import { ProfileStore, ClashProfile } from '../service/ProfileStore';
@@ -11,6 +12,7 @@ import { networkBackupSummary } from '../service/NetworkBackupTypes';
 export struct BackupManagerDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   store?: BackupStore;
   profiles?: ProfileStore;
   readAppearance: () => AppearanceSettings | undefined = (): AppearanceSettings | undefined => undefined;
@@ -59,7 +61,7 @@ export struct BackupManagerDialog {
   private clientKey: string = '';
   private alive: boolean = true;
 
-  aboutToAppear(): void {
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter();
     try {
       this.localEntries = this.store?.list() ?? [];
       const settings: WebDavSettings = this.store?.loadSettings() ?? { url: '', username: '', password: '' };
@@ -67,7 +69,7 @@ export struct BackupManagerDialog {
     } catch (error) { this.error = (error as Error).message; }
   }
 
-  aboutToDisappear(): void { this.alive = false; this.client?.close(); this.pendingText = ''; this.clientKey = ''; this.password = ''; }
+  aboutToDisappear(): void { this.alive = false; this.client?.close(); this.pendingText = ''; this.clientKey = ''; this.password = ''; dialogActivity.leave(this.dialogActivityId); }
 
   private settings(): WebDavSettings { return { url: this.server.trim(), username: this.username, password: this.password }; }
 

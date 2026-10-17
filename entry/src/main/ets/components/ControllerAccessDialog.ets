@@ -1,3 +1,4 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { util } from '@kit.ArkTS';
 import { VergePalette } from '../theme/VergeTheme';
 import { ControllerAccessSnapshot, validateControllerSecret } from '../service/ControllerAccessStore';
@@ -6,13 +7,14 @@ import { ControllerAccessSnapshot, validateControllerSecret } from '../service/C
 export struct ControllerAccessDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   initial: ControllerAccessSnapshot = { secret: '', error: '' };
   onSave: (secret: string) => Promise<void> = async (_secret: string): Promise<void> => {};
   onCopy: (secret: string) => void = (_secret: string): void => {};
   @State draft: string = '';
   @State error: string = '';
   @State saving: boolean = false;
-  aboutToAppear(): void { this.draft = this.initial.secret; this.error = this.initial.error; }
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter(); this.draft = this.initial.secret; this.error = this.initial.error; }
   private async save(): Promise<void> {
     if (this.saving) return;
     try {
@@ -21,6 +23,8 @@ export struct ControllerAccessDialog {
     } catch (error) { this.error = (error as Error).message || '控制器认证未能保存'; }
     finally { this.saving = false; }
   }
+  aboutToDisappear(): void { dialogActivity.leave(this.dialogActivityId); }
+
   build() {
     Column({ space: 16 }) {
       Text('内置控制器认证').fontSize(this.theme.font(20)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold).fontColor(this.theme.text).width('100%');

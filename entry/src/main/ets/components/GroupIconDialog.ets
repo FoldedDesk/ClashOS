@@ -1,3 +1,4 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { VergePalette } from '../theme/VergeTheme';
 import { ProxyGroupIcon } from './ProxyGroupIcon';
 import { GROUP_ICON_PRESETS, GROUP_ICON_LABELS, groupIconSource, iconImageUrl } from '../service/GroupIconTypes';
@@ -7,6 +8,7 @@ const ICON_MODES: string[] = ['跟随配置', '内置图标', '图片链接', '�
 export struct GroupIconDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   groupName: string = '';
   initialSource: string = '';
   configured: string = '';
@@ -27,12 +29,12 @@ export struct GroupIconDialog {
   @State busy: boolean = false;
   @State error: string = '';
 
-  aboutToAppear(): void {
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter();
     if (this.initialSource.startsWith('builtin:')) { this.mode = 1; this.preset = this.initialSource.slice(8); }
     else if (iconImageUrl(this.initialSource)) { this.mode = 2; this.url = this.initialSource; this.previewUrl = this.url; }
     else if (this.initialSource.startsWith('local:')) { this.mode = 3; this.local = this.initialSource; }
   }
-  aboutToDisappear(): void { this.onClose(); }
+  aboutToDisappear(): void { this.onClose(); dialogActivity.leave(this.dialogActivityId); }
   private preview(): string {
     return this.mode === 0 ? iconImageUrl(this.configured) : this.mode === 1 ? `builtin:${this.preset}` :
       this.mode === 2 ? this.previewUrl : this.local ? this.resolve(this.local) : '';

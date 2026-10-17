@@ -1,3 +1,4 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { VergePalette } from '../theme/VergeTheme';
 import { SystemNetworkCheck, NetworkCheck, NetworkSample, NetworkTarget, emptyNetworkCheck, networkTargets, networkProxyEnabled,
   networkProxyText, networkStateText, networkSampleText, networkPassed, networkStatistics, networkReport } from '../service/SystemNetworkCheck';
@@ -6,6 +7,7 @@ import { SystemNetworkCheck, NetworkCheck, NetworkSample, NetworkTarget, emptyNe
 export struct SystemNetworkDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   isCurrent: () => Promise<boolean> = async (): Promise<boolean> => true;
   onCopy: (text: string) => void = (_text: string): void => {};
   onSettings: () => void = (): void => {};
@@ -16,8 +18,8 @@ export struct SystemNetworkDialog {
   @State busy: boolean = false;
   private runner?: SystemNetworkCheck;
   private active: boolean = true;
-  aboutToAppear(): void { this.runner = new SystemNetworkCheck(this.isCurrent); }
-  aboutToDisappear(): void { this.active = false; this.runner?.dispose(); }
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter(); this.runner = new SystemNetworkCheck(this.isCurrent); }
+  aboutToDisappear(): void { this.active = false; this.runner?.dispose(); dialogActivity.leave(this.dialogActivityId); }
   private async start(): Promise<void> {
     if (this.busy) return; this.busy = true; this.error = '';
     try { await this.runner?.run(this.custom, (state: NetworkCheck): void => { this.result = state; }); if (this.active) this.onFinished(); }

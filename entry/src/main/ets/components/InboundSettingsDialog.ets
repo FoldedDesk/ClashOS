@@ -1,3 +1,4 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { VergePalette } from '../theme/VergeTheme';
 import { ClashInboundSettings, ClashInboundChanges, ClashInboundAccount } from '../service/ClashApi';
 
@@ -5,6 +6,7 @@ import { ClashInboundSettings, ClashInboundChanges, ClashInboundAccount } from '
 export struct InboundSettingsDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   initial: ClashInboundSettings = { allowLan: false, bindAddress: '*', users: [], skipAuth: [],
     allowed: ['0.0.0.0/0', '::/0'], denied: [], localAddress: '127.0.0.1', overridden: false, profile: '', revision: 0 };
   onSave: (changes?: ClashInboundChanges) => Promise<void> = async (_changes?: ClashInboundChanges): Promise<void> => {};
@@ -17,7 +19,7 @@ export struct InboundSettingsDialog {
   @State busy: boolean = false;
   @State error: string = '';
 
-  aboutToAppear(): void {
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter();
     this.allowLan = this.initial.allowLan; this.address = this.initial.bindAddress;
     this.accounts = this.initial.users.map((name: string): ClashInboundAccount => ({ username: name }));
     this.skip = this.initial.skipAuth.join('\n'); this.allowed = this.initial.allowed.join('\n'); this.denied = this.initial.denied.join('\n');
@@ -65,6 +67,8 @@ export struct InboundSettingsDialog {
         .enabled(!this.busy).accessibilityText(label).onChange(changed);
     }.width('100%');
   }
+
+  aboutToDisappear(): void { dialogActivity.leave(this.dialogActivityId); }
 
   build() {
     Column({ space: 14 }) {

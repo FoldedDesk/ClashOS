@@ -62,6 +62,15 @@ manual interval zero must remain off. `slow` responds after four seconds, allowi
 failure must restore prior file/metadata and reload HTTP18890. The other failure modes must not replace prior data.
 `/test-admin/subscription/state` exposes public counters and a custom-agent boolean, without recording origin request URLs or credentials.
 The right-click homepage opens `/public-home` in the system browser; `homeRequests` proves the visit.
+`/public-install-links` supplies real browser anchors for `clash`, `clashos` and `clash-verge`, with a Chinese/emoji
+name and a percent-encoded nested subscription query. `encodedQueryRequests` increments only when the origin
+receives the exact original `token=PUBLIC%2Bvalue%26tail&flag=meta` query; the fixture never records URLs or credentials.
+Test OS resolution without an explicit target bundle, cold/warm delivery, duplicate delivery, cancellation,
+invalid nested protocols, queued distinct requests, an unsaved configuration-editor draft and a delete confirmation.
+Before pressing Import, cancellation and invalid links must leave request counters, original runtime and selections unchanged.
+Turn off automatic updates for owned imports. In the browser, explicitly identify and close only the public fixture tab.
+For HDC-driven URI delivery, transfer and run an owned shell script with a properly quoted URI: HDC's command
+reconstruction otherwise splits the outer `&name=` parameter. Remove that script after verification.
 Verify cold startup, selected-profile-only backup/restore and preserved request settings, then restore the user's
 original runtime/selections/window and remove every owned public profile, backup, download, test app and forward.
 

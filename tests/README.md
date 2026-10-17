@@ -181,6 +181,7 @@ export CLAHSOS_TYPESCRIPT=/tmp/clashos-test-tools/node_modules/typescript
 node tests/controller_access_test.cjs
 node tests/session_lifecycle_test.cjs
 node tests/profile_files_test.cjs
+node tests/subscription_import_test.cjs
 CLASHOS_NATIVE_TESTS="$PWD/.host-build/native/native_tests" node tests/subscription_test.cjs
 node tests/appearance_test.cjs
 node tests/backup_migration_test.cjs

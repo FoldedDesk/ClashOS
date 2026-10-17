@@ -269,11 +269,15 @@
         "91 production subscription/client/store/codec scenarios with actual native validation and real files, including name-dependent scripts, bounded SDK timeout, request routing, malformed metadata, races, file failures, live apply/recovery failures and JSON/ZIP restoration",
         "Core 0.42 simulator proves unresolved direct SDK DNS failure versus authenticated internal HTTP18890 with SOCKS disabled; UTF-8 server name, quota/expiry, custom-UA successful update, explicit manual-off and cold persistence of all request settings verified",
         "Independent device HTTP401/invalid-content/timeout controls retain prior data/runtime; a valid candidate colliding with the independent fixture port18088 triggers confirmed original-file/metadata/runtime recovery to HTTP18890 and retains prior quota",
-        "Actual context-menu homepage opens the expected system-browser page and increments the independent origin counter; a public-profile-only backup restores an independent copy that updates successfully with retained custom UA/internal routing/manual-off/timeout/homepage"
+        "Actual context-menu homepage opens the expected system-browser page and increments the independent origin counter; a public-profile-only backup restores an independent copy that updates successfully with retained custom UA/internal routing/manual-off/timeout/homepage",
+        "Registered clash/clashos/clash-verge install-config links enter the existing editable subscription form on cold and warm singleton launches; parsing decodes the outer query once and preserves inner percent escapes, plus signs, format flags and Unicode names",
+        "Memory-only bounded FIFO deduplicates active/pending deliveries; API12-compatible component lifecycle leases defer imports while any editor or confirmation is open, preserving drafts and resuming after disappearance; links perform no download or replacement until Import",
+        "88 production parser/inbox/ability/page-dispatch/modal scenarios cover invalid schemes, duplicate parameters, malformed encodings, controls, bounds, stale callbacks, initialization, cancelled/repeated deliveries and queued requests",
+        "Simulator OS resolution without an explicit bundle and a real browser HTML anchor populate the exact Chinese/emoji name and nested URL; independent origin counters prove cancellation/invalid links cause zero downloads and successful import receives the exact original encoded query",
+        "Actual unsaved configuration-editor name, YAML draft and caret survive URI delivery; distinct links serialize after cancellation, repeated deliveries do not reopen drafts, and confirmation cancellation resumes the queue without deleting the profile"
       ],
       "remaining": [
-        "Full Mihomo schema",
-        "One-click install-config URL-scheme subscription import; the current EntryAbility reserves but ignores launch URLs"
+        "Full Mihomo schema"
       ],
       "source": [
         "entry/src/main/ets/service/ProfileStore.ets",
@@ -310,6 +314,12 @@
         "entry/src/main/ets/service/SubscriptionTypes.ets",
         "entry/src/main/ets/service/SubscriptionClient.ets",
         "tests/subscription_test.cjs",
+        "entry/src/main/ets/service/SubscriptionImport.ets",
+        "entry/src/main/ets/service/DialogActivity.ets",
+        "entry/src/main/ets/entryability/EntryAbility.ets",
+        "entry/src/main/ets/components/MessageDialog.ets",
+        "entry/src/main/module.json5",
+        "tests/subscription_import_test.cjs",
         "tests/webdav_device_server/entry/src/main/ets/entryability/SubscriptionFixture.ets"
       ]
     },

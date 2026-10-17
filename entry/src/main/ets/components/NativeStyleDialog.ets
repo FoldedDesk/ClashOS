@@ -1,3 +1,4 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { VergePalette, createPalette } from '../theme/VergeTheme';
 import { NativeStyles, nativeStyles, parseNativeStyles } from '../theme/NativeStyles';
 import { ConfigCodeEditor } from './ConfigCodeEditor';
@@ -7,6 +8,7 @@ import { ConfigEditorController } from '../service/ConfigEditorController';
 export struct NativeStyleDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   initialStyles?: NativeStyles;
   accent: string = '#3478F6';
   onSave: (value: NativeStyles) => void = (_value: NativeStyles): void => {};
@@ -23,7 +25,7 @@ export struct NativeStyleDialog {
   @State light: VergePalette = new VergePalette();
   @State dark: VergePalette = new VergePalette();
 
-  aboutToAppear(): void {
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter();
     this.draft = nativeStyles(this.initialStyles); this.initialContent = JSON.stringify(this.draft, null, 2); this.preview(this.draft);
     try { this.fonts = Array.from(new Set<string>(this.fonts.concat(this.getUIContext().getFont().getSystemFontList().filter((name: string) => name.length > 0 && name.length <= 120)))).slice(0, 256); } catch (_) {}
   }
@@ -62,6 +64,8 @@ export struct NativeStyleDialog {
     } catch (error) { this.error = (error as Error).message || '请先修正 JSON 样式'; }
     finally { this.busy = false; this.replacing = false; }
   }
+  aboutToDisappear(): void { dialogActivity.leave(this.dialogActivityId); }
+
   build() {
     Column({ space: 10 }) {
       Text('自定义样式').fontSize(this.theme.font(20)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold).fontColor(this.theme.text).width('100%');

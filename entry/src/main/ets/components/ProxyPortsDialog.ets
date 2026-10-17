@@ -1,3 +1,4 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { VergePalette } from '../theme/VergeTheme';
 import { ClashProxyPorts } from '../service/ClashApi';
 
@@ -5,6 +6,7 @@ import { ClashProxyPorts } from '../service/ClashApi';
 export struct ProxyPortsDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   initial: ClashProxyPorts = { http: 7890, socks: 7891, mixed: 0, overridden: false };
   onSave: (ports?: ClashProxyPorts) => Promise<void> = async (_ports?: ClashProxyPorts): Promise<void> => {};
   @State httpText: string = '';
@@ -14,7 +16,7 @@ export struct ProxyPortsDialog {
   @State saving: boolean = false;
   @State error: string = '';
 
-  aboutToAppear(): void {
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter();
     this.httpText = `${this.initial.http}`;
     this.socksText = `${this.initial.socks}`;
     this.mixedText = `${this.initial.mixed || 7890}`;
@@ -43,6 +45,8 @@ export struct ProxyPortsDialog {
       this.error = (error as Error).message || '端口未能保存，原设置已保留';
     } finally { this.saving = false; }
   }
+
+  aboutToDisappear(): void { dialogActivity.leave(this.dialogActivityId); }
 
   build() {
     Column({ space: 16 }) {

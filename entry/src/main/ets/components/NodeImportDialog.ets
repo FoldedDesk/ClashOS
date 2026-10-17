@@ -1,3 +1,4 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { VergePalette } from '../theme/VergeTheme';
 import { ClashNativeCore } from '../service/ClashNativeCore';
 import { NodeLinkImport, emptyNodeLinkImport } from '../service/NodeLinkTypes';
@@ -7,6 +8,7 @@ import { EditorObjectView } from '../service/ObjectEditsTypes';
 export struct NodeImportDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   initialContent: string = '';
   createProfile: boolean = true;
   targetName: string = '';
@@ -19,7 +21,7 @@ export struct NodeImportDialog {
   @State saving: boolean = false;
   private native: ClashNativeCore = new ClashNativeCore();
 
-  aboutToAppear(): void {
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter();
     this.text = this.initialContent;
     if (this.text.trim()) this.preview();
   }
@@ -36,6 +38,8 @@ export struct NodeImportDialog {
     catch (error) { this.error = (error as Error).message || '节点未能导入，原配置已保留'; }
     finally { this.saving = false; }
   }
+  aboutToDisappear(): void { dialogActivity.leave(this.dialogActivityId); }
+
   build() {
     Column({ space: 14 }) {
       Row() {

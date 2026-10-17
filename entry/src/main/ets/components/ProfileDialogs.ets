@@ -1,3 +1,4 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { VergePalette } from '../theme/VergeTheme';
 import { ConfigCodeEditor } from './ConfigCodeEditor';
 import { ConfigEditorController } from '../service/ConfigEditorController';
@@ -6,6 +7,7 @@ import { SubscriptionOptions, subscriptionOptions } from '../service/Subscriptio
 export struct ProfileEditorDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   title: string = '编辑配置';
   initialName: string = '';
   initialContent: string = '';
@@ -20,7 +22,7 @@ export struct ProfileEditorDialog {
   @State validation: string = '';
   private editor: ConfigEditorController = new ConfigEditorController();
 
-  aboutToAppear(): void {
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter();
     this.name = this.initialName;
     this.content = this.initialContent;
   }
@@ -48,6 +50,8 @@ export struct ProfileEditorDialog {
     catch (error) { this.error = (error as Error).message; this.editor.markError(this.error).catch(() => {}); }
     finally { this.saving = false; }
   }
+
+  aboutToDisappear(): void { dialogActivity.leave(this.dialogActivityId); }
 
   build() {
     Column({ space: 16 }) {
@@ -86,6 +90,8 @@ export struct ProfileEditorDialog {
 export struct ProfileInfoDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
+  onClosed: () => void = (): void => {};
   title: string = '编辑订阅信息';
   initialName: string = '';
   initialUrl: string = '';
@@ -105,7 +111,7 @@ export struct ProfileInfoDialog {
   @State saving: boolean = false;
   @State error: string = '';
 
-  aboutToAppear(): void {
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter();
     this.name = this.initialName;
     this.url = this.initialUrl;
     this.interval = `${this.initialInterval}`;
@@ -136,6 +142,8 @@ export struct ProfileInfoDialog {
       this.saving = false;
     }
   }
+
+  aboutToDisappear(): void { this.onClosed(); dialogActivity.leave(this.dialogActivityId); }
 
   build() {
     Column({ space: 14 }) {

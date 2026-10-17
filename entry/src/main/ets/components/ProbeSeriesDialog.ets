@@ -1,3 +1,4 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { VergePalette } from '../theme/VergeTheme';
 import { ProbeSample, ProbeSeries, ProbeSeriesController, emptyProbeSeries, probeStatistics, probeFailureText, probeReport } from '../service/ProbeSeriesController';
 
@@ -5,6 +6,7 @@ import { ProbeSample, ProbeSeries, ProbeSeriesController, emptyProbeSeries, prob
 export struct ProbeSeriesDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   nodeName: string = '';
   initialUrl: string = '';
   probe: (name: string, url: string) => Promise<number> = async (): Promise<number> => { throw new Error('内核不可用'); };
@@ -16,8 +18,8 @@ export struct ProbeSeriesDialog {
   @State result: ProbeSeries = emptyProbeSeries();
   @State error: string = '';
   private runner?: ProbeSeriesController;
-  aboutToAppear(): void { this.url = this.initialUrl; this.runner = new ProbeSeriesController(this.probe, this.isCurrent); }
-  aboutToDisappear(): void { this.runner?.dispose(); }
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter(); this.url = this.initialUrl; this.runner = new ProbeSeriesController(this.probe, this.isCurrent); }
+  aboutToDisappear(): void { this.runner?.dispose(); dialogActivity.leave(this.dialogActivityId); }
   private async start(): Promise<void> {
     this.error = '';
     try {

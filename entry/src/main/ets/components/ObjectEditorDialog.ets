@@ -1,3 +1,4 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { VergePalette } from '../theme/VergeTheme';
 import { ProfileStore } from '../service/ProfileStore';
 import { ObjectEdits, ObjectSequenceEdits, ObjectSnapshotSection, ObjectEditorSnapshot, EditorObjectView, ObjectEditItem, emptyObjectEdits, emptyObjectSnapshot } from '../service/ObjectEditsTypes';
@@ -12,6 +13,7 @@ interface ObjectEditorRow { item: EditorObjectView; index: number; removed: bool
 export struct ObjectEditorDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   store?: ProfileStore;
   profileName: string = '';
   sourceContent: string = '';
@@ -42,7 +44,7 @@ export struct ObjectEditorDialog {
   }
   private model(edits: ObjectEdits = this.edits, kind: number = this.kind): ObjectSequenceEdits { return kind === 0 ? edits.proxies : edits.groups; }
   private section(snapshot: ObjectEditorSnapshot = this.snapshot, kind: number = this.kind): ObjectSnapshotSection { return kind === 0 ? snapshot.proxies : snapshot.groups; }
-  aboutToAppear(): void {
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter();
     this.kind = this.initialKind; this.edits = this.clone(this.initial);
     try {
       if (!this.store) throw new Error('配置目录不可用');
@@ -55,7 +57,7 @@ export struct ObjectEditorDialog {
       }
     } catch (error) { this.error = (error as Error).message; }
   }
-  aboutToDisappear(): void { this.alive = false; this.child?.close(); }
+  aboutToDisappear(): void { this.alive = false; this.child?.close(); dialogActivity.leave(this.dialogActivityId); }
   private count(kind: number): number {
     const section = this.section(this.snapshot, kind), model = this.model(this.edits, kind);
     return section.prepend.length + section.append.length + section.original.filter((item: EditorObjectView) => model.remove.indexOf(item.name) < 0).length;

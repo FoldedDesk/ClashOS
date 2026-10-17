@@ -45,6 +45,9 @@ import { ClashApi, ClashCoreLog, ClashConnection, ClashProxyGroup, ClashProxyNod
 import { ClashNativeCore } from '../service/ClashNativeCore';
 import { ClashProfile, ProfileStore, MergeEditSnapshot, DEFAULT_PROFILE } from '../service/ProfileStore';
 import { SubscriptionOptions, subscriptionTraffic, subscriptionExpiry, subscriptionUrl } from '../service/SubscriptionTypes';
+import { SubscriptionImport, subscriptionImports } from '../service/SubscriptionImport';
+import { dialogActivity } from '../service/DialogActivity';
+import { MessageDialog, MessageDialogOptions } from '../components/MessageDialog';
 import { VpnTunnelService } from '../service/VpnTunnelService';
 import { CoreRuntime, VpnState, emptyRuntime } from '../service/CoreSessionTypes';
 import { CoreSessionCoordinator } from '../service/CoreSessionCoordinator';
@@ -184,6 +187,7 @@ struct Index {
   private subscriptionTimer: number = -1;
   private settingsStore: SettingsStore | undefined = undefined;
   private dialogController: CustomDialogController | undefined = undefined;
+  private messageDialogController: CustomDialogController | undefined = undefined;
   private savedMode: string = '';
   private mutationVersion: number = 0;
   @State subscriptionUrl: string = '';
@@ -212,8 +216,12 @@ struct Index {
   @State systemProxyOpening: boolean = false;
   @StorageLink('clashosForeground') @Watch('onAbilityForeground') foregroundRevision: number = 0;
   private systemProxyReadVersion: number = 0;
+  @StorageLink('clashosImportRevision') @Watch('reviewNextImport') importRevision: number = 0;
 
   aboutToAppear(): void {
+    this.pageActive = true;
+    this.initializingCore = true;
+    dialogActivity.onIdle = (): void => { setTimeout(() => this.reviewNextImport(), 0); };
     let defaultConfigPath: string = '';
     try {
       const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -271,6 +279,27 @@ struct Index {
     await this.refreshCore();
     if (this.coreConnected && !this.internalCore && this.savedMode.length > 0) await this.changeMode(this.savedMode);
     this.autoUpdateSubscriptions();
+    this.reviewNextImport();
+  }
+
+  private reviewNextImport(): void {
+    if (!this.pageActive || this.initializingCore || !this.profileStore || dialogActivity.busy()) return;
+    const error: string = subscriptionImports.takeError();
+    if (error) this.notice = error;
+    const request: SubscriptionImport | undefined = subscriptionImports.take();
+    if (!request) return;
+    try {
+      this.selectedTab = 4;
+      this.openProfileInfo(undefined, request);
+    } catch (_) {
+      subscriptionImports.finish(request.id);
+      this.notice = '无法打开订阅导入窗口，请重新打开链接';
+    }
+  }
+
+  private showMessageDialog(options: MessageDialogOptions): void {
+    this.messageDialogController = new CustomDialogController({ builder: MessageDialog({ options }), autoCancel: true, customStyle: true });
+    this.messageDialogController.open();
   }
 
   private persistSettings(): void {
@@ -284,9 +313,11 @@ struct Index {
 
   aboutToDisappear(): void {
     this.pageActive = false;
+    dialogActivity.onIdle = undefined;
     this.appearanceController?.dispose();
     if (this.subscriptionTimer >= 0) clearInterval(this.subscriptionTimer);
     this.dialogController?.close();
+    this.messageDialogController?.close();
     this.persistSettings();
     if (this.refreshTimer >= 0) {
       clearInterval(this.refreshTimer);
@@ -814,7 +845,7 @@ struct Index {
   }
 
   private confirmRemoveProfile(profile: ClashProfile): void {
-    this.getUIContext().showAlertDialog({
+    this.showMessageDialog({
       title: '删除配置', message: `删除「${profile.name}」的本地副本？`,
       primaryButton: { value: '取消', action: () => {} },
       secondaryButton: { value: '删除', fontColor: this.theme.danger, action: () => this.removeProfile(profile) }
@@ -977,10 +1008,11 @@ struct Index {
     } catch (error) { this.notice = `无法打开扩展配置：${(error as Error).message}`; }
   }
 
-  private openProfileInfo(profile?: ClashProfile): void {
+  private openProfileInfo(profile?: ClashProfile, request?: SubscriptionImport): void {
     this.dialogController = new CustomDialogController({
       builder: ProfileInfoDialog({ title: profile === undefined ? '添加远程订阅' : '编辑配置信息',
-        initialName: profile?.name ?? '', initialUrl: profile?.sourceUrl ?? this.subscriptionUrl,
+        initialName: profile?.name ?? request?.name ?? '', initialUrl: profile?.sourceUrl ?? request?.url ?? this.subscriptionUrl,
+        onClosed: (): void => { if (request) subscriptionImports.finish(request.id); },
         initialInterval: profile?.updateInterval ?? 0, requireUrl: profile === undefined,
         initialOptions: profile?.subscription?.options, initialFollowInterval: profile?.subscription?.followInterval ?? profile === undefined,
         onSave: async (name: string, url: string, interval: number | undefined, options: SubscriptionOptions): Promise<void> => {
@@ -1196,7 +1228,7 @@ struct Index {
   }
 
   private confirmClearGeo(resource: ClashGeoResource): void {
-    this.getUIContext().showAlertDialog({
+    this.showMessageDialog({
       title: '删除本地数据库', message: `删除 ${this.geoTitle(resource.kind)}？引用此数据的分流将在重新下载后恢复。`,
       primaryButton: { value: '取消', action: () => {} },
       secondaryButton: { value: '删除', fontColor: this.theme.danger, action: () => this.geoAction(resource, 'clear') }
@@ -1519,7 +1551,7 @@ struct Index {
     this.diagnosing = true;
     try {
       const result: CoreDiagnostics = await this.coreApi.diagnostics();
-      this.getUIContext().showAlertDialog({
+      this.showMessageDialog({
         title: result.passed ? '内核自检通过' : '内核自检未通过',
         message: `随机数：${result.random ? '通过' : '失败'}\n密钥派生摘要：${result.md5 ? '通过' : '失败'}\nAES-GCM 加密：${result.aesEncrypt ? '通过' : '失败'}\nAES-GCM 解密：${result.aesDecrypt ? '通过' : '失败'}\n报文认证：${result.authentication ? '通过' : '失败'}${result.shadowsocks === undefined ? ' ' : `\nShadowsocks 三种 AEAD：${result.shadowsocks ? '通过' : '失败'}`}${result.shadowsocksTcp === undefined ? '' : `\nShadowsocks 分帧接收：${result.shadowsocksTcp ? '通过' : '失败'}`}${result.vmess === undefined ? '' : `\nVMess 加密：${result.vmess ? '通过' : '失败'}`}${result.trojan === undefined ? '' : `\nTrojan 请求认证：${result.trojan ? '通过' : '失败'}`}${result.vless === undefined ? '' : `\nVLESS 协议：${result.vless ? '通过' : '失败'}`}${result.certificateStore === undefined ? '' : `\nTLS 证书集合：${result.certificateStore ? '通过' : '失败'}`}\n代理端口监听：${result.listeners ? '通过' : '失败'}\n\nHTTP 127.0.0.1:${result.httpPort}\nSOCKS5 127.0.0.1:${result.socksPort}\n\n该自检不检测节点服务器和系统代理。`,
         primaryButton: { value: '关闭', action: () => {} },
@@ -1581,7 +1613,7 @@ struct Index {
   private showSystemProxyGuide(enable?: boolean): void {
     const host: string = this.internalCore ? this.proxyHost : '内核所在设备的 IP 地址';
     const port: string = this.httpPort > 0 ? `${this.httpPort}` : '当前配置的 HTTP 端口';
-    this.getUIContext().showAlertDialog({
+    this.showMessageDialog({
       title: enable === undefined ? '系统 HTTP 代理' : enable ? '开启系统代理' : '关闭系统代理',
       message: enable === false ? '进入系统设置 → 网络 → 代理，关闭“使用代理服务器”。\n\n当前版本需在系统设置中完成切换；返回 ClashOS 后会自动更新实际状态。关闭系统代理不会停止内核或虚拟网卡。' :
         `进入系统设置 → 网络 → 代理，开启“使用代理服务器”。\n\n服务器：${host}\n端口：${port}\n忽略：localhost,127.0.0.1,::1\n\n当前版本需在系统设置中完成切换；返回 ClashOS 后会自动更新实际状态。使用期间保持 ClashOS 运行。`,
@@ -1895,7 +1927,7 @@ struct Index {
   }
 
   private connectionDetails(item: ClashConnection): void {
-    this.getUIContext().showAlertDialog({
+    this.showMessageDialog({
       title: '连接详情',
       message: `${item.host}${item.port.length > 0 ? `:${item.port}` : ''}\n协议：${item.network.toUpperCase()}\n代理链：${this.connectionRoute(item)}\n规则：${item.rule}\n上传：${this.formatBytes(item.upload)}\n下载：${this.formatBytes(item.download)}\n开始时间：${item.start || '未知'}`,
       primaryButton: { value: '关闭', action: () => {} },

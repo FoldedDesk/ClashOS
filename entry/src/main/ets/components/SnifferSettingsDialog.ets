@@ -1,3 +1,4 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { VergePalette } from '../theme/VergeTheme';
 import { ConfigCodeEditor } from './ConfigCodeEditor';
 import { ConfigEditorController } from '../service/ConfigEditorController';
@@ -24,6 +25,7 @@ const COMMON_SNIFFER: string = `{
 export struct SnifferSettingsDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   initialContent: string = '';
   onValidate: (text: string) => void = (_text: string): void => {};
   onSave: (text: string) => Promise<void> = async (_text: string): Promise<void> => {};
@@ -45,6 +47,10 @@ export struct SnifferSettingsDialog {
     } catch (error) { this.error = (error as Error).message || '嗅探设置未能应用'; this.editor.markError(this.error).catch(() => {}); }
     finally { this.busy = false; }
   }
+
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter(); }
+
+  aboutToDisappear(): void { dialogActivity.leave(this.dialogActivityId); }
 
   build() {
     Column({ space: 14 }) {

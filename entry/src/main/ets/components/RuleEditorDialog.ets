@@ -1,3 +1,4 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { VergePalette } from '../theme/VergeTheme';
 import { RuleEdits, RuleEditorSnapshot } from '../service/RuleEditsTypes';
 
@@ -9,6 +10,7 @@ const RULE_TYPES: string[] = ['DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD', 'DOMA
 export struct RuleEditorDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   profileName: string = '';
   initial: RuleEdits = { version: 1, prepend: [], append: [], remove: [] };
   snapshot: RuleEditorSnapshot = { error: '', rules: [], effective: [], policies: ['DIRECT', 'REJECT'], providers: [] };
@@ -34,7 +36,7 @@ export struct RuleEditorDialog {
   @State saving: boolean = false;
   @State dialogWidth: number = 900;
 
-  aboutToAppear(): void { this.prepend = [...this.initial.prepend]; this.append = [...this.initial.append]; this.excluded = [...this.initial.remove]; }
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter(); this.prepend = [...this.initial.prepend]; this.append = [...this.initial.append]; this.excluded = [...this.initial.remove]; }
   private edits(): RuleEdits { return { version: 1, prepend: [...this.prepend], append: [...this.append], remove: [...this.excluded] }; }
   private commit(edits: RuleEdits): boolean {
     try {
@@ -158,6 +160,8 @@ export struct RuleEditorDialog {
       }.width('100%');
     }.padding(12).borderRadius(this.theme.radius(6)).backgroundColor(this.theme.field).width('100%');
   }
+  aboutToDisappear(): void { dialogActivity.leave(this.dialogActivityId); }
+
   build() {
     Column({ space: 12 }) {
       Row() {

@@ -1,3 +1,4 @@
+import { dialogActivity } from '../service/DialogActivity';
 import { VergePalette } from '../theme/VergeTheme';
 import { ClashRuntimeConfig } from '../service/ClashApi';
 
@@ -5,6 +6,7 @@ import { ClashRuntimeConfig } from '../service/ClashApi';
 export struct RuntimeConfigDialog {
   @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
   controller?: CustomDialogController;
+  private dialogActivityId: number = 0;
   initial: ClashRuntimeConfig = { mode: 'Rule', logLevel: 'info', ipv6: false, path: '', temporary: false, revision: 0 };
   onSave: (value: ClashRuntimeConfig) => Promise<void> = async (_value: ClashRuntimeConfig): Promise<void> => {};
   onReload: () => Promise<void> = async (): Promise<void> => {};
@@ -15,7 +17,7 @@ export struct RuntimeConfigDialog {
   @State busy: boolean = false;
   @State error: string = '';
 
-  aboutToAppear(): void {
+  aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter();
     this.mode = this.initial.mode; this.logLevel = this.initial.logLevel; this.ipv6 = this.initial.ipv6;
     this.sniffing = this.initial.sniffing === true;
   }
@@ -31,6 +33,8 @@ export struct RuntimeConfigDialog {
     } catch (error) { this.error = (error as Error).message || '设置未能应用'; }
     finally { this.busy = false; }
   }
+
+  aboutToDisappear(): void { dialogActivity.leave(this.dialogActivityId); }
 
   build() {
     Column({ space: 18 }) {

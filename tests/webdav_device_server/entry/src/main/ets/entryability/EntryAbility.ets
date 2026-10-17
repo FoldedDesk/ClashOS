@@ -89,9 +89,10 @@ export default class EntryAbility extends UIAbility {
       this.subscription.mode = mode; this.respond(client, 200, this.subscription.state()); return;
     }
     if (path === '/test-admin/subscription/source') { this.respond(client, 200, this.subscription.source); return; }
+    if (path === '/public-install-links') { this.respond(client, 200, this.subscription.installPage(), 'Content-Type: text/html; charset=utf-8\r\n'); return; }
     if (path === '/public-home') { this.subscription.homeRequests++; this.respond(client, 200, '<html><title>ClashOS public subscription fixture</title><body>Public subscription homepage</body></html>', 'Content-Type: text/html\r\n'); return; }
-    if (path === '/public-subscription.yaml' && method === 'GET') {
-      if (!this.subscription.accept(headers['user-agent'] ?? '') || this.subscription.mode === 'bad-http') { this.respond(client, 401, ''); return; }
+    if (path.split('?')[0] === '/public-subscription.yaml' && method === 'GET') {
+      if (!this.subscription.accept(headers['user-agent'] ?? '', path) || this.subscription.mode === 'bad-http') { this.respond(client, 401, ''); return; }
       if (this.subscription.mode === 'slow') { setTimeout(() => this.respond(client, 200, this.subscription.source, this.subscription.headers()), 4000); return; }
       this.respond(client, 200, this.subscription.mode === 'invalid-config' ? 'NOT A CONFIG' : this.subscription.mode === 'port-conflict' ? this.subscription.source.replace('port: 18890', 'port: 18088') : this.subscription.source, this.subscription.headers()); return;
     }
