@@ -308,14 +308,15 @@ bool parseRuleContent(const RuleProvider& provider,const std::string& body,std::
         yaml_parser_t parser;if(!yaml_parser_initialize(&parser)){error="Cannot allocate rule YAML parser";return false;}
         yaml_parser_set_input_string(&parser,reinterpret_cast<const unsigned char*>(body.data()),body.size());yaml_document_t document;
         if(!yaml_parser_load(&parser,&document)){yaml_parser_delete(&parser);error="Invalid rule provider YAML";return false;}
+        bool ok=resolveYamlMerges(document,body,error);
         auto* root=yaml_document_get_root_node(&document);auto* list=yamlValue(document,root,"payload");if(list==nullptr)list=yamlValue(document,root,"rules");
-        bool ok=list!=nullptr&&list->type==YAML_SEQUENCE_NODE;
+        ok=ok&&list!=nullptr&&list->type==YAML_SEQUENCE_NODE;
         if(ok)for(auto* item=list->data.sequence.items.start;item<list->data.sequence.items.top;++item) {
             auto* entry=yaml_document_get_node(&document,*item);if(entry->type!=YAML_SCALAR_NODE||payload.size()>=RULE_MAX_COUNT){ok=false;break;}payload.push_back(yamlText(entry));
         }
         yaml_document_delete(&document);
         if(ok){yaml_document_t extra;if(!yaml_parser_load(&parser,&extra))ok=false;else{if(yaml_document_get_root_node(&extra)!=nullptr)ok=false;yaml_document_delete(&extra);}}
-        yaml_parser_delete(&parser);if(!ok){error="Rule provider requires one YAML document with a payload/rules list";return false;}
+        yaml_parser_delete(&parser);if(!ok){if(error.empty())error="Rule provider requires one YAML document with a payload/rules list";return false;}
     }
     return compileRulePayload(provider,payload,result,error);
 }

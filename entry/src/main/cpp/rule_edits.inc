@@ -102,7 +102,7 @@ bool renderEditedRules(const std::string& source, const std::vector<std::string>
     yaml_parser_delete(&parser);
     if (!loaded) return false;
     std::string error;
-    if (!applyConfigMerges(document, merges, error, source) || !applyObjectEdits(document, objects, error)) { yaml_document_delete(&document); return false; }
+    if (!resolveYamlMerges(document, source, error) || !applyConfigMerges(document, merges, error, source) || !applyObjectEdits(document, objects, error)) { yaml_document_delete(&document); return false; }
     const int sequence = yaml_document_add_sequence(&document, reinterpret_cast<const yaml_char_t*>(YAML_SEQ_TAG), YAML_BLOCK_SEQUENCE_STYLE);
     bool valid = sequence != 0;
     for (const auto& rule : rules) {

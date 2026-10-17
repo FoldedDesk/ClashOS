@@ -24,6 +24,7 @@ public:
         }
         yaml_parser_delete(&parser);
         if (!valid) error = "Expected one valid YAML or JSON document";
+        else valid = resolveYamlMerges(document, text, error);
         return valid;
     }
     bool initialize() { loaded = yaml_document_initialize(&document, nullptr, nullptr, nullptr, 1, 1); return loaded; }

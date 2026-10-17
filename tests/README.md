@@ -22,6 +22,21 @@ python3 tests/run_native_tests.py --build-dir .host-build/native --config /path/
 `CLAHSOS_REFERENCE_PYTHON` 可指定已安装 cryptography 的 Python。
 原生测试会绑定本机回环端口；限制 socket 绑定的沙箱无法完成这些检查。
 
+YAML 模板专项不需要主机监听权限：
+
+```sh
+python3 tests/run_native_tests.py --suite yaml --build-dir .host-build/native
+```
+
+检查锚点/别名、`<<` 单映射和映射列表、显式字段与模板列表的优先级、浅合并、
+显式 merge/string 标签及字面量 `"<<"` 的独立导出。
+覆盖脚本类型、可视化编辑隔离、文件集合导入/缓存/失败回退、实际规则匹配、
+原始文件保留，以及循环/复杂度拒绝和不回显配置值的错误位置。
+独立 Python/OpenSSL 对端验证继承的认证、请求头和 TLS 设置用于实际收发。
+合并规则参照 [YAML merge 类型规范](https://yaml.org/type/merge.html)。
+公开设备配置位于 `fixtures/yaml/device-templates.yaml`，使用独立设备测试应用的
+[HTTP/SOCKS 参考服务](webdav_device_server/README.md#http--socks-device-verification)。
+
 hosts 与加密转发专项使用继承的 Unix socket，不需要绑定回环端口：
 
 ```sh

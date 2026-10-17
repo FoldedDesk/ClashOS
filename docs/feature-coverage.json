@@ -1,6 +1,6 @@
 {
   "applicationName": "ClashOS",
-  "reviewedCoreVersion": "0.33",
+  "reviewedCoreVersion": "0.34",
   "objective": "实现 Clash Verge 的大部分功能，包括各类右键菜单，并提供可正常使用的 ClashOS。",
   "brandingDecision": "Follow the user's later explicit spelling correction: ClashOS.",
   "referenceInventory": [
@@ -162,10 +162,16 @@
         "Duplicate group-member and direct/indirect cycle exclusion, provider name prefixes/suffixes, safe Unicode/metacharacter quoting and protocol-aware VMess cipher values",
         "Native LAN/authentication, DNS, provider override, group icon/include-all and HTTP/TLS/QUIC sniffer schema fields; unrelated mappings and secrets excluded",
         "Cancelable bounded asynchronous parsing for large drafts, per-document reference caches, stale/read-only/composing edit guards and exact CRLF undo",
-        "Actual emulator node/provider/rule-provider/group-target menu selections, undo/redo, native validation, save/reopen and independently inspected system-picker YAML export with exact expected bytes"
+        "Actual emulator node/provider/rule-provider/group-target menu selections, undo/redo, native validation, save/reopen and independently inspected system-picker YAML export with exact expected bytes",
+        "Native YAML anchor/alias and merge-key resolution before profile/provider parsing, extension/script execution, visual editing and effective export; explicit keys and earlier merge sources take priority with shallow replacement",
+        "Explicit merge tags and literal quoted/!!str/JSON << keys retain their meaning across standalone exports; original imported source remains unchanged",
+        "Bounded graph traversal rejects cycles, excessive depth/work/expanded size and malformed merge inputs with source locations that do not echo values",
+        "Host tests verify file-provider credential template updates, live route/cache rollback and reopening; independent OpenSSL peers verify inherited HTTP/SOCKS authentication, headers and TLS",
+        "Simulator Core 0.33 rejects the public template profile; Core 0.34 imports it through the system picker, forwards six nodes through HTTP/SOCKS plus actual SOCKS UDP, and validates inherited visual edits across cold startup",
+        "Actual system-picker effective export matches original semantics in both Python SafeLoader and native decoding; inline-provider templates forward actual TCP/UDP, cyclic controller payloads return 400 and retain the original profile"
       ],
       "remaining": [
-        "Full Mihomo schema, YAML anchor/alias expansion and downloaded remote-provider node-reference completion"
+        "Full Mihomo schema, template-aware current-document name/protocol completion and downloaded remote-provider node-reference completion"
       ],
       "source": [
         "entry/src/main/ets/service/ProfileStore.ets",
@@ -181,7 +187,10 @@
         "scripts/config-editor/script-completion.mjs",
         "scripts/config-editor/schema.mjs",
         "scripts/config-editor/references.mjs",
-        "scripts/config-editor/completion.test.mjs"
+        "scripts/config-editor/completion.test.mjs",
+        "entry/src/main/cpp/yaml_merges.inc",
+        "tests/yaml_merges_test.inc",
+        "tests/fixtures/yaml/device-templates.yaml"
       ]
     },
     {
@@ -285,8 +294,8 @@
     {
       "feature": "Daily browser connectivity",
       "status": "verified_with_limits",
-      "latest": "Core 0.33 final HAP installed. Six HTTP/HTTPS/SOCKS5 authenticated/anonymous/TLS nodes through an inline provider return HTTP 204 via both local HTTP/SOCKS ingress. Actual SOCKS5 UDP echoes 0/8/4096/65481-byte payloads over plain/TLS control connections. UI node selection and username editing change authentication, survive cold restart and recover after correction. Original saved profile, all 11 group selections, full meaningful runtime and original window restored; owned fixture profile/app/clipboard/forwards removed. Explicit restored Google HTTPS returns 204 / CONNECT 200 / TLS verification 0.",
-      "limit": "Device positive fixtures return fixed HTTP/UDP data on loopback and explicitly skip the public test CA; required-verification controls fail. Independent host OpenSSL peers separately verify valid CA/hostname and HTTPS destination checks. SOCKS5 TLS protects its control channel, not native UDP datagrams. Advanced VLESS and other outbound protocols/chain options remain incomplete. Earlier intermittent api.github.com TLS failures remain unexplained. Full native suite requires host loopback binding unavailable here. True-device TUN authorization/background survival remains unproven."
+      "latest": "Core 0.34 final HAP installed. System-picker import loads a YAML template profile rejected by Core 0.33. Six inherited HTTP/HTTPS/SOCKS5 authenticated/anonymous/TLS nodes return 204 through both ingress protocols and pass latency checks; SOCKS nodes echo actual 0/8/4096/65481-byte UDP packets. Inherited credentials/TLS appear in visual forms, node-only edits affect authentication across cold startup while other template users keep working, and clearing overrides recovers forwarding. System-picker effective export matches source semantics in independent SafeLoader and native decoding. Inline-provider templates also forward actual TCP/UDP. Cyclic controller payload returns 400. Original saved profile, all 11 selections, meaningful runtime and window restored; owned test profile, fixture app, public files and extra forwards removed. Restored Google and Gstatic HTTPS return 204 / CONNECT 200 / TLS verification 0.",
+      "limit": "Device positive fixtures return fixed HTTP/UDP data on loopback and explicitly skip the public test CA; required-verification controls fail. Independent host OpenSSL peers separately verify valid CA/hostname and HTTPS destination checks. SOCKS5 TLS protects its control channel, not native UDP datagrams. Advanced VLESS and other outbound protocols/chain options remain incomplete. Intermittent HTTPS TLS failures remain unexplained: api.github.com was affected earlier, and one restored Google attempt returned TLS 35 before subsequent verified Google/Gstatic requests succeeded. Full native suite requires host loopback binding unavailable here. True-device TUN authorization/background survival remains unproven."
     },
     {
       "feature": "Domain sniffing",
@@ -318,12 +327,12 @@
     }
   ],
   "nextWork": [
-    "Isolate intermittent api.github.com TLS failures with an available independent network control",
+    "Isolate intermittent HTTPS TLS failures (Google/api.github.com) with an available independent network control",
     "Broader routing and ingress configuration, including redir/TProxy",
     "Supported-device TUN proof and broader archive interoperability",
-    "Advanced style assets and full Mihomo schema/alias/downloaded-provider completion"
+    "Advanced style assets, full Mihomo schema, template-aware editor references and downloaded-provider completion"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 12:49:42 UTC",
+  "reviewedAt": "2026-10-17 13:21:09 UTC",
   "verificationNotes": "Status summary only. Historical device screenshots and per-run records are archived outside the source repository. Reproduce host checks with tests/README.md; device and true VPN validation remain separate."
 }

@@ -106,7 +106,7 @@ bool parseProviderContent(const ProxyProvider& provider,const std::string& text,
     yaml_parser_set_input_string(&parser,reinterpret_cast<const unsigned char*>(text.data()),text.size());yaml_document_t document;
     if(!yaml_parser_load(&parser,&document)){yaml_parser_delete(&parser);error="Invalid provider YAML/JSON";return false;}
     yaml_node_t* root=yaml_document_get_root_node(&document);
-    bool ok=root!=nullptr&&root->type==YAML_MAPPING_NODE&&parseProxySequence(document,yamlValue(document,root,"proxies"),nodes,error);
+    bool ok=root!=nullptr&&root->type==YAML_MAPPING_NODE&&resolveYamlMerges(document,text,error)&&parseProxySequence(document,yamlValue(document,root,"proxies"),nodes,error);
     yaml_document_delete(&document);
     if(ok) {
         yaml_document_t extra;

@@ -705,6 +705,7 @@ yaml_node_t* yamlValue(yaml_document_t& document, yaml_node_t* map, const std::s
     return nullptr;
 }
 
+#include "yaml_merges.inc"
 #include "forward_proxy_options.inc"
 
 bool parseProxyNode(yaml_document_t& document,yaml_node_t* source,ProxyNode& node,std::string& error)
@@ -907,6 +908,7 @@ bool parseConfigText(const std::string& text, ParsedConfig& config, std::string&
     yaml_node_t* root = yaml_document_get_root_node(&document);
     bool valid = root != nullptr && root->type == YAML_MAPPING_NODE;
     if (!valid) error = "Configuration root must be a mapping";
+    if (valid) valid = resolveYamlMerges(document, text, error);
     if (valid && merges && !merges->sequence.empty()) {
         valid = scriptTagScalars(document, text, error) && applyBackupSequence(document, merges->sequence, error);
         if (valid) valid = scriptDocumentText(document, config.enhancedSource, error);
@@ -1501,8 +1503,8 @@ std::string responseFor(const std::string& method, const std::string& path, cons
     if (path.substr(0, path.find('?')) == "/clashos/ports") return proxyPortsControlLocked(method, path, body);
     if (path.substr(0, path.find('?')) == "/clashos/inbound") return inboundControlLocked(method, path, body);
     if (method == "GET" && path == "/version") {
-        return "{\"version\":\"ClashOS Core 0.33 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
-            "\",\"premium\":false,\"meta\":true,\"features\":[\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"vless\",\"trojan\",\"http-outbound\",\"socks5-outbound\",\"socks5-udp\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
+        return "{\"version\":\"ClashOS Core 0.34 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
+            "\",\"premium\":false,\"meta\":true,\"features\":[\"yaml-merge-keys\",\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"vless\",\"trojan\",\"http-outbound\",\"socks5-outbound\",\"socks5-udp\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
     }
     if (method == "GET" && path == "/clahsos/diagnostics") return diagnosticsJson();
     const std::string resource=path.substr(0,path.find('?'));

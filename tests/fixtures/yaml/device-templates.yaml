@@ -1,0 +1,33 @@
+# Public local-only fixture for the independent device reference application.
+# The product must never activate this configuration automatically.
+port: 7890
+socks-port: 7891
+mode: rule
+http-template: &http
+  type: http
+  server: 127.0.0.1
+  port: 18097
+  username: fixture
+  password: p@ss:word
+socks-template: &socks
+  <<: *http
+  type: socks5
+  udp: true
+tls-template: &tls
+  port: 18098
+  tls: true
+  sni: vmess.test
+  skip-cert-verify: true
+proxies:
+  - {name: Template-HTTP, <<: *http}
+  - {<<: [*tls, *http], name: Template-HTTPS}
+  - {<<: *socks, name: Template-SOCKS5}
+  - {name: Template-SOCKS5-TLS, <<: [*tls, *socks]}
+  - {<<: *http, name: Template-HTTP-anonymous, username: '', password: ''}
+  - {<<: *socks, name: Template-SOCKS5-anonymous, username: '', password: ''}
+members: &members [Template-HTTP, Template-HTTPS, Template-SOCKS5, Template-SOCKS5-TLS, Template-HTTP-anonymous, Template-SOCKS5-anonymous]
+group-template: &group {type: select, proxies: *members}
+proxy-groups:
+  - {<<: *group, name: YAML-Templates}
+rule-template: &rules ['MATCH,YAML-Templates']
+rules: *rules
