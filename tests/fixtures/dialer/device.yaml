@@ -1,0 +1,18 @@
+# Public fixture for the removable com.clashos.webdavtest app; never a subscription.
+mode: rule
+port: 7890
+socks-port: 7891
+external-controller: 127.0.0.1:9090
+proxies:
+  - {name: Chain HTTP, type: http, server: 127.0.0.1, port: 18097, username: fixture, password: 'p@ss:word'}
+  - {name: Chain HTTPS, type: http, server: 127.0.0.1, port: 18098, username: fixture, password: 'p@ss:word', tls: true, servername: vmess.test, skip-cert-verify: true}
+  - {name: Chain SOCKS, type: socks5, server: 127.0.0.1, port: 18097, username: fixture, password: 'p@ss:word', udp: true}
+  - {name: Chain SOCKS TLS, type: socks5, server: 127.0.0.1, port: 18098, username: fixture, password: 'p@ss:word', tls: true, servername: vmess.test, skip-cert-verify: true, udp: true}
+  - {name: Chain VLESS TCP, type: vless, server: chain.device.test, port: 18097, uuid: 11111111-2222-4333-8444-555555555555, udp: true, dialer-proxy: Chain Gateway}
+  - {name: Chain VLESS TLS, type: vless, server: chain.device.test, port: 18098, uuid: 11111111-2222-4333-8444-555555555555, tls: true, servername: vmess.test, skip-cert-verify: true, udp: true, dialer-proxy: Chain Gateway}
+  - {name: Chain VLESS WS, type: vless, server: chain.device.test, port: 18097, uuid: 11111111-2222-4333-8444-555555555555, network: ws, ws-opts: {path: /vless-device}, udp: true, dialer-proxy: Chain Gateway}
+  - {name: Chain VLESS WSS, type: vless, server: chain.device.test, port: 18098, uuid: 11111111-2222-4333-8444-555555555555, tls: true, servername: vmess.test, skip-cert-verify: true, network: ws, ws-opts: {path: /vless-device}, udp: true, dialer-proxy: Chain Gateway}
+proxy-groups:
+  - {name: Chain Gateway, type: select, proxies: [Chain HTTP, Chain HTTPS, Chain SOCKS, Chain SOCKS TLS]}
+  - {name: Chain Route, type: select, proxies: [Chain VLESS TCP, Chain VLESS TLS, Chain VLESS WS, Chain VLESS WSS]}
+rules: ['MATCH,Chain Route']

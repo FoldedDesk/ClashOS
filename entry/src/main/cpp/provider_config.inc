@@ -12,6 +12,7 @@ struct ProviderPattern {
     ProviderPattern(const ProviderPattern&)=delete;
 };
 bool validProviderPattern(const std::string& pattern){return ProviderPattern(pattern).valid;}
+#include "dialer_graph.inc"
 bool applyProviderOptions(const ProxyProvider& provider,std::vector<ProxyNode>& nodes,std::string& error)
 {
     ProviderPattern include(provider.filter),exclude(provider.excludeFilter);
@@ -25,6 +26,7 @@ bool applyProviderOptions(const ProxyProvider& provider,std::vector<ProxyNode>& 
         node.name=provider.prefix+node.name+provider.suffix;node.provider=provider.name;
         if(provider.overrideUdp>=0){node.udp=provider.overrideUdp!=0;node.udpConfigured=true;}
         if(provider.overrideSkipVerify>=0)node.skipCertVerify=provider.overrideSkipVerify!=0;
+        if(provider.overrideDialerConfigured)node.dialerProxy=provider.overrideDialer;
         if(node.name.empty()||!names.insert(node.name).second){error="Provider overrides produced duplicate/reserved proxy names";return false;}
         selected.push_back(std::move(node));
     }
@@ -76,6 +78,13 @@ bool parseProviderDefinitions(yaml_document_t& document,yaml_node_t* root,std::v
             if(override->type!=YAML_MAPPING_NODE){error="Provider override must be a mapping";return false;}
             if(yamlValue(document,override,"override-expr")!=nullptr||yamlValue(document,override,"proxy-name")!=nullptr){error="Provider override expressions/renaming rules are not supported yet";return false;}
             provider.prefix=text(override,"additional-prefix");provider.suffix=text(override,"additional-suffix");
+            if(auto* dialer=yamlValue(document,override,"dialer-proxy")) {
+                provider.overrideDialerConfigured=true;provider.overrideDialer=yamlText(dialer);
+                if(dialer->type!=YAML_SCALAR_NODE||provider.overrideDialer.size()>4096||
+                    std::any_of(provider.overrideDialer.begin(),provider.overrideDialer.end(),[](unsigned char ch){return ch<32||ch==127;})) {
+                    error="Provider dialer-proxy override must be a bounded proxy/group name";return false;
+                }
+            }
             if(yamlValue(document,override,"udp")!=nullptr)provider.overrideUdp=lower(text(override,"udp"))=="true"?1:0;
             if(yamlValue(document,override,"skip-cert-verify")!=nullptr)provider.overrideSkipVerify=lower(text(override,"skip-cert-verify"))=="true"?1:0;
         }
@@ -148,14 +157,16 @@ std::string resolveProviderFile(const std::string& profile,const std::string& pa
     const std::string root=std::string(realBase)+"/",file=realFile;
     return file.rfind(root,0)==0?file:std::string{};
 }
-bool providerNamesAvailableLocked(const std::string& name,const std::vector<ProxyNode>& nodes,std::string& error)
+bool providerNamesAvailableLocked(const std::string& name,const std::vector<ProxyNode>& nodes,std::string& error,bool deferMissing=false)
 {
     std::set<std::string> occupied={"DIRECT","REJECT"};
     for(const ProxyNode& node:g_state.localNodes)occupied.insert(node.name);
     for(const ProxyGroup& group:g_state.groups)occupied.insert(group.name);
     for(const ProxyProvider& provider:g_state.providers)if(provider.name!=name)for(const ProxyNode& node:provider.nodes)occupied.insert(node.name);
     for(const ProxyNode& node:nodes)if(!occupied.insert(node.name).second){error="Provider proxy name conflicts with another proxy or group";return false;}
-    return true;
+    auto candidates=g_state.providers;
+    for(auto& provider:candidates)if(provider.name==name)provider.nodes=nodes;
+    return validateDialerGraph(g_state.localNodes,candidates,g_state.groups,error,deferMissing);
 }
 void rebuildProviderNodesLocked()
 {
@@ -217,7 +228,7 @@ void initializeProvidersLocked()
             path=resolveProviderFile(g_state.configPath,provider.path);
             read=!path.empty()&&readProviderFile(path,provider.sizeLimit,content,error);
         }
-        if(read&&parseProviderContent(provider,content,nodes,error)&&providerNamesAvailableLocked(provider.name,nodes,error)) {
+        if(read&&parseProviderContent(provider,content,nodes,error)&&providerNamesAvailableLocked(provider.name,nodes,error,true)) {
             provider.nodes=std::move(nodes);provider.updatedAt=providerFileTime(path);
         } else if(provider.type=="file")provider.lastError=error.empty()?"Provider file must be inside the configuration directory":error;
     }

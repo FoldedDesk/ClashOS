@@ -16,6 +16,31 @@ function fixture(source,language='yaml') {
   return {result,labels:result?.options.map(x=>x.label)||[],apply(label){const option=result?.options.find(x=>x.label===label);assert(option,'Missing '+label);option.apply(view);return state.doc.toString();},undo(){assert(undo(view));return serializeDocument(state.doc,baseline,text);},text};
 }
 const nodes='proxies:\n  - {name: Public, type: ss}\n  - {name: "🇯🇵 日本 #1", type: trojan}\n';
+for(const language of ['yaml','json'])test('Dialer references preserve exact Unicode names and support undo: '+language,()=>{
+  const f=fixture(language==='yaml'?nodes+'proxy-groups: [{name: Gateway, proxies: [Public]}]\nproxy-providers: {P: {type: inline, payload: [{name: Exit, type: ss, dialer-proxy: ¦}]}}':JSON.stringify({proxies:[{name:'Public',type:'ss'},{name:'🇯🇵 日本 #1',type:'trojan'},{name:'Exit',type:'ss','dialer-proxy':'¦'}],'proxy-groups':[{name:'Gateway',proxies:['Public']}]}),language);
+  for(const label of ['Public','🇯🇵 日本 #1','Gateway','DIRECT'])assert(f.labels.includes(label),label);
+  assert(!f.labels.includes('Exit'));const changed=f.apply('🇯🇵 日本 #1');
+  if(language==='json')assert.equal(JSON.parse(changed).proxies[2]['dialer-proxy'],'🇯🇵 日本 #1');else assert(changed.includes('dialer-proxy: "🇯🇵 日本 #1"'));
+  assert.equal(f.undo(),f.text);
+});
+test('Dialer candidates exclude direct and indirect cycles through nodes and groups',()=>{
+  const f=fixture('proxies: [{name: Exit, type: ss, dialer-proxy: ¦}, {name: Back, type: ss, dialer-proxy: Exit}, {name: Public, type: ss}]\nproxy-groups: [{name: Unsafe, proxies: [Back]}, {name: All, include-all-proxies: true}, {name: Safe, proxies: [Public]}]');
+  for(const name of ['Exit','Back','Unsafe','All'])assert(!f.labels.includes(name),name);for(const name of ['Public','Safe','DIRECT'])assert(f.labels.includes(name),name);
+});
+test('Provider dialer override excludes groups consuming that provider, including dynamic resources',()=>{
+  for(const type of ['inline','http']){
+    const f=fixture('proxies: [{name: Public, type: ss}]\nproxy-providers: {P: {type: '+type+', override: {dialer-proxy: ¦}, payload: [{name: Exit, type: ss}]}}\nproxy-groups: [{name: Unsafe, use: [P]}, {name: All, include-all-providers: true}, {name: Safe, proxies: [Public]}]');
+    assert(!f.labels.includes('Unsafe'));assert(!f.labels.includes('All'));assert(f.labels.includes('Safe'));
+  }
+});
+test('Adding a provider or node to a group cannot introduce a dialer cycle',()=>{
+  const source='proxies: [{name: Back, type: ss, dialer-proxy: Main}, {name: Public, type: ss}]\nproxy-providers: {P: {type: http, override: {dialer-proxy: Main}}, Safe: {type: http}}\n';
+  const members=fixture(source+'proxy-groups: [{name: Main, proxies: [¦]}]');assert(!members.labels.includes('Back'));assert(members.labels.includes('Public'));
+  const providers=fixture(source+'proxy-groups: [{name: Main, use: [¦]}]');assert.deepEqual(providers.labels,['Safe']);
+});
+test('Dialer fields are offered on nodes and provider overrides',()=>{
+  for(const source of ['proxies: [{name: Exit, dial¦}]','proxy-providers: {P: {override: {dial¦}}}','proxy-providers: {P: {payload: [{name: Exit, dial¦}]}}'])assert(fixture(source).labels.includes('dialer-proxy'));
+});
 for(const protocol of ['http','socks5'])for(const language of ['yaml','json']) {
   test('Forward proxy network completion follows native TCP support: '+protocol+' '+language,()=>{
     const source=language==='yaml'?`proxies: [{name: Public, type: ${protocol}, network: ¦}]`:`{"proxies":[{"name":"Public","type":"${protocol}","network":¦}]}`;

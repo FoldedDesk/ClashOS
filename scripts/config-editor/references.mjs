@@ -8,7 +8,7 @@ const ruleTypes=['DOMAIN','DOMAIN-SUFFIX','DOMAIN-KEYWORD','DOMAIN-WILDCARD','DO
 
 export function scalarText(raw,partial=false) {
   if(raw.startsWith('"')){
-    try{return JSON.parse(partial&&!raw.endsWith('"')?raw+'"':raw);}catch(_){return null;}
+    try{return JSON.parse(partial&&(raw.length===1||!raw.endsWith('"'))?raw+'"':raw);}catch(_){return null;}
   }
   if(raw.startsWith("'")){
     if(!partial&&!raw.endsWith("'"))return null;
@@ -43,14 +43,16 @@ function indexFor(state,pos,language) {
   const complete=ensureSyntaxTree(state,state.doc.length,40),tree=complete||syntaxTree(state),root=rootAt(tree,pos,language),doc=state.doc;
   if(!root)return {tree,nodes:[],groups:[],providers:[],ruleProviders:[]};
   const key=language+':'+root.from+':'+root.to,old=cache.get(doc)?.get(key);if(old)return {...old,tree};
-  const nodes=entries(property(root,'proxies',doc)).filter(n=>mappingTypes.has(n.name)).map(n=>({name:textOf(property(n,'name',doc),doc),detail:'节点 · '+(textOf(property(n,'type',doc),doc)||'未知协议')}));
+  const nodes=entries(property(root,'proxies',doc)).filter(n=>mappingTypes.has(n.name)).map(n=>({node:n,name:textOf(property(n,'name',doc),doc),dialer:textOf(property(n,'dialer-proxy',doc),doc),detail:'节点 · '+(textOf(property(n,'type',doc),doc)||'未知协议')}));
   const providers=pairs(property(root,'proxy-providers',doc)).map(pair=>{
     const node=valueOf(pair),override=property(node,'override',doc),prefix=textOf(property(override,'additional-prefix',doc),doc)||'',suffix=textOf(property(override,'additional-suffix',doc),doc)||'';
     // Filtered/dynamic resources stay authoritative in the native core. Do not
     // evaluate user regular expressions or fabricate downloaded provider nodes.
     const visible=textOf(property(node,'type',doc),doc)==='inline'&&!textOf(property(node,'filter',doc),doc)&&!textOf(property(node,'exclude-filter',doc),doc)&&!textOf(property(node,'exclude-type',doc),doc);
-    const payload=visible?entries(property(node,'payload',doc)).map(n=>textOf(property(n,'name',doc),doc)).filter(Boolean).map(name=>({name:prefix+name+suffix,detail:'集合节点 · '+keyOf(pair,doc)})):[];
-    return {name:keyOf(pair,doc),detail:'代理集合',payload};
+    const overrideDialer=property(override,'dialer-proxy',doc),dialer=overrideDialer?textOf(overrideDialer,doc):null;
+    const definitions=entries(property(node,'payload',doc)).map(n=>({node:n,name:textOf(property(n,'name',doc),doc),dialer:overrideDialer?dialer:textOf(property(n,'dialer-proxy',doc),doc)})).filter(n=>n.name).map(n=>({...n,name:prefix+n.name+suffix,detail:'集合节点 · '+keyOf(pair,doc)}));
+    const payload=visible?definitions:[];
+    return {name:keyOf(pair,doc),detail:'代理集合',payload,definitions,dialer,vertex:Symbol(keyOf(pair,doc))};
   });
   const ruleProviders=pairs(property(root,'rule-providers',doc)).map(pair=>({name:keyOf(pair,doc),detail:'规则集合'}));
   const groups=entries(property(root,'proxy-groups',doc)).filter(n=>mappingTypes.has(n.name)).map(node=>({node,name:textOf(property(node,'name',doc),doc),detail:'代理组 · '+(textOf(property(node,'type',doc),doc)||'select'),members:strings(property(node,'proxies',doc),doc),uses:strings(property(node,'use',doc),doc),includeNodes:textOf(property(node,'include-all-proxies',doc),doc)==='true'||textOf(property(node,'include-all',doc),doc)==='true',includeProviders:textOf(property(node,'include-all-providers',doc),doc)==='true'||textOf(property(node,'include-all',doc),doc)==='true'}));
@@ -61,7 +63,14 @@ function atGroup(index,pos) {
 }
 function circularGroups(index,target) {
   const parents=new Map(),pending=[target],seen=new Set();
-  for(const group of index.groups)for(const member of group.members){if(!parents.has(member.name))parents.set(member.name,[]);parents.get(member.name).push(group.name);}
+  const edge=(from,to)=>{if(!to)return;if(!parents.has(to))parents.set(to,[]);parents.get(to).push(from);};
+  for(const node of [...index.nodes,...index.providers.flatMap(p=>p.definitions)])edge(node.name,node.dialer);
+  for(const provider of index.providers){edge(provider.vertex,provider.dialer);for(const node of provider.definitions)edge(provider.vertex,node.name);}
+  for(const group of index.groups){
+    for(const member of group.members)edge(group.name,member.name);
+    if(group.includeNodes)for(const node of index.nodes)edge(group.name,node.name);
+    for(const provider of index.providers)if(group.includeProviders||group.uses.some(p=>p.name===provider.name))edge(group.name,provider.vertex);
+  }
   while(pending.length){const name=pending.pop();if(seen.has(name))continue;seen.add(name);for(const parent of parents.get(name)||[])pending.push(parent);}return seen;
 }
 function targets(index) {
@@ -97,12 +106,25 @@ function ruleOptions(index,span) {
 }
 export function referenceCompletions(state,pos,language,info) {
   const path=info.path,key=path.at(-1),groupPath=path.length===2&&path[0]==='proxy-groups',providerPath=path.length===3&&['proxy-providers','rule-providers'].includes(path[0]);
-  if(!(groupPath&&['proxies','use','default-selected'].includes(key)||providerPath&&key==='proxy'||path.length===1&&key==='rules'))return null;
+  const dialerPath=key==='dialer-proxy'&&(path.length===2&&path[0]==='proxies'||path.length===4&&path[0]==='proxy-providers'&&path[2]==='payload');
+  const overrideDialer=key==='dialer-proxy'&&path.length===4&&path[0]==='proxy-providers'&&path[2]==='override';
+  if(!(groupPath&&['proxies','use','default-selected'].includes(key)||providerPath&&key==='proxy'||path.length===1&&key==='rules'||dialerPath||overrideDialer))return null;
   const index=indexFor(state,pos,language),span=scalarSpan(state,pos,info,index.tree);if(!span)return null;
   if(span.sequence!==(['proxies','use','rules'].includes(key)))return null;
   if(path.length===1&&key==='rules')return ruleOptions(index,span);
   let candidates=targets(index);const group=groupPath?atGroup(index,pos):null;
-  if(groupPath&&key==='use')candidates=index.providers.filter(p=>!group?.uses.some(m=>m.name===p.name&&m.from!==span.from));
+  if(groupPath&&key==='use'){
+    const circular=group?.name?circularGroups(index,group.name):new Set();
+    candidates=index.providers.filter(p=>!circular.has(p.vertex)&&!group?.uses.some(m=>m.name===p.name&&m.from!==span.from));
+  }
+  if(dialerPath){
+    const node=[...index.nodes,...index.providers.flatMap(p=>p.definitions)].find(n=>n.node.from<=pos&&pos<=n.node.to),circular=node?.name?circularGroups(index,node.name):new Set();
+    candidates=candidates.filter(n=>!circular.has(n.name));
+  }
+  if(overrideDialer){
+    const provider=index.providers.find(p=>p.name===path[1]),circular=provider?circularGroups(index,provider.vertex):new Set();
+    candidates=candidates.filter(n=>!circular.has(n.name));
+  }
   if(groupPath&&key==='proxies'){
     const duplicates=new Set(group?.members.filter(m=>m.from!==span.from).map(m=>m.name)),circular=group?.name?circularGroups(index,group.name):new Set();
     candidates=candidates.filter(x=>!duplicates.has(x.name)&&!circular.has(x.name));

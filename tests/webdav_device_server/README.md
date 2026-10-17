@@ -69,3 +69,22 @@ node form, change a username, apply, restart, and verify the change affects
 authentication; then correct the credentials and verify TCP/UDP after restart.
 Restore the original profile, mode, groups and window, remove the owned test
 profile and forwards, clear only the fixture clipboard and uninstall this app.
+
+## dialer-proxy device verification
+
+The HTTP/SOCKS parser can additionally tunnel only `chain.device.test:18097` or
+`:18098` to the corresponding fixed loopback fixture port. This lets the native
+core establish real two-hop connections without arbitrary network forwarding.
+The `forward` state exposes separate `relay-tcp`/`relay-tls` counts; VLESS
+request/UDP counts come from the independent exit parser.
+
+Start the VLESS fixture and import `../fixtures/dialer/device.yaml`. For each
+of four `Chain Gateway` entries and four `Chain Route` exits, verify HTTP and
+SOCKS ingress at `http://vless.device.test/verify`, node delay, and the on-device
+UDP probe. Each probe checks 0/8/4096/65483-byte datagrams. The fixture TLS CA is
+public and explicitly skipped only by these test nodes; host peers separately
+check actual HTTPS trust. Select a different dialer in the visual node form,
+save/apply, restart the app, and verify both metadata and actual forwarding.
+Restore the original saved profile, runtime settings, all group selections and
+window; delete only the owned fixture profile/public file, remove added forwards
+and uninstall this fixture app.

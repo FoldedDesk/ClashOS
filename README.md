@@ -32,6 +32,13 @@ SOCKS5 节点支持匿名或用户名密码认证，以及 TCP / UDP；控制连
 两者均可配置 TLS；SOCKS5 的 TLS 只保护 TCP 控制连接，UDP 仍使用原生数据报。
 可在“节点链接”入口导入 `http://`、`https://`、`socks5://` 链接，或通过文件和订阅导入。
 
+节点的 `dialer-proxy` 可填写中转节点或代理组的精确名称；也可在“订阅 → 编辑节点”表单中选择。
+例如为落地节点填写 `dialer-proxy: 中转组`，连接会先经过中转组当前选中的节点。
+代理集合支持 `override: {dialer-proxy: 中转组}`。切换中转组后，新连接使用新选择，已有连接保持原路径。
+支持 TCP 链路及可承载的 UDP 链路；HTTP 中转不能承载原生 SS/SOCKS UDP，VLESS/VMess/Trojan 的流式 UDP 可经过 TCP 中转。
+配置校验拒绝循环及超过八个出站节点的链路；中转不可用时连接失败。链路内的封装不重复计入流量或连接列表。
+UDP 单包上限随各层封装收紧，超限数据包会被丢弃。用法参照 [Mihomo dialer-proxy](https://wiki.metacubex.one/config/proxies/dialer-proxy/)。
+
 Shadowsocks TCP 在节点响应尚未收全时仍可继续上传，保留分片解码进度及半关闭语义。
 “测试 → 内核自检”包含当前设备上的三种 SS 加密分帧检查，使用公开测试数据，
 检查本地接收行为；节点服务器和系统代理连通性需另行检测。

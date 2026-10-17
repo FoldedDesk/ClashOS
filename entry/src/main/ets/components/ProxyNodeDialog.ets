@@ -5,7 +5,7 @@ import { ProxyNodeForm, EditorObjectView, defaultProxyNodeForm } from '../servic
 interface WsHeadersPatch { Host: string | null; }
 interface WsNodePatch { path: string; headers: WsHeadersPatch; }
 interface NodeFormPatch {
-  name: string; type: string; udp: boolean;
+  name: string; type: string; udp: boolean; 'dialer-proxy': string | null;
   server?: string; port?: number; username?: string; password?: string; uuid?: string; cipher?: string; alterId?: number;
   tls?: boolean; 'skip-cert-verify'?: boolean; servername?: string | null; sni?: string | null; network?: string; 'ws-opts'?: WsNodePatch;
 }
@@ -22,6 +22,7 @@ export struct ProxyNodeDialog {
   title: string = '新建节点';
   initialContent: string = NEW_NODE_CONTENT;
   lockName: boolean = false;
+  choices: string[] = [];
   onSave: (item: EditorObjectView) => void = (_item: EditorObjectView): void => {};
   @State form: ProxyNodeForm = defaultProxyNodeForm();
   @State advanced: boolean = false;
@@ -55,6 +56,7 @@ export struct ProxyNodeDialog {
   private patch(): string {
     const transport: boolean = this.form.type === 'vmess' || this.form.type === 'vless' || this.form.type === 'trojan' || this.form.type === 'http' || this.form.type === 'socks5';
     const patch: NodeFormPatch = { name: this.lockName ? this.identity : this.form.name.trim(), type: this.form.type, udp: this.form.type !== 'http' && this.form.udp,
+      'dialer-proxy': this.form.type === 'reject' ? null : this.form.dialerProxy || null,
       'skip-cert-verify': transport ? this.form.skipCertVerify : undefined,
       'ws-opts': transport && this.form.network === 'ws' ? { path: this.form.wsPath || '/', headers: { Host: this.form.wsHost.trim() || null } } : undefined };
     if (this.form.type !== 'direct' && this.form.type !== 'reject') {
@@ -86,6 +88,7 @@ export struct ProxyNodeDialog {
     const discarded: boolean = this.identity.length > 0 || this.form.username.length > 0 || this.form.password.length > 0 || this.form.uuid.length > 0;
     const next = defaultProxyNodeForm();
     next.name = this.form.name; next.type = type; next.server = this.form.server; next.port = this.form.port || '443';
+    next.dialerProxy = type === 'reject' ? '' : this.form.dialerProxy;
     next.cipher = type === 'vmess' ? 'auto' : 'aes-128-gcm'; next.tls = type === 'trojan'; next.udp = type !== 'http'; this.form = next;
     this.base = '{}'; this.changedProtocol = this.changedProtocol || discarded;
   }
@@ -102,6 +105,7 @@ export struct ProxyNodeDialog {
   }
   @Builder
   private label(text: string) { Text(text).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%').margin({ bottom: 6 }); }
+  private dialerChoices(): string[] { return this.choices.filter((name: string) => name !== this.form.name); }
 
   build() {
     Column({ space: 12 }) {
@@ -125,6 +129,16 @@ export struct ProxyNodeDialog {
             }.width('100%');
             if (this.lockName) Text('名称用于配置引用；需要改名可创建副本，再更新代理组或规则。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
             if (this.changedProtocol) Text('已清除原协议的其他选项；取消编辑可保留原配置。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.warning).width('100%');
+            if (this.form.type !== 'reject') {
+              Column({ space: 6 }) {
+                this.label('中转节点 / 代理组（dialer-proxy）');
+                TextInput({ text: this.form.dialerProxy, placeholder: '留空直接连接此节点服务器' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily)
+                  .backgroundColor(this.theme.field).onChange((value: string) => this.form.dialerProxy = value);
+                if (this.dialerChoices().length > 0) Select(['不使用中转', ...this.dialerChoices()].map((value: string): SelectOption => ({ value })))
+                  .value(this.form.dialerProxy || '不使用中转').height(34).width('100%').font({ size: this.theme.font(12), family: this.theme.fontFamily })
+                  .onSelect((index: number) => this.form.dialerProxy = index === 0 ? '' : this.dialerChoices()[index - 1]);
+              }.width('100%');
+            }
             if (this.form.type !== 'direct' && this.form.type !== 'reject') {
               GridRow({ columns: this.dialogWidth < 640 ? 1 : 2, gutter: 12 }) {
                 GridCol() { Column() { this.label('服务器'); TextInput({ text: this.form.server, placeholder: '域名或 IP，不含协议和路径' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily)

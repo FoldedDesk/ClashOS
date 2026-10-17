@@ -22,6 +22,20 @@ python3 tests/run_native_tests.py --build-dir .host-build/native --config /path/
 `CLAHSOS_REFERENCE_PYTHON` 可指定已安装 cryptography 的 Python。
 原生测试会绑定本机回环端口；限制 socket 绑定的沙箱无法完成这些检查。
 
+链式代理专项使用继承的 Unix socket，无需主机监听权限：
+
+```sh
+python3 tests/run_native_tests.py --suite dialer --build-dir .host-build/native
+python3 tests/run_native_tests.py --suite groups --build-dir .host-build/native
+```
+
+独立 Python/OpenSSL 对端检查 HTTP/SOCKS/SS 中转下的加密 TCP、HTTPS、三跳实际入站、
+不完整响应时的继续上传及半关闭；UDP 覆盖 VLESS 流式封装、三种 SS 加密嵌套、SOCKS 控制连接和直连别名。
+检查空包、最大包、超限丢弃、来源地址、认证失败过滤、单次计数、连接取消、工作线程上限与清理。
+配置检查覆盖本地和集合节点的循环、引用、深度、覆盖、缓存恢复、失败回退、选择快照及测速路径。
+`groups` 专项检查自动健康组和负载均衡。模拟器公开配置位于 `fixtures/dialer/device.yaml`，
+设备独立对端与步骤见 [链式代理设备验证](webdav_device_server/README.md#dialer-proxy-device-verification)。
+
 YAML 模板专项不需要主机监听权限：
 
 ```sh

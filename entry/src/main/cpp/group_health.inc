@@ -5,7 +5,7 @@ void chooseHealthyGroupLocked(ProxyGroup& group)
     if(!isAutomaticGroup(group))return;
     auto delay=[&](const std::string& member)->int {
         const auto sample=group.health.find(member);
-        if(sample==group.health.end() || resolveProxyLocked(member).name!=sample->second.resolved)return -1;
+        if(sample==group.health.end() || !matchesProxyHealth(resolveProxyLocked(member),sample->second))return -1;
         return sample->second.delay;
     };
     const std::string before=group.now;
@@ -62,13 +62,13 @@ void commitHealthResult(const GroupProbeJob& job,int delay)
         const auto provider=std::find_if(g_state.providers.begin(),g_state.providers.end(),[&](const ProxyProvider& item){return item.name==job.provider;});
         if(provider==g_state.providers.end()||provider->health.checkGeneration!=job.generation)return;
         const ProxyNode node=resolveProxyLocked(job.member);
-        if(node.name==job.node.name&&node.provider==job.provider){provider->health.health[job.member]={delay,node.name};g_state.delays[node.name]=delay;}
+        if(sameProxyRoute(node,job.node)&&node.provider==job.provider){provider->health.health[job.member]={delay,node.name,node.chain};g_state.delays[node.name]=delay;}
         return;
     }
     auto group=std::find_if(g_state.groups.begin(),g_state.groups.end(),[&](const ProxyGroup& item){return item.name==job.group;});
     if(group==g_state.groups.end()||group->checkGeneration!=job.generation)return;
-    if(resolveProxyLocked(job.member).name==job.node.name){
-        group->health[job.member]={delay,job.node.name};g_state.delays[job.member]=delay;g_state.delays[job.node.name]=delay;
+    if(sameProxyRoute(resolveProxyLocked(job.member),job.node)){
+        group->health[job.member]={delay,job.node.name,job.node.chain};g_state.delays[job.member]=delay;g_state.delays[job.node.name]=delay;
         chooseHealthyGroupLocked(*group);
     }
 }

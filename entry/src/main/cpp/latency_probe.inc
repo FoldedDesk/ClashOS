@@ -125,7 +125,7 @@ std::string delayResponse(const std::string& path)
     ProxyNode node;uint64_t revision;
     {std::lock_guard<std::mutex> guard(g_state.mutex);const RouteContext context{target.host,"probe","tcp"};node=resolveProxyLocked(name,&context);revision=g_state.configRevision;}
     std::string error;const int delay=probeNode(node,target,timeout,expected,error);
-    {std::lock_guard<std::mutex> guard(g_state.mutex);if(g_state.configRevision==revision && resolveProxyLocked(name).name==node.name)g_state.delays[name]=delay;}
+    {std::lock_guard<std::mutex> guard(g_state.mutex);if(g_state.configRevision==revision && sameProxyRoute(resolveProxyLocked(name),node))g_state.delays[name]=delay;}
     if(delay==0){coreLog("warning","Latency test failed for "+name+": "+error);return "{\"error\":\""+jsonEscape(error)+"\"}";}
     return "{\"delay\":"+std::to_string(delay)+"}";
 }

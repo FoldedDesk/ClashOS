@@ -1,6 +1,6 @@
 {
   "applicationName": "ClashOS",
-  "reviewedCoreVersion": "0.35",
+  "reviewedCoreVersion": "0.36",
   "objective": "实现 Clash Verge 的大部分功能，包括各类右键菜单，并提供可正常使用的 ClashOS。",
   "brandingDecision": "Follow the user's later explicit spelling correction: ClashOS.",
   "referenceInventory": [
@@ -71,13 +71,20 @@
         "Independent Python/OpenSSL peers reproduce the Core 0.34 upload stall and verify 72 duplex cases across all three ciphers and HTTP/SOCKS ingress, including server-first data, empty records and half-close",
         "Every split and EOF position in independent known-answer vectors verifies prompt nonblocking yield, blocking-read continuation, plaintext/authentication boundaries and persistent rejection; existing SS TCP/UDP/HTTPS tests remain passing",
         "Device-local Shadowsocks TCP diagnostics decode public independent vectors one byte at a time over Unix socket pairs, test outgoing writes during partial reception, and reject truncated/corrupt records without reading user credentials",
-        "Core 0.35 simulator native diagnostics and the visible self-test dialog pass the new check; original saved profile and all 11 selections remain unchanged, and Google/Gstatic/GitHub HTTPS requests return verified 204/204/200"
+        "Core 0.35 simulator native diagnostics and the visible self-test dialog pass the new check; original saved profile and all 11 selections remain unchanged, and Google/Gstatic/GitHub HTTPS requests return verified 204/204/200",
+        "dialer-proxy resolves exact node/group names into immutable per-connection chains, supports provider overrides and records the actual entry/exit path without duplicate connection or traffic accounting",
+        "Bounded TCP stream bridges reuse existing protocol codecs; UDP carriers preserve datagram boundaries, actual reply sources, SOCKS control lifetime, nested framing limits and cancellation cleanup; unavailable routes fail closed",
+        "Graph validation covers local/filtered/provider members, cycles, deferred unavailable resources, eight outbound nodes and nesting/complexity bounds; provider dialer-only updates replace live routes and preserve valid caches on failure",
+        "Visual node dialer input/selection, native form serialization and offline YAML/JSON reference completion with cycle filtering; saved form edits survive cold startup and forward actual TCP/UDP traffic",
+        "1041 independent host chain assertions verify 24 HTTPS entry/exit pairs, three-hop HTTP/SOCKS ingress, partial replies and half-close, streamed/native UDP, provider member probes/cache lifecycle, health snapshots, worker limits and cleanup",
+        "Core 0.36 simulator verifies 16 HTTP/HTTPS/SOCKS/SOCKS-TLS entry and VLESS TCP/TLS/WS/WSS exit pairs through both ingress types, node delay and actual UDP lengths 0/8/4096/65483; wrong entry authentication and required fixture-CA validation fail, restored positive control passes",
+        "An independent VLESS carrier with a DIRECT alias and SS exit reproduces maximum-datagram loss before the internal-envelope correction; full physical packets and their internal source envelopes now have separate bounds and pass the nested maximum/empty/cancellation checks"
       ],
       "remaining": [
         "Protocol and option breadth is below Mihomo, including VLESS Reality/Vision/XUDP/extra encryption, other advanced transports and additional outbound protocols",
         "No bundled Mihomo/Alpha core download/switch workflow",
         "REST compatibility remains partial: redir/TProxy and broader TUN/general configuration fields",
-        "Chained outbounds via dialer-proxy remain unsupported"
+        "Advanced chained protocols and UDP carrier combinations beyond the documented independent host/device matrix still require interoperability verification"
       ],
       "source": [
         "entry/src/main/cpp/clash_core.cpp",
@@ -115,7 +122,15 @@
         "entry/src/main/cpp/ss_tcp_reader.inc",
         "entry/src/main/cpp/ss_tcp_selftest.inc",
         "tests/ss_duplex_test.inc",
-        "tests/ss_duplex_reference_peer.py"
+        "tests/ss_duplex_reference_peer.py",
+        "entry/src/main/cpp/dialer_graph.inc",
+        "entry/src/main/cpp/dialer_bridge.inc",
+        "entry/src/main/cpp/dialer_udp.inc",
+        "tests/dialer_proxy_test.inc",
+        "tests/chain_relay_reference_peer.py",
+        "tests/chain_udp_reference_peer.py",
+        "tests/fixtures/dialer/device.yaml",
+        "scripts/config-editor/references.mjs"
       ]
     },
     {
@@ -304,8 +319,8 @@
     {
       "feature": "Daily browser connectivity",
       "status": "verified_with_limits",
-      "latest": "Core 0.35 final HAP installed. Native device diagnostics and the visible self-test dialog pass bytewise SS AEAD receive checks and truncated/authentication controls for all three ciphers. Independent host peers reproduce the old Core 0.34 partial-reply upload stall and pass 72 corrected duplex cases plus every vector split/EOF and existing TCP/UDP/HTTPS interoperability. Original saved profile, all 11 selections, meaningful runtime and original window remain intact. Original-profile Google and Gstatic HTTPS return 204, GitHub API returns 200, all with CONNECT 200 and TLS verification 0. No fixture profile/application/extra forwarding was needed for this device check.",
-      "limit": "Device positive fixtures return fixed HTTP/UDP data on loopback and explicitly skip the public test CA; required-verification controls fail. Independent host OpenSSL peers separately verify valid CA/hostname and HTTPS destination checks. SOCKS5 TLS protects its control channel, not native UDP datagrams. Advanced VLESS and other outbound protocols/chain options remain incomplete. Intermittent HTTPS TLS failures remain unexplained: api.github.com was affected earlier, and one restored Google attempt returned TLS 35 before subsequent verified Google/Gstatic requests succeeded. The SS partial-response stall is independently proven and fixed; it is not established as the cause of the earlier intermittent HTTPS TLS failures. Independent host TLS clients could not reach the HDC-forwarded proxy, so a broader upstream control is still needed. Full native suite requires host loopback binding unavailable here. True-device TUN authorization/background survival remains unproven."
+      "latest": "Core 0.36 final ARM64/x86_64 HAP built and installed on the simulator. Sixteen real two-hop entry/exit combinations pass HTTP/SOCKS ingress, delay and on-device UDP, with wrong-auth/required-CA negative controls. The visual dialer edit persists after cold startup and forwards actual traffic. Original saved profile, complete meaningful runtime, all 11 group selections and original window are restored; the owned fixture profile, public file, application and extra forwards are removed. A first restored Google attempt returned TLS 35; following Google/Gstatic/GitHub requests returned verified 204/204/200 with CONNECT 200 and TLS verification 0.",
+      "limit": "Device positive fixtures return fixed HTTP/UDP data on loopback and explicitly skip the public test CA; required-verification controls fail. Independent host OpenSSL peers separately verify valid CA/hostname and HTTPS destination checks. SOCKS5 TLS protects its control channel, not native UDP datagrams. Advanced VLESS and additional outbound protocols remain incomplete; chain verification is limited to the documented matrix. Intermittent HTTPS TLS failures remain unexplained: api.github.com was affected earlier, and one restored Google attempt returned TLS 35 before subsequent verified Google/Gstatic requests succeeded. The SS partial-response stall is independently proven and fixed; it is not established as the cause of the earlier intermittent HTTPS TLS failures. Independent host TLS clients could not reach the HDC-forwarded proxy, so a broader upstream control is still needed. Full native suite requires host loopback binding unavailable here. True-device TUN authorization/background survival remains unproven."
     },
     {
       "feature": "Domain sniffing",
@@ -343,6 +358,6 @@
     "Advanced style assets, full Mihomo schema, template-aware editor references and downloaded-provider completion"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 13:42:49 UTC",
-  "verificationNotes": "Status summary only. Historical device screenshots and per-run records are archived outside the source repository. Reproduce host checks with tests/README.md; device and true VPN validation remain separate."
+  "reviewedAt": "2026-10-17 14:49:05 UTC",
+  "verificationNotes": "Status summary only; goal completion remains unproven. Per-run records/screenshots remain outside Git. Core 0.36 chain/group/provider/forward/VLESS/API/SS/YAML targeted suites and the editor tests pass. Hosts passed on a serial recheck after a parallel-run TCP response failure. Current configs/sniffer suite attempts cannot finish because host loopback bind returns EPERM; do not count these as passing full-suite checks. Device and true VPN validation remain separate."
 }

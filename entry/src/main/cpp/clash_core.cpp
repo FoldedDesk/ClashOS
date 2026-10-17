@@ -65,7 +65,7 @@ extern "C" {
 namespace {
 
 using HealthClock = std::chrono::steady_clock;
-struct GroupHealthSample { int delay=0;std::string resolved; };
+struct GroupHealthSample { int delay=0;std::string resolved;std::vector<std::string> chain; };
 struct BalancedSession {
     std::string member;
     HealthClock::time_point expires{},used{};
@@ -124,6 +124,8 @@ struct ProxyNode {
     std::string cipher;
     std::string password;
     std::string username;
+    std::string dialerProxy;
+    std::shared_ptr<const ProxyNode> dialerNode;
     std::map<std::string, std::string> httpHeaders;
     std::string uuid;
     int alterId = 0;
@@ -139,6 +141,8 @@ struct ProxyNode {
     bool udpConfigured = false;
     uint64_t revision = 0;
     std::vector<std::string> chain;
+    std::vector<std::string> policyChain;
+    bool routeUdpDisabled=false;
     std::string matchedRule;
     std::string provider;
     bool loadBalanced=false;
@@ -147,11 +151,22 @@ struct ProxyNode {
     bool destinationIpv6=false;
 };
 
+bool sameProxyRoute(const ProxyNode& first,const ProxyNode& second)
+{
+    return first.name==second.name&&((first.dialerProxy.empty()&&second.dialerProxy.empty())||first.chain==second.chain);
+}
+bool matchesProxyHealth(const ProxyNode& node,const GroupHealthSample& sample)
+{
+    return node.name==sample.resolved&&(node.dialerProxy.empty()||node.chain==sample.chain);
+}
+
 struct ProxyProvider {
     std::string name,type,url,path,downloadProxy="DIRECT";
     std::string filter,excludeFilter,excludeType,prefix,suffix;
     std::map<std::string,std::string> headers;
     int interval=3600,timeout=10000,overrideUdp=-1,overrideSkipVerify=-1;
+    bool overrideDialerConfigured=false;
+    std::string overrideDialer;
     size_t sizeLimit=8*1024*1024;
     bool updating=false,forceUpdate=false,healthEnabled=false;
     std::string updatedAt,lastError;
@@ -412,7 +427,10 @@ void attachUpstream(int client, int upstream)
 {
     std::lock_guard<std::mutex> guard(g_state.sessionsMutex);
     auto found = g_state.connections.find(client);
-    if (found != g_state.connections.end()) found->second.upstream = upstream;
+    if (found != g_state.connections.end()) {
+        found->second.upstream = upstream;
+        if (found->second.cancelled && upstream >= 0) shutdown(upstream, SHUT_RDWR);
+    }
 }
 
 void recordTransfer(int client, bool upload, size_t bytes)
@@ -720,6 +738,14 @@ bool parseProxyNode(yaml_document_t& document,yaml_node_t* source,ProxyNode& nod
             node.cipher = lower(value(source, "cipher"));
             node.password = value(source, "password");
             node.username = value(source, "username");
+            if (auto* dialer = yamlValue(document, source, "dialer-proxy")) {
+                node.dialerProxy = yamlText(dialer);
+                if (dialer->type != YAML_SCALAR_NODE || node.dialerProxy.size() > 4096 ||
+                    std::any_of(node.dialerProxy.begin(), node.dialerProxy.end(), [](unsigned char ch) { return ch < 32 || ch == 127; })) {
+                    valid = false; error = "dialer-proxy must be a bounded proxy/group name"; break;
+                }
+                if (node.type == "reject" && !node.dialerProxy.empty()) { valid = false; error = "REJECT nodes cannot use dialer-proxy"; break; }
+            }
             node.uuid = value(source, "uuid");
             const std::string alter = value(source, "alterId");
             char* alterEnd = nullptr;
@@ -764,7 +790,7 @@ bool parseProxyNode(yaml_document_t& document,yaml_node_t* source,ProxyNode& nod
                 if (yamlValue(document, source, "password") == nullptr || node.password.empty()) {
                     valid = false; error = "Trojan requires a non-empty password"; break;
                 }
-                for (const char* option : {"reality-opts", "shadow-tls-opts", "restls-opts", "jls-opts", "fingerprint", "name-cert-verify", "client-fingerprint", "dialer-proxy"}) {
+                for (const char* option : {"reality-opts", "shadow-tls-opts", "restls-opts", "jls-opts", "fingerprint", "name-cert-verify", "client-fingerprint"}) {
                     yaml_node_t* configured = yamlValue(document, source, option);
                     if (configured != nullptr && (configured->type == YAML_MAPPING_NODE || !yamlText(configured).empty()))
                         node.transportError = std::string("Unsupported Trojan option: ") + option;
@@ -783,7 +809,7 @@ bool parseProxyNode(yaml_document_t& document,yaml_node_t* source,ProxyNode& nod
                     }
                 }
                 if (!valid) break;
-                for (const char* option : {"reality-opts", "flow", "packet-encoding", "fingerprint", "name-cert-verify", "client-fingerprint", "dialer-proxy", "http-opts", "h2-opts", "grpc-opts", "xhttp-opts"}) {
+                for (const char* option : {"reality-opts", "flow", "packet-encoding", "fingerprint", "name-cert-verify", "client-fingerprint", "http-opts", "h2-opts", "grpc-opts", "xhttp-opts"}) {
                     yaml_node_t* configured = yamlValue(document, source, option);
                     if (configured != nullptr && (configured->type != YAML_SCALAR_NODE || !yamlText(configured).empty()))
                         node.transportError = std::string("Unsupported VLESS option: ") + option;
@@ -821,7 +847,7 @@ bool parseProxyNode(yaml_document_t& document,yaml_node_t* source,ProxyNode& nod
                         if (!node.httpHeaders.emplace(name, yamlText(field)).second) node.transportError = "Duplicate HTTP proxy header";
                     }
                 }
-                for (const char* option : {"reality-opts", "fingerprint", "client-fingerprint", "name-cert-verify", "dialer-proxy", "ws-opts", "http-opts", "h2-opts", "grpc-opts"}) {
+                for (const char* option : {"reality-opts", "fingerprint", "client-fingerprint", "name-cert-verify", "ws-opts", "http-opts", "h2-opts", "grpc-opts"}) {
                     auto* configured = yamlValue(document, source, option);
                     if (configured && (configured->type != YAML_SCALAR_NODE || !yamlText(configured).empty())) node.transportError = std::string("Unsupported forward proxy option: ") + option;
                 }
@@ -1079,6 +1105,8 @@ bool parseConfigText(const std::string& text, ParsedConfig& config, std::string&
     }
     if(valid)for(const ProxyProvider& provider:config.providers)if(names.count(provider.downloadProxy)==0){valid=false;error="Unknown download proxy for provider";break;}
     if(valid)for(const RuleProvider& provider:config.ruleProviders)if(names.count(provider.downloadProxy)==0){valid=false;error="Unknown download proxy for rule provider";break;}
+    if(valid)valid=validateDialerGraph(config.nodes,config.providers,config.groups,error,
+        std::any_of(config.providers.begin(),config.providers.end(),[](const auto& provider){return provider.type!="inline";}));
     yaml_node_t* rules = yamlValue(document, root, "rules");
     if (rules != nullptr && rules->type != YAML_SEQUENCE_NODE) { valid = false; error = "rules must be a list"; }
     if (valid && rules != nullptr) {
@@ -1291,9 +1319,23 @@ bool supportsVless(const ProxyNode& node)
     return node.type == "vless" && (node.network == "tcp" || node.network == "ws") && node.transportError.empty() &&
         (node.network != "ws" || node.alpn.empty() || std::find(node.alpn.begin(), node.alpn.end(), "http/1.1") != node.alpn.end());
 }
-bool supportsUdp(const ProxyNode& node)
+ProxyNode resolveProxyLocked(std::string selection,const RouteContext* context);
+
+bool supportsDialerTcp(const ProxyNode& node,int depth=0)
 {
-    return (node.type == "direct"&&(!node.udpConfigured||node.udp)) || (node.udp && ((node.type == "ss" && shadowsocksCipher(node.cipher)!=SsCipher::Unsupported) || supportsVmess(node) || supportsTrojan(node) || supportsVless(node) || (node.type == "socks5" && forwardProxyError(node).empty())));
+    if((depth>=8&&!(node.name=="DIRECT"&&node.type=="direct"&&node.dialerProxy.empty()))||!node.transportError.empty())return false;
+    const bool supported=node.type=="direct"||(node.type=="ss"&&shadowsocksCipher(node.cipher)!=SsCipher::Unsupported)||
+        supportsVmess(node)||supportsTrojan(node)||supportsVless(node)||((node.type=="http"||node.type=="socks5")&&forwardProxyError(node).empty());
+    return supported&&(node.dialerProxy.empty()||node.dialerProxy=="DIRECT"||(node.dialerNode&&supportsDialerTcp(*node.dialerNode,depth+1)));
+}
+
+bool supportsUdp(const ProxyNode& node,int depth=0)
+{
+    if ((depth>=8&&!(node.name=="DIRECT"&&node.type=="direct"&&node.dialerProxy.empty()))||node.routeUdpDisabled) return false;
+    const bool base=(node.type == "direct"&&(!node.udpConfigured||node.udp)) || (node.udp && ((node.type == "ss" && shadowsocksCipher(node.cipher)!=SsCipher::Unsupported) || supportsVmess(node) || supportsTrojan(node) || supportsVless(node) || (node.type == "socks5" && forwardProxyError(node).empty())));
+    if(!base||node.dialerProxy.empty()||node.dialerProxy=="DIRECT")return base;
+    if(!node.dialerNode)return false;
+    return node.type=="vmess"||node.type=="trojan"||node.type=="vless" ? supportsDialerTcp(*node.dialerNode,depth+1) : supportsUdp(*node.dialerNode,depth+1);
 }
 
 std::string proxyNodeJsonLocked(const ProxyNode& node)
@@ -1302,7 +1344,8 @@ std::string proxyNodeJsonLocked(const ProxyNode& node)
         node.type == "trojan" ? "Trojan" : node.type == "vless" ? "VLESS" : node.type == "http" ? "Http" : node.type == "socks5" ? "Socks5" : node.type == "direct" ? "DIRECT" : node.type == "reject" ? "REJECT" : node.type;
     std::ostringstream output;
     output << "{\"name\":\"" << jsonEscape(node.name) << "\",\"type\":\"" << jsonEscape(type)
-        << "\",\"udp\":" << (supportsUdp(node) ? "true" : "false");
+        << "\",\"udp\":" << (supportsUdp(node.dialerProxy.empty()?node:resolveProxyLocked(node.name,nullptr)) ? "true" : "false");
+    if(!node.dialerProxy.empty())output<<",\"dialer-proxy\":\""<<jsonEscape(node.dialerProxy)<<'"';
     if (!node.provider.empty()) output << ",\"provider-name\":\"" << jsonEscape(node.provider) << '"';
     const auto delay = g_state.delays.find(node.name);
     if (delay != g_state.delays.end()) output << ",\"alive\":" << (delay->second > 0 ? "true" : "false")
@@ -1317,7 +1360,7 @@ bool proxyUdpLocked(const std::string& name, std::set<std::string> seen = {})
     if (name == "DIRECT") return true;
     if (name == "REJECT") return false;
     if (!seen.insert(name).second || seen.size() > 32) return false;
-    for (const auto& node : g_state.nodes) if (node.name == name) return supportsUdp(node);
+    for (const auto& node : g_state.nodes) if (node.name == name) return supportsUdp(node.dialerProxy.empty()?node:resolveProxyLocked(name,nullptr));
     for (const auto& group : g_state.groups) if (group.name == name && !group.disableUdp) {
         if (group.type != "LoadBalance") return proxyUdpLocked(group.now, seen);
         return !group.proxies.empty() && std::all_of(group.proxies.begin(), group.proxies.end(),
@@ -1503,8 +1546,8 @@ std::string responseFor(const std::string& method, const std::string& path, cons
     if (path.substr(0, path.find('?')) == "/clashos/ports") return proxyPortsControlLocked(method, path, body);
     if (path.substr(0, path.find('?')) == "/clashos/inbound") return inboundControlLocked(method, path, body);
     if (method == "GET" && path == "/version") {
-        return "{\"version\":\"ClashOS Core 0.35 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
-            "\",\"premium\":false,\"meta\":true,\"features\":[\"yaml-merge-keys\",\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"vless\",\"trojan\",\"http-outbound\",\"socks5-outbound\",\"socks5-udp\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
+        return "{\"version\":\"ClashOS Core 0.36 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
+            "\",\"premium\":false,\"meta\":true,\"features\":[\"yaml-merge-keys\",\"dialer-proxy\",\"dialer-proxy-udp\",\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"vless\",\"trojan\",\"http-outbound\",\"socks5-outbound\",\"socks5-udp\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
     }
     if (method == "GET" && path == "/clahsos/diagnostics") return diagnosticsJson();
     const std::string resource=path.substr(0,path.find('?'));
@@ -2140,27 +2183,44 @@ ProxyNode resolveProxyLocked(std::string selection,const RouteContext* context=n
 #include "load_balance.inc"
 #include "rule_match.inc"
 
-ProxyNode resolveProxyLocked(std::string selection,const RouteContext* context)
+ProxyNode resolveProxyPathLocked(std::string selection,const RouteContext* context,std::set<std::string> visited,int hops)
 {
-    std::set<std::string> visited=context!=nullptr?context->ancestors:std::set<std::string>{};
     std::vector<std::string> chain;
     ProxyNode node;
     bool balanced=false;
-    while (!selection.empty() && visited.size() < 32) {
+    const auto finish = [&]() {
+        node.loadBalanced=balanced;
+        node.policyChain.assign(chain.rbegin(),chain.rend());node.chain=node.policyChain;
+        node.revision=g_state.configRevision;node.destinationDns=g_state.dns;
+        node.destinationIpv6=g_state.ipv6.load()&&(!g_state.dns->enabled||g_state.dns->ipv6);
+        node.dialerNode.reset();node.routeUdpDisabled=false;
+        for(const auto& name:node.policyChain) {
+            const auto group=std::find_if(g_state.groups.begin(),g_state.groups.end(),[&](const auto& item){return item.name==name;});
+            if(group!=g_state.groups.end()&&group->disableUdp)node.routeUdpDisabled=true;
+        }
+        if(!node.dialerProxy.empty()) {
+            RouteContext parent=context?*context:RouteContext{};
+            parent.host=node.type=="direct"&&context?context->host:node.server;
+            parent.network=context&&context->network=="udp"&&(node.type=="direct"||node.type=="ss"||node.type=="socks5")?"udp":"tcp";parent.ancestors=visited;
+            auto dialer=resolveProxyPathLocked(node.dialerProxy,context?&parent:nullptr,visited,hops+1);
+            node.loadBalanced=node.loadBalanced||dialer.loadBalanced;
+            node.chain.insert(node.chain.begin()+std::min<size_t>(1,node.chain.size()),dialer.chain.begin(),dialer.chain.end());
+            node.dialerNode=std::make_shared<const ProxyNode>(std::move(dialer));
+        }
+        return node;
+    };
+    while (!selection.empty() && visited.size() < 64) {
         if (!visited.insert(selection).second) break;
         chain.push_back(selection);
         if (selection == "DIRECT" || selection == "REJECT") {
             node.name = selection;
             node.type = selection == "DIRECT" ? "direct" : "reject";
             node.udp = selection == "DIRECT";
-            node.loadBalanced=balanced;
-            node.chain.assign(chain.rbegin(), chain.rend());
-            return node;
+            return finish();
         }
         if (findNodeLocked(selection, node)) {
-            node.loadBalanced=balanced;
-            node.chain.assign(chain.rbegin(), chain.rend());
-            return node;
+            if(hops>=8){node={};node.type="reject";node.name="REJECT";node.transportError="Proxy chain exceeds eight outbound nodes";break;}
+            return finish();
         }
         auto group=std::find_if(g_state.groups.begin(),g_state.groups.end(),[&](const ProxyGroup& item){return item.name==selection;});
         if(group==g_state.groups.end())break;
@@ -2179,6 +2239,11 @@ ProxyNode resolveProxyLocked(std::string selection,const RouteContext* context)
     node.loadBalanced=balanced;
     node.chain.assign(chain.rbegin(), chain.rend());
     return node;
+}
+
+ProxyNode resolveProxyLocked(std::string selection,const RouteContext* context)
+{
+    return resolveProxyPathLocked(std::move(selection),context,context?context->ancestors:std::set<std::string>{},0);
 }
 
 ProxyNode activeProxyNode(const std::string& host, int port = 0, const std::string& network = "tcp",const std::string& source="",const std::vector<std::string>* knownIps=nullptr)
@@ -2216,10 +2281,7 @@ ProxyNode activeProxyNode(const std::string& host, int port = 0, const std::stri
     const RouteContext context{query.host,source,network};
     ProxyNode node = resolveProxyLocked(selection,&context);
     wakeHealthChecks();
-    if(network=="udp")for(const std::string& name:node.chain) {
-        const auto group=std::find_if(g_state.groups.begin(),g_state.groups.end(),[&](const ProxyGroup& item){return item.name==name;});
-        if(group!=g_state.groups.end()&&group->disableUdp){node.type="reject";node.udp=false;break;}
-    }
+    if(network=="udp"&&node.routeUdpDisabled){node.type="reject";node.udp=false;}
     if(!node.provider.empty())for(ProxyProvider& provider:g_state.providers)if(provider.name==node.provider){provider.health.lastUsed=HealthClock::now();wakeHealthChecks();break;}
     node.matchedRule = matchedRule;
     node.revision = g_state.configRevision;
@@ -2323,7 +2385,7 @@ bool connectShadowsocks(const ProxyNode& node, const std::string& host, int port
     if (masterKey.size() != keySize) return false;
     std::vector<unsigned char> salt(keySize);
     if (!randomBytes(salt)) return false;
-    upstream = connectUpstream(node.server, node.port, timeoutMs,DnsPurpose::Proxy);
+    if (upstream < 0) upstream = connectUpstream(node.server, node.port, timeoutMs,DnsPurpose::Proxy);
     if (upstream < 0 || !sendAll(upstream, salt)) {
         if (upstream >= 0) closeSocket(upstream);
         upstream = -1;
@@ -2348,6 +2410,17 @@ bool connectShadowsocks(const ProxyNode& node, const std::string& host, int port
 #include "vless_protocol.inc"
 #include "forward_proxy_protocol.inc"
 
+struct DialerBridge;
+struct DialerHandshakeDeadline {
+    HealthClock::time_point previous=g_probeDeadline;
+    DialerHandshakeDeadline(bool enabled,int timeout) {
+        if(enabled){const auto deadline=HealthClock::now()+std::chrono::milliseconds(timeout);if(g_probeDeadline==HealthClock::time_point{}||deadline<g_probeDeadline)g_probeDeadline=deadline;}
+    }
+    ~DialerHandshakeDeadline(){g_probeDeadline=previous;}
+};
+int openDialerTransport(const ProxyNode& node,const std::string& host,int port,int timeout,
+    std::shared_ptr<DialerBridge>& bridge,std::string& error);
+
 struct ProxyStream {
     int fd = -1;
     std::unique_ptr<VmessSession> vmess;
@@ -2355,6 +2428,7 @@ struct ProxyStream {
     std::unique_ptr<VlessSession> vless;
     std::unique_ptr<ForwardProxySession> forward;
     std::unique_ptr<ShadowsocksReader> shadowsocks;
+    std::shared_ptr<DialerBridge> dialerBridge;
     bool encrypted = false;
     SsCipher ssCipher=SsCipher::Aes256Gcm;
     std::vector<unsigned char> sendKey;
@@ -2369,10 +2443,25 @@ bool openProxyStream(const ProxyNode& node, const std::string& host, int port, P
     std::string& error, int timeoutMs = 6000)
 {
     DestinationDnsScope dnsScope(node);
+    DialerHandshakeDeadline handshake(!node.dialerProxy.empty(),timeoutMs);
     std::string destination;
     if(!proxyDestination(node,host,destination,error))return false;
+    if(!node.transportError.empty()){error=node.transportError;return false;}
+    if((node.type=="http"||node.type=="socks5")&&!(error=forwardProxyError(node)).empty())return false;
+    if(node.type=="vless"&&!VlessSession::validate(node,error))return false;
+    if(node.type=="trojan"&&!TrojanSession::validate(node,error))return false;
+    if(node.type=="ss"&&shadowsocksCipher(node.cipher)==SsCipher::Unsupported){error="Unsupported Shadowsocks cipher";return false;}
+    if(!node.dialerProxy.empty()&&node.dialerProxy!="DIRECT") {
+        if(!node.dialerNode){error="dialer-proxy route is not available";return false;}
+        if(node.type!="direct"&&node.type!="ss"&&node.type!="vmess"&&node.type!="trojan"&&node.type!="vless"&&node.type!="http"&&node.type!="socks5") {
+            error="Unsupported chained outbound type";return false;
+        }
+        stream.fd=openDialerTransport(*node.dialerNode,node.type=="direct"?destination:node.server,
+            node.type=="direct"?port:node.port,timeoutMs,stream.dialerBridge,error);
+        if(stream.fd<0)return false;
+    }
     if (node.type == "direct") {
-        stream.fd = connectUpstream(host, port, timeoutMs);
+        if(stream.fd<0)stream.fd = connectUpstream(host, port, timeoutMs);
     } else if (node.type == "ss" && shadowsocksCipher(node.cipher)!=SsCipher::Unsupported) {
         stream.encrypted = true;
         stream.ssCipher=shadowsocksCipher(node.cipher);
@@ -2384,27 +2473,27 @@ bool openProxyStream(const ProxyNode& node, const std::string& host, int port, P
             evpBytesToKey(node.password, shadowsocksKeySize(stream.ssCipher)));
     } else if (node.type == "http" || node.type == "socks5") {
         error = forwardProxyError(node); if (!error.empty()) return false;
-        stream.fd = connectUpstream(node.server, node.port, timeoutMs, DnsPurpose::Proxy);
+        if(stream.fd<0)stream.fd = connectUpstream(node.server, node.port, timeoutMs, DnsPurpose::Proxy);
         if (stream.fd < 0) { error = "Cannot connect to forward proxy server"; return false; }
         socketTimeout(stream.fd, timeoutMs);
         stream.forward = std::make_unique<ForwardProxySession>(stream.fd);
         if (!stream.forward->start(node, destination, port, false, error)) return false;
     } else if (node.type == "vless") {
         if (!VlessSession::validate(node, error)) return false;
-        stream.fd = connectUpstream(node.server, node.port, timeoutMs,DnsPurpose::Proxy);
+        if(stream.fd<0)stream.fd = connectUpstream(node.server, node.port, timeoutMs,DnsPurpose::Proxy);
         if (stream.fd < 0) { error = "Cannot connect to VLESS server"; return false; }
         socketTimeout(stream.fd, timeoutMs);
         stream.vless = std::make_unique<VlessSession>(stream.fd);
         if (!stream.vless->start(node, destination, port, false, error)) return false;
     } else if (node.type == "trojan") {
         if (!TrojanSession::validate(node, error)) return false;
-        stream.fd = connectUpstream(node.server, node.port, timeoutMs,DnsPurpose::Proxy);
+        if(stream.fd<0)stream.fd = connectUpstream(node.server, node.port, timeoutMs,DnsPurpose::Proxy);
         if (stream.fd < 0) { error = "Cannot connect to Trojan server"; return false; }
         socketTimeout(stream.fd, timeoutMs);
         stream.trojan = std::make_unique<TrojanSession>(stream.fd);
         if (!stream.trojan->start(node, destination, port, false, error)) return false;
     } else if (node.type == "vmess") {
-        stream.fd = connectUpstream(node.server, node.port, timeoutMs,DnsPurpose::Proxy);
+        if(stream.fd<0)stream.fd = connectUpstream(node.server, node.port, timeoutMs,DnsPurpose::Proxy);
         if (stream.fd < 0) { error = "Cannot connect to VMess server"; return false; }
         socketTimeout(stream.fd, timeoutMs);
         stream.vmess = std::make_unique<VmessSession>(stream.fd);
@@ -2511,6 +2600,7 @@ void relayStream(int client, ProxyStream& stream)
     }
 }
 
+#include "dialer_bridge.inc"
 #include "latency_probe.inc"
 #include "provider_http.inc"
 #include "provider_runtime.inc"

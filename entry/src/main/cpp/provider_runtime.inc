@@ -7,8 +7,8 @@ bool sameProviderNodes(const std::vector<ProxyNode>& first,const std::vector<Pro
     if(first.size()!=second.size())return false;
     for(size_t i=0;i<first.size();++i) {
         const auto& a=first[i];const auto& b=second[i];
-        if(std::tie(a.name,a.type,a.server,a.port,a.cipher,a.password,a.username,a.httpHeaders,a.uuid,a.alterId,a.tls,a.udp,a.udpConfigured,a.network,a.wsPath,a.wsHeaders,a.serverName,a.skipCertVerify,a.alpn,a.transportError)!=
-           std::tie(b.name,b.type,b.server,b.port,b.cipher,b.password,b.username,b.httpHeaders,b.uuid,b.alterId,b.tls,b.udp,b.udpConfigured,b.network,b.wsPath,b.wsHeaders,b.serverName,b.skipCertVerify,b.alpn,b.transportError))return false;
+        if(std::tie(a.name,a.type,a.server,a.port,a.cipher,a.password,a.username,a.httpHeaders,a.uuid,a.alterId,a.tls,a.udp,a.udpConfigured,a.network,a.wsPath,a.wsHeaders,a.serverName,a.skipCertVerify,a.alpn,a.transportError,a.dialerProxy)!=
+           std::tie(b.name,b.type,b.server,b.port,b.cipher,b.password,b.username,b.httpHeaders,b.uuid,b.alterId,b.tls,b.udp,b.udpConfigured,b.network,b.wsPath,b.wsHeaders,b.serverName,b.skipCertVerify,b.alpn,b.transportError,b.dialerProxy))return false;
     }
     return true;
 }
@@ -153,17 +153,18 @@ std::string providerMemberDelayResponse(const std::string& path)
     const std::string rest=path.substr(19,query-19);const size_t slash=rest.find('/');
     if(slash==std::string::npos||rest.size()<slash+14||rest.substr(rest.size()-12)!="/healthcheck")return "{\"error\":\"Invalid provider member probe\"}";
     const std::string providerName=urlDecode(rest.substr(0,slash)),member=urlDecode(rest.substr(slash+1,rest.size()-slash-13));
+    TestTarget target;if(!parseTestUrl(queryValue(path,"url"),target))return "{\"error\":\"A valid HTTP(S) probe URL is required\"}";
     ProxyNode node;uint64_t revision;bool found=false;
     {
         std::lock_guard<std::mutex> guard(g_state.mutex);revision=g_state.configRevision;
-        for(const ProxyProvider& provider:g_state.providers)if(provider.name==providerName)for(const ProxyNode& candidate:provider.nodes)if(candidate.name==member){node=candidate;found=true;break;}
+        const RouteContext context{target.host,"probe","tcp"};
+        for(const ProxyProvider& provider:g_state.providers)if(provider.name==providerName)for(const ProxyNode& candidate:provider.nodes)if(candidate.name==member){node=resolveProxyLocked(candidate.name,&context);found=true;break;}
     }
     if(!found)return "{\"error\":\"Provider member not found\"}";
-    TestTarget target;if(!parseTestUrl(queryValue(path,"url"),target))return "{\"error\":\"A valid HTTP(S) probe URL is required\"}";
     const std::string expected=queryValue(path,"expected").empty()?"200-399":queryValue(path,"expected");
     if(!validProbeStatus(expected))return "{\"error\":\"Invalid expected HTTP status\"}";
     int timeout=std::atoi(queryValue(path,"timeout").c_str());timeout=std::clamp(timeout<=0?5000:timeout,100,60000);
     std::string error;const int delay=probeNode(node,target,timeout,expected,error);
-    {std::lock_guard<std::mutex> guard(g_state.mutex);if(g_state.configRevision==revision)g_state.delays[member]=delay;}
+    {std::lock_guard<std::mutex> guard(g_state.mutex);if(g_state.configRevision==revision&&sameProxyRoute(resolveProxyLocked(member),node))g_state.delays[member]=delay;}
     return delay>0?"{\"delay\":"+std::to_string(delay)+"}":"{\"error\":\""+jsonEscape(error)+"\"}";
 }

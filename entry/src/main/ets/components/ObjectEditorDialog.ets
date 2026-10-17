@@ -105,6 +105,7 @@ export struct ObjectEditorDialog {
     this.child?.close();
     if (kind === 0) {
       this.child = new CustomDialogController({ builder: ProxyNodeDialog({ store: this.store,
+        choices: this.snapshot.choices,
         title: copy ? '复制节点' : row ? '编辑节点' : '新建节点', initialContent: content, lockName: row !== undefined && !copy,
         onSave: (item: EditorObjectView): void => { this.finish(item, kind, lane, copy ? undefined : row); } }), autoCancel: false, customStyle: true });
     } else {

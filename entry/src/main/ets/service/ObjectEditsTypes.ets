@@ -8,7 +8,7 @@ export interface ObjectSnapshotSection { original: EditorObjectView[]; prepend: 
 export interface ObjectEditorSnapshot { error: string; proxies: ObjectSnapshotSection; groups: ObjectSnapshotSection; choices: string[]; providers: string[]; }
 
 export interface ProxyNodeForm {
-  name: string; type: string; server: string; port: string; username: string; password: string; uuid: string; cipher: string; alterId: string;
+  name: string; type: string; server: string; port: string; username: string; password: string; uuid: string; cipher: string; alterId: string; dialerProxy: string;
   tls: boolean; udp: boolean; skipCertVerify: boolean; serverName: string; network: string; wsPath: string; wsHost: string;
 }
 export interface ProxyGroupForm {
@@ -21,7 +21,7 @@ export interface ProxyNodeDraft { error: string; item: EditorObjectView; form: P
 export interface ProxyGroupDraft { error: string; item: EditorObjectView; form: ProxyGroupForm; }
 
 export function defaultProxyNodeForm(): ProxyNodeForm {
-  return { name: '', type: 'ss', server: '', port: '443', username: '', password: '', uuid: '', cipher: 'aes-128-gcm', alterId: '0', tls: false, udp: true,
+  return { name: '', type: 'ss', server: '', port: '443', username: '', password: '', uuid: '', cipher: 'aes-128-gcm', alterId: '0', dialerProxy: '', tls: false, udp: true,
     skipCertVerify: false, serverName: '', network: 'tcp', wsPath: '/', wsHost: '' };
 }
 export function defaultProxyGroupForm(): ProxyGroupForm {

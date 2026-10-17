@@ -2,20 +2,35 @@ import { socket } from '@kit.NetworkKit';
 import { util } from '@kit.ArkTS';
 
 // Independent fixed-target HTTP/SOCKS responder. Credentials are public fixture
-// values; no arbitrary forwarding, production configuration or payload logging.
+// values. Chained tests may relay only to the two fixed local fixture ports;
+// no arbitrary forwarding, production configuration or payload logging.
 export class ForwardFixtureConnection {
   private input: Uint8Array = new Uint8Array(0);
   private phase: number = 0;
   private protocol: string = '';
   private closed: boolean = false;
   private udp?: socket.UDPSocket;
+  private relay?: socket.TCPSocket;
+  private relayWrites: Promise<void> = Promise.resolve();
   private encoder: util.TextEncoder = new util.TextEncoder();
   private decoder: util.TextDecoder = util.TextDecoder.create('utf-8');
   private send: (bytes: Uint8Array) => Promise<void>;
   private close: () => Promise<void>;
   private event: (name: string) => void;
   constructor(send: (bytes: Uint8Array) => Promise<void>, close: () => Promise<void>, event: (name: string) => void) { this.send = send; this.close = close; this.event = event; }
-  stop(): void { this.closed = true; this.udp?.close().catch(() => {}); }
+  stop(): void { this.closed = true; this.udp?.close().catch(() => {}); this.relay?.close().catch(() => {}); }
+  private async openRelay(port: number): Promise<void> {
+    if (port !== 18097 && port !== 18098) throw new Error('Invalid fixture relay');
+    const relay = socket.constructTCPSocketInstance(); this.relay = relay;
+    relay.on('message', (message: socket.SocketMessageInfo): void => {
+      const bytes = new Uint8Array(message.message);
+      this.relayWrites = this.relayWrites.then(() => this.send(bytes)).catch(() => this.reject());
+    });
+    relay.on('close', (): void => { this.relayWrites.then(() => this.close()).catch(() => {}); });
+    relay.on('error', (): void => { this.reject().catch(() => {}); });
+    await relay.connect({ address: { address: '127.0.0.1', port, family: 1 }, timeout: 5000 });
+    this.phase = 6; this.event('relay');
+  }
   private async reject(): Promise<void> { this.event('rejected'); this.stop(); await this.close().catch(() => {}); }
   private headers(text: string): Record<string, string> {
     const result: Record<string, string> = {};
@@ -24,6 +39,7 @@ export class ForwardFixtureConnection {
   }
   async receive(bytes: Uint8Array): Promise<void> {
     if (this.closed) return;
+    if (this.phase === 6 && this.relay) { await this.relay.send({ data: bytes.buffer as ArrayBuffer }); return; }
     const next = new Uint8Array(this.input.length + bytes.length); next.set(this.input); next.set(bytes, this.input.length); this.input = next;
     if (this.input.length > 32768) { await this.reject(); return; }
     if (this.phase === 0) {
@@ -37,8 +53,11 @@ export class ForwardFixtureConnection {
         if (fields['proxy-authorization'] && fields['proxy-authorization'] !== expected) {
           await this.send(this.encoder.encodeInto('HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 0\r\n\r\n')); await this.reject(); return;
         }
-        if (!text.startsWith('CONNECT forward.device.test:80 HTTP/1.1\r\n') || fields['host'] !== 'forward.device.test:80') { await this.reject(); return; }
+        const relayPort: number = text.startsWith('CONNECT chain.device.test:18097 HTTP/1.1\r\n') && fields['host'] === 'chain.device.test:18097' ? 18097 :
+          text.startsWith('CONNECT chain.device.test:18098 HTTP/1.1\r\n') && fields['host'] === 'chain.device.test:18098' ? 18098 : 0;
+        if (!relayPort && (!text.startsWith('CONNECT forward.device.test:80 HTTP/1.1\r\n') || fields['host'] !== 'forward.device.test:80')) { await this.reject(); return; }
         this.input = this.input.slice(end + 4); this.phase = 4; this.event('http');
+        if (relayPort) await this.openRelay(relayPort);
         await this.send(this.encoder.encodeInto('HTTP/1.1 200 Connection established\r\n\r\n')); continue;
       }
       if (this.phase === 1) {
@@ -68,6 +87,8 @@ export class ForwardFixtureConnection {
           await this.udp.bind({ address: '127.0.0.1', port: 0, family: 1 }); const local = await this.udp.getLocalAddress();
           const reply = new Uint8Array([5,0,0,1,127,0,0,1,(local.port || 0) >> 8,(local.port || 0) & 255]);
           await this.send(reply); this.phase = 5; this.event('socks5');
+        } else if (command === 1 && this.input[3] === 3 && this.decoder.decodeToString(this.input.slice(5, length - 2)) === 'chain.device.test' && [18097,18098].includes(port)) {
+          await this.openRelay(port); await this.send(new Uint8Array([5,0,0,1,127,0,0,1,0,0])); this.event('socks5');
         } else if (command === 1 && this.input[3] === 3 && this.decoder.decodeToString(this.input.slice(5, length - 2)) === 'forward.device.test' && port === 80) {
           await this.send(new Uint8Array([5,0,0,1,127,0,0,1,0,0])); this.phase = 4; this.event('socks5');
         } else { await this.reject(); return; }
@@ -80,6 +101,7 @@ export class ForwardFixtureConnection {
         this.stop(); await this.close().catch(() => {}); return;
       }
       if (this.phase === 5 && this.input.length) await this.reject();
+      if (this.phase === 6 && this.relay && this.input.length) { const pending = this.input; this.input = new Uint8Array(0); await this.relay.send({ data: pending.buffer as ArrayBuffer }); }
       return;
     }
   }

@@ -42,13 +42,9 @@ bool balancedMemberAvailableLocked(const ProxyGroup& group,const std::string& me
     const ProxyNode node=resolveProxyLocked(member,&peek);
     if(node.type=="reject")return false;
     const auto sample=group.health.find(member);
-    if(sample!=group.health.end()&&sample->second.resolved==node.name&&sample->second.delay==0)return false;
+    if(sample!=group.health.end()&&matchesProxyHealth(node,sample->second)&&sample->second.delay==0)return false;
     if(context.network=="udp") {
         if(group.disableUdp||!supportsUdp(node))return false;
-        for(const std::string& name:node.chain) {
-            const auto nested=std::find_if(g_state.groups.begin(),g_state.groups.end(),[&](const ProxyGroup& item){return item.name==name;});
-            if(nested!=g_state.groups.end()&&nested->disableUdp)return false;
-        }
     }
     return true;
 }
