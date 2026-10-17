@@ -1,0 +1,33 @@
+# Public editor/native compatibility fixture. Never loaded by the app by default.
+http-base: &http
+  type: http
+  server: 127.0.0.1
+  port: 18097
+  username: fixture
+  password: p@ss:word
+node-name: &node-name "Template\x20HTTP"
+member-list: &members [*node-name, DIRECT]
+proxy-list: &nodes
+  - {<<: *http, name: *node-name}
+  - <<: [{port: 18098, tls: true, skip-cert-verify: true, sni: vmess.test}, *http]
+    name: Template-HTTPS
+provider-map: &providers
+  Local:
+    type: inline
+    payload: [{<<: *http, name: Pool}]
+    override: {additional-prefix: "[T] "}
+select-base: &select
+  type: select
+  proxies: *members
+  use: [Local]
+group-list: &groups
+  - {<<: *select, name: Template-Main, default-selected: *node-name}
+rule-list: &rules ["MATCH,Template-Main"]
+defaults: &defaults
+  proxies: *nodes
+  proxy-groups: *groups
+  proxy-providers: *providers
+  rule-providers:
+    FixtureRules: {type: inline, behavior: domain, payload: [example.com]}
+  rules: *rules
+!!merge <<: *defaults

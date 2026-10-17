@@ -198,10 +198,17 @@
         "Bounded graph traversal rejects cycles, excessive depth/work/expanded size and malformed merge inputs with source locations that do not echo values",
         "Host tests verify file-provider credential template updates, live route/cache rollback and reopening; independent OpenSSL peers verify inherited HTTP/SOCKS authentication, headers and TLS",
         "Simulator Core 0.33 rejects the public template profile; Core 0.34 imports it through the system picker, forwards six nodes through HTTP/SOCKS plus actual SOCKS UDP, and validates inherited visual edits across cold startup",
-        "Actual system-picker effective export matches original semantics in both Python SafeLoader and native decoding; inline-provider templates forward actual TCP/UDP, cyclic controller payloads return 400 and retain the original profile"
+        "Actual system-picker effective export matches original semantics in both Python SafeLoader and native decoding; inline-provider templates forward actual TCP/UDP, cyclic controller payloads return 400 and retain the original profile",
+        "Template-aware references reuse the current Lezer syntax graph: document-scoped scalar/sequence/map aliases, root and nested merges, explicit merge tags/key aliases, literal merge-like keys, explicit empty overrides and shallow/earlier-source precedence",
+        "Inherited protocol types constrain native node enums; shared member, provider-use and dialer template edits exclude duplicates and cycles for every actual consumer, including provider-prefixed names and provider overrides targeting their own nodes",
+        "YAML scalar decoding preserves native lexical numeric names, quoted escapes, folded/quoted names and aliased keys; forward/duplicate/cross-document aliases and bounded invalid/cyclic/expansion drafts never fabricate referenced nodes",
+        "202 offline editor tests pass, including 45 template cases, dense shared profiles, semantic-cache invalidation and exact CRLF insertion/undo; the shared public fixture also passes native parsing/provider hydration within 150 complete YAML assertions",
+        "Final ARM64/x86_64 HAP simulator verifies actual profile right-click editor entry, inherited default and shared-member completion lists, accepted selection, undo/redo, native validation, save/reopen and cold-start persistence of anchors/aliases/merges",
+        "Edited template profile forwards actual HTTP 204 through its selected prefixed provider node before and after cold startup; original profile, full meaningful runtime, all 11 selections and original window restored, owned fixture profile/app/public file/forward removed",
+        "Final installed HAP also verifies completion after an escaped apostrophe in a single-quoted YAML prefix, native validation and persisted double-quoted exact node name on reopen; JSON escaped-quote prefixes have independent regression coverage"
       ],
       "remaining": [
-        "Full Mihomo schema, template-aware current-document name/protocol completion and downloaded remote-provider node-reference completion"
+        "Full Mihomo schema, general schema hints inside arbitrary shared template definitions and downloaded remote-provider node-reference completion"
       ],
       "source": [
         "entry/src/main/ets/service/ProfileStore.ets",
@@ -220,7 +227,10 @@
         "scripts/config-editor/completion.test.mjs",
         "entry/src/main/cpp/yaml_merges.inc",
         "tests/yaml_merges_test.inc",
-        "tests/fixtures/yaml/device-templates.yaml"
+        "tests/fixtures/yaml/device-templates.yaml",
+        "scripts/config-editor/reference-model.mjs",
+        "scripts/config-editor/template-completion.test.mjs",
+        "tests/fixtures/yaml/editor-templates.yaml"
       ]
     },
     {
@@ -386,9 +396,9 @@
     "Improve intermittent route reliability; independent first-flight and OS client controls reproduce failure beyond one core/client path, while end-to-end root cause remains incomplete",
     "Broader routing and ingress configuration, including redir/TProxy",
     "Supported-device TUN proof and broader archive interoperability",
-    "Advanced style assets, full Mihomo schema, template-aware editor references and downloaded-provider completion"
+    "Advanced style assets, full Mihomo schema, generic shared-template schema hints and downloaded-provider completion"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 15:42:41 UTC",
-  "verificationNotes": "Status summary only; goal completion remains unproven. Per-run records/screenshots stay outside Git. Native TLS/hosts/forward/VLESS/dialer/health-group suites and the 26-check probe service suite pass; simulator validates actual failure categories, mixed/three/five/ten UI results, context menus, stop/close/configuration isolation and OS system-proxy HTTPS. Full-suite host DNS binding remains unavailable (EPERM). Tests/README.md documents reproducible public controls; live-route first-flight evidence uses private local inputs and remains outside the repository."
+  "reviewedAt": "2026-10-17 16:15:43 UTC",
+  "verificationNotes": "Status summary only; goal completion remains unproven. Per-run records/screenshots stay outside Git. Native TLS/hosts/forward/VLESS/dialer/health-group suites and the 26-check probe service suite pass; simulator validates actual failure categories, mixed/three/five/ten UI results, context menus, stop/close/configuration isolation and OS system-proxy HTTPS. Full-suite host DNS binding remains unavailable (EPERM). Tests/README.md documents reproducible public controls; live-route first-flight evidence uses private local inputs and remains outside the repository. The template-aware editor update additionally passes 202 editor checks, the complete 150-assertion native YAML suite, actual simulator completion/save/reopen/cold-start behavior and public fixed-peer HTTP forwarding. A post-restoration Google request again reproduced the already documented TLS closure; editor work does not resolve that route reliability limit."
 }

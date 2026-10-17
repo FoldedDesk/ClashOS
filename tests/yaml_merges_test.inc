@@ -14,6 +14,17 @@ void yamlMergeTests(const std::string& directory)
     auto json = [&](const std::string& source) {
         std::string output; error.clear(); require(backupYamlText(source, output, error), "Template JSON conversion failed"); return output;
     };
+    const auto editorFixture = readTestFile(std::string(CLAHSOS_TEST_ROOT) + "/fixtures/yaml/editor-templates.yaml");
+    ParsedConfig editorConfig; error.clear();
+    require(parseConfigText(editorFixture, editorConfig, error), "Editor template fixture must load with the shipping native parser");
+    require(editorConfig.nodes.size() >= 2 && editorConfig.nodes[0].name == "Template HTTP" && editorConfig.nodes[1].name == "Template-HTTPS" && editorConfig.nodes[1].tls, "Editor candidates must agree with effective native names, escapes and merge order");
+    const auto editorPath = directory + "/editor-templates.yaml";
+    { std::ofstream out(editorPath); out << editorFixture; }
+    require(loadConfigLocked(editorPath, error), "Editor template fixture must activate with actual inline-provider hydration");
+    require(g_state.groups.size() == 1 && g_state.groups[0].name == "Template-Main" && g_state.groups[0].proxies == std::vector<std::string>({"Template HTTP", "DIRECT", "[T] Pool"}), "Editor defaults must agree with inherited members and prefixed inline-provider nodes");
+    require(editorConfig.rules.size() == 1 && editorConfig.rules[0].target == "Template-Main", "Editor rules must share the effective native group reference");
+    ParsedConfig editorScalars;
+    require(parseConfigText("base: &b {type: http, server: 127.0.0.1, port: 18097}\nkey: &key name\nproxies: [{<<: *b, name: !!int 0x12}, {<<: *b, name: 0012}, {<<: *b, name: \"A\\x20B\"}, {<<: *b, *key: Public}]\n", editorScalars, error) && editorScalars.nodes.size() == 4 && editorScalars.nodes[0].name == "0x12" && editorScalars.nodes[1].name == "0012" && editorScalars.nodes[2].name == "A B" && editorScalars.nodes[3].name == "Public", "Scalar and alias-key editor compatibility controls must retain native configuration values");
     const auto expanded = json(R"(center: &center {x: 1, y: 2}
 big: &big {r: 10, x: 9}
 small: &small {r: 1}

@@ -3,10 +3,10 @@ import {Transaction} from '@codemirror/state';
 
 import {fieldsFor,valuesFor} from './schema.mjs';
 import {referenceCompletions,currentNodeType} from './references.mjs';
+import {scalarText} from './reference-model.mjs';
 export {clashRootFields} from './schema.mjs';
 function unquote(text) {
-  try { if(text.startsWith('"'))return JSON.parse(text); } catch (_) {}
-  return text.startsWith("'")&&text.endsWith("'")?text.slice(1,-1).replace(/''/g,"'"):text;
+  return scalarText(text)??text;
 }
 function pairKey(node, doc) {
   const key = node.getChild('Key') || node.getChild('PropertyName');
@@ -36,7 +36,8 @@ export function completionContext(state, pos, language) {
       if(!m)continue;
       const depth=m[1].replace(/\t/g,'  ').length+(text.trimStart().startsWith('- ')?2:0);
       while(stack.length&&stack.at(-1).depth>=depth)stack.pop();
-      if(!m[3]||/^[>|]/.test(m[3]))stack.push({depth,key:unquote(m[2].trim()),scalar:/^[>|]/.test(m[3])});
+      const rest=m[3].replace(/^(?:(?:&[^\s,[\]{}]+|!(?:<[^>]+>|[^\s,[\]{}]*))\s*)+/, '');
+      if(!rest||rest.startsWith('#')||/^[>|]/.test(rest))stack.push({depth,key:unquote(m[2].trim()),scalar:/^[>|]/.test(rest)});
     }
     while(stack.length&&stack.at(-1).depth>=indent)stack.pop();
     if(stack.some(x=>x.scalar))return null;
@@ -79,7 +80,7 @@ export function clashCompletions(language) {
     if(!base)return null;
     const references=referenceCompletions(context.state,context.pos,language,base),info=references||base;
     if(!context.explicit&&!info.prefix)return null;
-    const candidates=references?references.candidates:info.isKey?fieldsFor(info.path):valuesFor(info.path,currentNodeType(context.state,context.pos)).map(value=>({label:String(value),value,type:typeof value==='boolean'?'keyword':'enum',detail:'Clash 参数值'}));
+    const candidates=references?references.candidates:info.isKey?fieldsFor(info.path):valuesFor(info.path,currentNodeType(context.state,context.pos,language)).map(value=>({label:String(value),value,type:typeof value==='boolean'?'keyword':'enum',detail:'Clash 参数值'}));
     const options=candidates.filter(x=>x.label.toLowerCase().startsWith(info.prefix.toLowerCase())).map(option=>({...option,apply:(view)=>{
       if(view.state.readOnly||view.composing||!view.state.doc.eq(context.state.doc))return;
       const edit=completionEdit(view.state.doc,info,option);

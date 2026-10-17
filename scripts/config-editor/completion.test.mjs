@@ -73,6 +73,14 @@ test('Single-quoted YAML names and values preserve literal apostrophes',()=>{
   const f=fixture("proxies: [{name: 'Public''s node'}]\nproxy-groups: [{name: Main, proxies: ['Pu¦blic']}]");
   assert(f.labels.includes("Public's node"));assert(f.apply("Public's node").includes('["Public\'s node"]'));
 });
+test('A YAML prefix ending in an escaped apostrophe still matches its decoded node name',()=>{
+  const f=fixture("proxies: [{name: 'Public''s node'}]\nproxy-groups: [{name: Main, proxies: ['Public''¦s node']}]");
+  assert.deepEqual(f.labels,["Public's node"]);assert(f.apply("Public's node").includes('["Public\'s node"]'));assert.equal(f.undo(),f.text);
+});
+test('A JSON prefix ending in an escaped quote still matches its decoded node name',()=>{
+  const name='Public "quoted"',source=JSON.stringify({proxies:[{name}],'proxy-groups':[{name:'Main',proxies:['Public "¦quoted"']}]});
+  const f=fixture(source,'json');assert.deepEqual(f.labels,[name]);assert.deepEqual(JSON.parse(f.apply(name))['proxy-groups'][0].proxies,[name]);assert.equal(f.undo(),f.text);
+});
 test('Member candidates omit duplicates, self references and groups that create indirect cycles',()=>{
   const f=fixture(nodes+'proxy-groups:\n  - name: Main\n    proxies: [Public, ¦]\n  - name: Parent\n    proxies: [Bridge]\n  - name: Bridge\n    proxies: [Main]\n  - name: Independent\n    proxies: [DIRECT]\n');
   for(const name of ['Main','Parent','Bridge','Public'])assert(!f.labels.includes(name),name);assert(f.labels.includes('Independent'));assert(f.labels.includes('DIRECT'));

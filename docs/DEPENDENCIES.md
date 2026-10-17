@@ -9,6 +9,8 @@
 libmaxminddb、HevSocks5Tunnel / lwIP，以及 CA 集合和公共后缀列表。
 离线编辑器依赖固定于 `scripts/config-editor/package-lock.json`，
 生成资源及第三方声明位于 `entry/src/main/resources/rawfile/config-editor/`。
+其中 `yaml` 2.8.2（ISC）只为编辑器解码 YAML 标量，覆盖转义及折叠语义；
+模板引用复用 Lezer 语法树并作有界图遍历，不展开整个配置，也不联网获取名称。
 
 为控制首次克隆体积，移除了 Abseil / RE2 不参与项目构建的上游测试、测试数据、
 基准程序、示例应用、CI、其他构建系统元数据及 Mbed TLS 的历史变更日志。

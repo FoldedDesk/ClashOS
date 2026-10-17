@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test editor.test.mjs completion.test.mjs"
+    "test": "node --test editor.test.mjs completion.test.mjs template-completion.test.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.3",
@@ -18,7 +18,8 @@
     "@codemirror/state": "6.7.6",
     "@codemirror/view": "6.43.14",
     "@lezer/highlight": "1.2.5",
-    "codemirror": "6.0.2"
+    "codemirror": "6.0.2",
+    "yaml": "2.8.2"
   },
   "devDependencies": {
     "esbuild": "0.28.2"

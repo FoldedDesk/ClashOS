@@ -160,6 +160,15 @@ npm test --prefix scripts/config-editor
 npm run build --prefix scripts/config-editor
 ```
 
+编辑器回归包含 YAML 锚点、标量/列表/映射别名、根级合并、合并优先级、显式空值、
+共享模板的重复及循环过滤、协议选项、转义名称、无效草稿、缓存更新和 CRLF 撤销。
+`fixtures/yaml/editor-templates.yaml` 同时供编辑器与原生 `--suite yaml` 使用，
+核对实际节点名称、内联 Provider 前缀、组成员及规则目标。
+设备检查可导入该公开配置，在“编辑配置文件”中将 `default-selected` 的别名改为空值后点击“补全”，
+候选应为 `Template HTTP`、`DIRECT` 和 `[T] Pool`；
+在 `&members` 列表末尾新增成员时，已有别名成员与当前组应被排除。
+保存、冷启动并重新打开时应保留锚点结构；此配置的端口是公开测试服务，不是可用的互联网节点。
+
 `fixtures` 内的域名、账户和密码是公开测试数据。`fixtures/vmess/server-key.pem`
 是独立 TLS 参考端的公开测试私钥，只用于本地测试。应用不会默认加载这些配置。
 
