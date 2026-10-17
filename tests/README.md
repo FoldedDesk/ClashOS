@@ -57,6 +57,17 @@ CLAHSOS_TYPESCRIPT=/path/to/typescript node tests/probe_series_test.cjs
 连续检测服务检查混合结果、统计、报告、停止、关闭及配置变化后的请求隔离。
 模拟器公开配置与独立对端见 [节点检测设备验证](webdav_device_server/README.md#connection-probe-device-verification)。
 
+`node tests/system_network_check_test.cjs` 检查生产系统联网检测服务：实际系统代理选项、
+缓存与系统 TLS 策略、HTTP 状态/网络错误分类、自定义地址、代理凭据不进入报告、
+停止/关闭释放请求，以及代理认证/排除项/内核状态变化时隔离未完成结果。
+模拟器中可使用同一个独立对端验证交替 204/503、TLS 提前关闭、慢请求停止/关闭、
+检测期间切换配置，并在系统设置中关闭/恢复代理检查实际提示和排除项行为。
+
+同一可移除应用还提供 [独立 Shadowsocks HTTPS 对照](webdav_device_server/README.md#independent-shadowsocks-https-reference)：
+通过系统加密库和套接字实现 AES-GCM，先检查公开 Python 向量，再用同一个系统 HTTP/TLS 客户端
+交替访问内核及独立参考路径。参考路径只接受三个固定公开 HTTPS 目标，私有节点参数只留在内存；
+统计区分连接关闭、认证失败和已完成的 HTTP 错误响应，并检查参考请求不会增加内核流量。
+
 链式代理专项使用继承的 Unix socket，无需主机监听权限：
 
 ```sh

@@ -98,6 +98,42 @@ headers, clipboard data, node addresses or credentials. The API follows the
 Restore the original profile/runtime/selections/window and remove owned fixture
 applications and forwards after verification.
 
+## Independent Shadowsocks HTTPS reference
+
+The removable app can run a second HTTP CONNECT proxy on **127.0.0.1:18106**.
+It implements SIP004 with HarmonyOS CryptoArchitectureKit MD5, SHA-1 and AES-GCM,
+and NetworkKit sockets. It does not call the production core or its cryptography.
+Only `www.google.com:443`, `www.gstatic.com:443` and `api.github.com:443` are allowed.
+The supported test ciphers are `aes-128-gcm` and `aes-256-gcm`.
+
+1. `POST /test-admin/ss-reference/self-test` must return `passed: true`. The public
+   Python/OpenSSL vectors verify master/subkey derivation, transmitted bytes,
+   every receive split, bytewise input, empty records, nonce carry, authentication,
+   reserved length bits and truncated replies. Regenerate both native and device
+   fixtures with `python tests/generate_ss_aead_vectors.py` using cryptography.
+2. `POST /test-admin/ss-reference/config` accepts a private JSON body with
+   `address` (numeric IPv4), `port`, `cipher` and `password`. Use an owned 0600
+   input file, never shell arguments or logs. The endpoint and keys remain in
+   memory; state responses contain only counters and readiness. Configuration
+   requires a successful self-test and replaces any previous reference listener.
+3. Compare `POST /test-admin/https/{google|gstatic|github}/reference` with `/http1`.
+   Both use the same OS HTTP/1.1 client, TLS verification, public URL and headers;
+   `/http1` uses the production listener on 7890, `/reference` uses 18106. Pin
+   both routes to the same SS endpoint before interpreting a codec comparison.
+   Alternate order and retain every planned outcome, including non-2xx responses.
+4. `GET /test-admin/ss-reference/state` separates encrypted upload/download,
+   authenticated plaintext, remote EOF before data, decoding, truncation and
+   socket errors. Verify actual core transfer totals stay unchanged for reference
+   requests. An HTTP 403 is a completed HTTPS response, not a TLS connection error.
+5. `POST /test-admin/ss-reference/stop` closes peers and clears endpoint/key state.
+   Restore the original user runtime and all group selections/candidates, delete
+   private inputs, remove owned forwards and uninstall this app.
+
+These controls can demonstrate that a failure also occurs outside the core.
+They cannot prove a single cause for all failures, long-term route reliability,
+full browser behavior or support for untested Shadowsocks variants. API response
+bodies/headers and private endpoint details are never exported.
+
 ## dialer-proxy device verification
 
 The HTTP/SOCKS parser can additionally tunnel only `chain.device.test:18097` or

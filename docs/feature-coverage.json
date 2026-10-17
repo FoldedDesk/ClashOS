@@ -408,10 +408,37 @@
       ]
     },
     {
+      "feature": "System proxy network checks",
+      "status": "verified_with_limits",
+      "implemented": [
+        "Tests-page card and actual right-click entry; fixed Google/Gstatic/GitHub targets or a custom HTTP(S) URL, using the real OS HTTP client with usingProxy=true and current exclusion rules",
+        "Uncached bounded HTTP/1.1 requests retain system certificate verification; exact expected statuses and HTTP errors remain separate from OS transport failures",
+        "Visible system proxy/exclusions, explicit disabled-proxy warning, per-site timing/code/status, copyable report and system-settings shortcut",
+        "Active-request destruction on stop/close, immutable snapshots, no proxy credentials or response bodies/headers in published state; proxy authentication/exclusion and runtime changes discard pending results",
+        "44 production-service host assertions and actual simulator controls verify outcomes, quick repeated-row refresh, invalid URL rejection, cancellation, close, stale runtime and right-click actions",
+        "Actual system-settings off/on roundtrip restores the original proxy; an excluded localhost target returns 200 with zero core transfer increments, while the original-profile public targets return 204/204/200 with real core traffic"
+      ],
+      "limitations": [
+        "Uses system HTTP policy; a successful request does not prove that every application uses ClashOS or that a particular excluded target traverses the core",
+        "A small external sample does not establish long-term route reliability; the existing intermittent closure remains unresolved",
+        "OS error 2300999 is kept as an unknown system network failure, without claiming a certificate or specific TLS cause",
+        "Pending OS request settlement after destroy is controlled by the platform; stopped/closed checks issue no following target requests"
+      ],
+      "source": [
+        "entry/src/main/ets/service/SystemNetworkCheck.ets",
+        "entry/src/main/ets/components/SystemNetworkDialog.ets",
+        "entry/src/main/ets/pages/Index.ets",
+        "tests/system_network_check_test.cjs",
+        "tests/webdav_device_server/entry/src/main/ets/entryability/OsSsCrypto.ets",
+        "tests/webdav_device_server/entry/src/main/ets/entryability/OsSsReference.ets",
+        "tests/generate_ss_aead_vectors.py"
+      ]
+    },
+    {
       "feature": "Daily browser connectivity",
       "status": "verified_with_limits",
-      "latest": "Final Core 0.39 HAP installed. Both deterministic native upload-loss witnesses are repaired; 51 authenticated/corrupt protocol controls and all 12 real simulator TCP cases pass, with independent origin counters. Same saved profile OS HTTP/1.1 samples before/after (8 per site) are Google 5/8 to 6/8, Gstatic 8/8 to 8/8, GitHub 5/8 to 6/8; this small uncontrolled external sample does not establish a reliability improvement or resolve intermittent TLS closure. A separate final OS system-proxy sample returns Google/Gstatic 204 and GitHub 200 with actual per-request core upload/download increases. Original runtime/all 11 groups/selections/window are restored, and the owned fixture app/probe/forward are removed.",
-      "limit": "Intermittent early TLS closure remains a real unresolved reliability limit. Core 0.36 comparisons reproduced failures in both the native Mbed TLS probe and host HTTP/SOCKS clients. The independent HarmonyOS HTTP/1.1 client with explicit close succeeded in 19 of 24 requests and reported five failures. A separately encoded Python/cryptography SS first-flight control with raw curl transport, bypassing ClashOS, received authenticated TLS bytes in 23 of 24 trials and one clean zero-byte remote EOF. This isolates one occurrence beyond the core codec; it is not a full independent HTTPS exchange and does not establish a single cause for all failures. Target/node TLS certificate checks remain enabled according to their existing policies. Native failure controls and repeated-check UI improve diagnosis; they do not eliminate the observed upstream-path failure. Full native suite still needs host loopback binding, which returns EPERM here. True-device TUN authorization and background survival, advanced protocols and wider interoperability remain unproven."
+      "latest": "Core 0.39 plus the system-network-check UI is installed. Final original-profile checks using the production dialog and actual OS system proxy return Google/Gstatic 204 and GitHub 200, with real core transfer increments. Independent device controls verify alternating 204/503 rows and summary, TLS EOF as an OS network error, cancellation, pending close, runtime staleness, disabled-system-proxy warnings and actual exclusion-list bypass with zero core traffic. Original profile, all 11 selections/candidate lists and system proxy are restored. Original window placement is restored and the owned fixture app/extra forwarding are removed.",
+      "limit": "Intermittent early external closure remains unresolved. A full independent on-device Shadowsocks AES-GCM reference uses OS cryptography/sockets and the same OS HTTP/1.1 client, pinned to the same endpoint and credentials as the native control. Its 287 public Python/OpenSSL vector assertions pass. Across 12 attempts per site/client, native Google succeeds 10/12 and reference 9/12; Gstatic succeeds 12/12 in both, GitHub 12/12 native and 11/12 reference. Each reference failure closes before receiving any encrypted reply, with no decode/authentication error and no core transfer increments. Thus failure also occurs outside the production core; this does not identify a single cause or prove core correctness. A second existing endpoint completes all 16 Google checks but returns HTTP 403 for all 16 GitHub checks across the two clients, so it was not adopted as a default. These are bounded external samples, not evidence of long-term reliability or full browser compatibility. True-device TUN authorization/background survival and broader protocol interoperability remain unverified."
     },
     {
       "feature": "Domain sniffing",
@@ -443,12 +470,12 @@
     }
   ],
   "nextWork": [
-    "Improve intermittent route reliability; independent first-flight and OS client controls reproduce failure beyond one core/client path, while end-to-end root cause remains incomplete",
+    "Improve actual route reliability; a full independent OS crypto/socket HTTPS reference also reproduces early closure, so investigate shared endpoint/network behavior without assuming a production-codec cause",
     "Broader routing and ingress configuration, including redir/TProxy",
     "Supported-device TUN proof and broader archive interoperability",
     "Advanced style assets, full Mihomo schema and downloaded-provider completion"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 17:16:54 UTC",
-  "verificationNotes": "Status summary only; full goal completion remains unproven. Core 0.39 passes HTTP, SS duplex, forward, VLESS, dialer, TLS, hosts, API and YAML host suites with independent peers, plus final simulator crypto diagnostics and all 12 TCP ingress cases. The earlier offline editor remains covered by 240 tests and 25 controller checks. Original user runtime, all 11 groups/selections and window placement are restored. External Google/GitHub TLS failures remain reproducible after the upload-loss fixes; final successful system-proxy samples do not prove stability. Full real-listener host DNS/inbound/sniffer suites remain unavailable because binds return EPERM and are not reported passing. Per-run evidence and HAPs stay outside Git."
+  "reviewedAt": "2026-10-17 19:21:09 UTC",
+  "verificationNotes": "Status summary only; full goal completion remains unproven. Core 0.39 passes HTTP, SS duplex, forward, VLESS, dialer, TLS, hosts, API and YAML host suites with independent peers, plus final simulator crypto diagnostics and all 12 TCP ingress cases. The earlier offline editor remains covered by 240 tests and 25 controller checks. Original user runtime, all 11 groups/selections and window placement are restored. External Google/GitHub TLS failures remain reproducible after the upload-loss fixes; final successful system-proxy samples do not prove stability. Full real-listener host DNS/inbound/sniffer suites remain unavailable because binds return EPERM and are not reported passing. Per-run evidence and HAPs stay outside Git. The production OS system-proxy check adds 44 service assertions and actual device GUI/network controls. A separate removable OS-crypto Shadowsocks reference passes 287 public-vector assertions and completes full HTTPS exchanges without using the production core; planned matched-endpoint and crossed-endpoint samples retain all failures and distinguish HTTP 403 from connection failures. Secrets and per-run data stay outside Git. Goal completion remains unproven."
 }

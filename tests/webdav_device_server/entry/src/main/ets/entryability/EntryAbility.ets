@@ -8,6 +8,7 @@ import { VlessFixtureServer } from './VlessFixtureServer';
 import { probeVlessUdp } from './VlessFixtureProbe';
 import { probeNetworkHttps } from './NetworkFixtureProbe';
 import { HttpIngressFixtureServer } from './HttpIngressFixtureServer';
+import { OsSsReference } from './OsSsReference';
 
 interface FixtureFile { text: string; revision: number; }
 
@@ -23,6 +24,7 @@ export default class EntryAbility extends UIAbility {
   private encoder: util.TextEncoder = new util.TextEncoder();
   private vless: VlessFixtureServer = new VlessFixtureServer();
   private httpIngress: HttpIngressFixtureServer = new HttpIngressFixtureServer();
+  private ssReference: OsSsReference = new OsSsReference();
 
   onCreate(): void {
     this.server.on('connect', (client: socket.TCPSocketConnection): void => this.accept(client));
@@ -34,6 +36,7 @@ export default class EntryAbility extends UIAbility {
   onDestroy(): void {
     this.vless.stop();
     this.httpIngress.stop();
+    this.ssReference.stop();
     this.clients.forEach((client: socket.TCPSocketConnection) => client.close().catch(() => {}));
     this.server.close().catch(() => {}); this.files.clear();
   }
@@ -77,6 +80,15 @@ export default class EntryAbility extends UIAbility {
   }
 
   private handle(client: socket.TCPSocketConnection, method: string, path: string, headers: Record<string, string>, body: string): void {
+    if (path === '/test-admin/ss-reference/self-test' && method === 'POST') {
+      this.context.resourceManager.getRawFileContent('ss/reference-vectors.json').then((data: Uint8Array) => {
+        try { this.respond(client, 200, this.ssReference.selfTest(util.TextDecoder.create('utf-8').decodeToString(data))); }
+        catch (error) { this.respond(client, 500, JSON.stringify({ passed: false, publicVectorError: (error as Error).message })); }
+      }).catch(() => this.respond(client, 500, '{"passed":false}')); return;
+    }
+    if (path === '/test-admin/ss-reference/config' && method === 'POST') { this.ssReference.configure(body).then(() => this.respond(client, 200, this.ssReference.status())).catch(() => this.respond(client, 400, '{}')); return; }
+    if (path === '/test-admin/ss-reference/state') { this.respond(client, 200, this.ssReference.status()); return; }
+    if (path === '/test-admin/ss-reference/stop' && method === 'POST') { this.ssReference.stop().then(() => this.respond(client, 200, this.ssReference.status())); return; }
     if (path === '/test-admin/http/start' && method === 'POST') { this.httpIngress.start(); this.respond(client, 200, '{}'); return; }
     if (path === '/test-admin/http/release' && method === 'POST') { this.httpIngress.releaseEarly().then(() => this.respond(client, 200, '{}')).catch(() => this.respond(client, 500, '{}')); return; }
     if (path === '/test-admin/http/state') { this.respond(client, 200, this.httpIngress.status()); return; }

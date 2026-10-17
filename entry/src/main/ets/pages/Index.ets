@@ -13,6 +13,7 @@ import { RuntimeConfigDialog } from '../components/RuntimeConfigDialog';
 import { InboundSettingsDialog } from '../components/InboundSettingsDialog';
 import { SnifferSettingsDialog } from '../components/SnifferSettingsDialog';
 import { ProbeSeriesDialog } from '../components/ProbeSeriesDialog';
+import { SystemNetworkDialog } from '../components/SystemNetworkDialog';
 import { probeFailureText } from '../service/ProbeSeriesController';
 import { ClashInboundSettings, ClashInboundChanges } from '../service/ClashApi';
 import { ClashRuntimeConfig } from '../service/ClashApi';
@@ -1752,6 +1753,34 @@ struct Index {
     } catch (error) { this.notice = `清除会话分配失败：${(error as Error).message}`; }
   }
 
+  private async openSystemNetworkCheck(): Promise<void> {
+    const version: number = this.mutationVersion, connected: boolean = this.coreConnected;
+    const instance: string = this.connectedRuntime.instance;
+    try {
+      const initial: ClashRuntimeConfig | undefined = this.internalCore && connected ? await this.coreApi.runtimeConfig() : undefined;
+      const isCurrent = async (): Promise<boolean> => {
+        if (!this.pageActive || version !== this.mutationVersion || connected !== this.coreConnected || instance !== this.connectedRuntime.instance) return false;
+        if (initial) {
+          try {
+            const current = await this.coreApi.runtimeConfig();
+            return current.path === initial.path && current.revision === initial.revision && this.pageActive &&
+              version === this.mutationVersion && connected === this.coreConnected && instance === this.connectedRuntime.instance;
+          }
+          catch (_) { return false; }
+        }
+        return true;
+      };
+      if (!await isCurrent()) return;
+      this.dialogController?.close();
+      this.dialogController = new CustomDialogController({ builder: SystemNetworkDialog({ isCurrent,
+        onCopy: (text: string): void => { this.copyText(text, '联网检测报告'); },
+        onSettings: (): void => { this.openSystemNetworkSettings(); },
+        onFinished: (): void => { this.refreshSystemProxy(); this.refreshCore(); }
+      }), autoCancel: false, customStyle: true });
+      this.dialogController.open();
+    } catch (_) { this.notice = '无法打开联网检测，请刷新内核状态后重试'; }
+  }
+
   private async openProbeSeries(name: string = this.selectedProxy): Promise<void> {
     if (!this.coreConnected || !name || name === 'REJECT') return;
     const version: number = this.mutationVersion;
@@ -3229,6 +3258,17 @@ struct Index {
   @Builder
   private testsPage() {
     Column({ space: 16 }) {
+      Column({ space: 14 }) {
+        this.cardTitle('系统代理联网检测', $r('app.media.verge_connections'));
+        Text('检查当前系统网络能否访问网站，分别显示 HTTP 错误状态和连接失败。节点测速成功后，可在这里确认系统代理的实际访问结果。')
+          .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
+        Text(this.systemProxyDescription()).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
+        Row({ space: 12 }) {
+          this.outlineButton('系统联网检测', $r('app.media.verge_test'), () => this.openSystemNetworkCheck());
+          this.outlineButton('系统代理设置', $r('app.media.verge_settings'), () => this.openSystemNetworkSettings());
+        }.width('100%');
+      }.width('100%').padding(20).borderRadius(this.theme.radius(8)).backgroundColor(this.theme.surface)
+        .border({ width: 1, color: this.theme.border }).bindContextMenu(this.systemNetworkMenu(), ResponseType.RightClick);
       Column({ space: 16 }) {
         Row() {
           this.cardTitle('DNS 查询', $r('app.media.verge_connections'));
@@ -3326,6 +3366,15 @@ struct Index {
         }
       }.width('100%').padding(20).borderRadius(this.theme.radius(8)).backgroundColor(this.theme.surface).border({ width: 1, color: this.theme.border });
     }.width('100%');
+  }
+
+  @Builder
+  private systemNetworkMenu() {
+    Menu() {
+      MenuItem({ content: '系统联网检测', startIcon: $r('app.media.verge_test') }).onClick(() => this.openSystemNetworkCheck());
+      MenuItem({ content: '打开系统代理设置', startIcon: $r('app.media.verge_settings') }).onClick(() => this.openSystemNetworkSettings());
+      MenuItem({ content: '刷新系统代理状态', startIcon: $r('app.media.verge_refresh') }).onClick(() => this.refreshSystemProxy());
+    }.backgroundColor(this.theme.surface).backgroundBlurStyle(BlurStyle.NONE);
   }
 
   @Builder
