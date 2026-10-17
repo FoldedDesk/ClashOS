@@ -100,7 +100,11 @@ with tempfile.TemporaryDirectory(prefix='clashos-ss2022-network-') as temp:
                   'Actual SS2022 UDP DNS must reach the independent resolver without a cached or direct substitute')
             print('PASS actual Mihomo TCP/UDP/TLS: ' + node['cipher'], flush=True)
         print('PASS ' + str(checks) + ' official Mihomo SS2022 network assertions', flush=True)
-    except Exception:
+    except Exception as error:
+        # A public check annotation makes a network failure actionable even when
+        # GitHub requires authentication to download the complete job log.
+        message = ('After ' + str(checks) + ' assertions: ' + str(error)).replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+        print('::error title=SS2022 interoperability::' + message, flush=True)
         for log in logs:
             log.flush(); log.seek(0)
             print(log.read()[-6000:])  # Public fixture processes only.
