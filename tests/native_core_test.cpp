@@ -209,12 +209,13 @@ void forwardingTests() {
             require(dials.back() == std::make_pair(std::string("http.test"),80), "Plain HTTP must default to port 80");
         }
         require(sendAll(origin[1], response), "Origin response write");
-        require(receiveN(client[1], response.size()) == response, "HTTP response must be forwarded intact");
-        awaitCondition([&] { return g_state.downloadTotal.load() >= down + response.size(); }, "Download accounting missed forwarded bytes");
+        const std::string delivered = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: keep-alive\r\n\r\nhello";
+        require(receiveN(client[1], delivered.size()) == delivered, "HTTP content must remain intact while each hop controls its own connection lifetime");
+        awaitCondition([&] { return g_state.downloadTotal.load() >= down + delivered.size(); }, "Download accounting missed forwarded bytes");
         require(g_state.uploadTotal.load() - up == forwarded.size(), "Upload accounting must reflect actual origin bytes");
         const std::string snapshot = controlRequest("GET", "/connections");
         require(snapshot.find("http.test") != std::string::npos && snapshot.find("\"destinationPort\":\"80\"") != std::string::npos, "Connections endpoint needs actual target metadata");
-        require(snapshot.find("\"download\":" + std::to_string(response.size())) != std::string::npos, "Per-connection byte accounting is missing");
+        require(snapshot.find("\"download\":" + std::to_string(delivered.size())) != std::string::npos, "Per-connection byte accounting is missing");
         shutdown(client[1], SHUT_WR); shutdown(origin[1], SHUT_WR);
         close(client[1]); close(origin[1]); workersIdle();
         require(connectionId("http.test").empty(), "Completed HTTP connection must leave active table");
@@ -421,6 +422,7 @@ void latencyAndRuleTests() {
 #include "vless_core_test.inc"
 #include "forward_proxy_test.inc"
 #include "yaml_merges_test.inc"
+#include "http_ingress_test.inc"
 #include "ss_duplex_test.inc"
 #include "dialer_proxy_test.inc"
 #include "tls_failure_test.inc"
@@ -438,6 +440,7 @@ int main(int argc, char** argv) {
         if (argc == 4 && std::string(argv[3]) == "forward") { forwardProxyTests(argv[2]); shareLinkTests(); objectEditsTests(argv[2]); std::cout << "PASS " << checks << " forward proxy assertions (independent HTTP/SOCKS/OpenSSL/UDP peers)\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "providers") { providerTests(argv[2]); std::cout << "PASS " << checks << " provider assertions (independent OpenSSL peers and real cache lifecycle)\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "dialer") { dialerProxyTests(argv[2]); std::cout << "PASS " << checks << " dialer-proxy assertions\n"; return 0; }
+        if (argc == 4 && std::string(argv[3]) == "http") { httpIngressTests(argv[2]); std::cout << "PASS " << checks << " HTTP ingress assertions (independent origin/upgrade peers)\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "tls") { tlsFailureTests(); std::cout << "PASS " << checks << " independent TLS failure assertions\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "groups") { groupHealthTests(argv[2]); loadBalanceTests(argv[2]); std::cout << "PASS " << checks << " health/load-balance assertions\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "yaml") { yamlMergeTests(argv[2]); std::cout << "PASS " << checks << " YAML template assertions (configuration, scripts, providers, editing, export and independent protocol peers)\n"; return 0; }
@@ -451,7 +454,7 @@ int main(int argc, char** argv) {
             std::cout << "PASS " << checks << " " << argv[3] << " assertions (shipping YAML/Zstandard/Mbed TLS backends)\n";
             return 0;
         }
-        ssIncrementalTests(); ssDuplexTests(argv[2]); yamlMergeTests(argv[2]); snifferTests(argv[2]); inboundTests(argv[2]); controllerConfigTests(argv[2]); backupCodecTests(argv[2]); controllerApiTests(argv[2]); controllerAuthTests(argv[2]);controllerStateTests(argv[2]); configScriptTests(argv[2]); configMergeTests(argv[2]); shareLinkTests(); objectEditsTests(argv[2]); ruleEditsTests(argv[2]); protocolTests(); configurationTests(argv[1], argv[2]); forwardingTests(); latencyAndRuleTests();
+        ssIncrementalTests(); ssDuplexTests(argv[2]); yamlMergeTests(argv[2]); snifferTests(argv[2]); inboundTests(argv[2]); controllerConfigTests(argv[2]); backupCodecTests(argv[2]); controllerApiTests(argv[2]); controllerAuthTests(argv[2]);controllerStateTests(argv[2]); configScriptTests(argv[2]); configMergeTests(argv[2]); shareLinkTests(); objectEditsTests(argv[2]); ruleEditsTests(argv[2]); protocolTests(); configurationTests(argv[1], argv[2]); httpIngressTests(argv[2]); latencyAndRuleTests();
         udpProtocolTests(); udpForwardingTests(); vlessTests(argv[2]); forwardProxyTests(argv[2]); dialerProxyTests(argv[2]); tlsFailureTests();
         vmessTests(argv[2]);httpsProbeTests();groupHealthTests(argv[2]);providerTests(argv[2]);loadBalanceTests(argv[2]);ssAeadTests();trojanTests(argv[2]);ruleProviderTests(argv[2]);dnsHostsTests(argv[2]);vmessDuplexTests(argv[2]);dnsTests(argv[2]);dnsListenerTests(argv[2]);geoTests(argv[2]);proxyPortTests(argv[2]);
         std::cout << "PASS " << checks << " assertions (shipping Mbed TLS backend; Harmony networking still requires device verification)\n";

@@ -1,0 +1,16 @@
+# Fixed public origin only; all unrelated traffic is rejected during this test.
+port: 7890
+socks-port: 7891
+mode: rule
+allow-lan: false
+ipv6: false
+sniffer: {enable: false}
+hosts:
+  origin.fixture.test: 127.0.0.1
+  origin1.fixture.test: 127.0.0.1
+  origin2.fixture.test: 127.0.0.1
+rules:
+  - DOMAIN,origin.fixture.test,DIRECT
+  - DOMAIN,origin1.fixture.test,DIRECT
+  - DOMAIN,origin2.fixture.test,DIRECT
+  - MATCH,REJECT

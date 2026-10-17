@@ -7,6 +7,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { VlessFixtureServer } from './VlessFixtureServer';
 import { probeVlessUdp } from './VlessFixtureProbe';
 import { probeNetworkHttps } from './NetworkFixtureProbe';
+import { HttpIngressFixtureServer } from './HttpIngressFixtureServer';
 
 interface FixtureFile { text: string; revision: number; }
 
@@ -21,6 +22,7 @@ export default class EntryAbility extends UIAbility {
   private clients: socket.TCPSocketConnection[] = [];
   private encoder: util.TextEncoder = new util.TextEncoder();
   private vless: VlessFixtureServer = new VlessFixtureServer();
+  private httpIngress: HttpIngressFixtureServer = new HttpIngressFixtureServer();
 
   onCreate(): void {
     this.server.on('connect', (client: socket.TCPSocketConnection): void => this.accept(client));
@@ -31,6 +33,7 @@ export default class EntryAbility extends UIAbility {
 
   onDestroy(): void {
     this.vless.stop();
+    this.httpIngress.stop();
     this.clients.forEach((client: socket.TCPSocketConnection) => client.close().catch(() => {}));
     this.server.close().catch(() => {}); this.files.clear();
   }
@@ -74,6 +77,8 @@ export default class EntryAbility extends UIAbility {
   }
 
   private handle(client: socket.TCPSocketConnection, method: string, path: string, headers: Record<string, string>, body: string): void {
+    if (path === '/test-admin/http/start' && method === 'POST') { this.httpIngress.start(); this.respond(client, 200, '{}'); return; }
+    if (path === '/test-admin/http/state') { this.respond(client, 200, this.httpIngress.status()); return; }
     if (path.startsWith('/test-admin/https/') && method === 'POST') {
       const parts: string[] = path.substring('/test-admin/https/'.length).split('/');
       if (parts.length > 2) { this.respond(client, 400, '{}'); return; }

@@ -407,6 +407,8 @@ bool beginConnection(int client, const std::string& host, int port, const std::v
     const std::string& rule, const std::string& network = "tcp", int owner = -1)
 {
     std::lock_guard<std::mutex> guard(g_state.sessionsMutex);
+    const auto previous = g_state.connections.find(client);
+    if (previous != g_state.connections.end() && previous->second.cancelled) return false;
     if (network == "udp" && std::count_if(g_state.connections.begin(), g_state.connections.end(),
         [](const auto& pair) { return pair.second.network == "udp"; }) >= 256) return false;
     ConnectionInfo info;
@@ -1546,8 +1548,8 @@ std::string responseFor(const std::string& method, const std::string& path, cons
     if (path.substr(0, path.find('?')) == "/clashos/ports") return proxyPortsControlLocked(method, path, body);
     if (path.substr(0, path.find('?')) == "/clashos/inbound") return inboundControlLocked(method, path, body);
     if (method == "GET" && path == "/version") {
-        return "{\"version\":\"ClashOS Core 0.37 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
-            "\",\"premium\":false,\"meta\":true,\"features\":[\"yaml-merge-keys\",\"dialer-proxy\",\"dialer-proxy-udp\",\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"vless\",\"trojan\",\"http-outbound\",\"socks5-outbound\",\"socks5-udp\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
+        return "{\"version\":\"ClashOS Core 0.38 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
+            "\",\"premium\":false,\"meta\":true,\"features\":[\"http-message-framing\",\"http-upgrade\",\"yaml-merge-keys\",\"dialer-proxy\",\"dialer-proxy-udp\",\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"vless\",\"trojan\",\"http-outbound\",\"socks5-outbound\",\"socks5-udp\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
     }
     if (method == "GET" && path == "/clahsos/diagnostics") return diagnosticsJson();
     const std::string resource=path.substr(0,path.find('?'));
@@ -2564,11 +2566,20 @@ void relayStream(int client, ProxyStream& stream)
             const ssize_t count = recv(client, buffer.data(), buffer.size(), 0);
             if (count == 0) {
                 clientOpen = false;
-                if (stream.vmess) { if (!stream.vmess->finish()) break; }
-                else if (stream.trojan) { if (!stream.trojan->finish()) break; }
-                else if (stream.vless) { if (!stream.vless->finish()) break; }
-                else if (stream.forward) { if (!stream.forward->finish()) break; }
-                else shutdown(stream.fd, SHUT_WR);
+                bool finished = true;
+                if (stream.vmess) finished = stream.vmess->finish();
+                else if (stream.trojan) finished = stream.trojan->finish();
+                else if (stream.vless) finished = stream.vless->finish();
+                else if (stream.forward) finished = stream.forward->finish();
+                else finished = shutdown(stream.fd, SHUT_WR) == 0;
+                if (!finished) {
+                    // Upload and download have separate lifetimes. A peer can
+                    // close after queuing its authenticated reply, before our
+                    // TLS/protocol EOF notification reaches it. Drain that
+                    // reply with the normal authentication checks still active.
+                    shutdown(stream.fd, SHUT_WR);
+                    coreLog("debug", "Upstream EOF notification was not delivered; draining response");
+                }
             } else if (count < 0) {
                 if (errno == EINTR) continue;
                 break;
@@ -2654,80 +2665,8 @@ void closePair(int first, int second)
 #include "sniffer_wire.inc"
 #include "sniffer_runtime.inc"
 
-void handleHttpProxyClient(int client)
-{
-    InboundConfig policy; std::string source;
-    if (!inboundHandshakePolicy(client, policy, source)) { closeSocket(client); return; }
-    const std::string request = readUntilHeaders(client);
-    const size_t headerEnd = request.find("\r\n\r\n");
-    const size_t lineEnd = request.find("\r\n");
-    if (headerEnd == std::string::npos || lineEnd == std::string::npos) { closeSocket(client); return; }
-    if (!inboundHttpAuthenticated(policy, source, request)) {
-        sendAll(client, "HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"ClashOS\", charset=\"UTF-8\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-        closeSocket(client); return;
-    }
-    std::istringstream firstLine(request.substr(0, lineEnd));
-    std::string method, target, version;
-    firstLine >> method >> target >> version;
-    const bool tunnel = lower(method) == "connect";
-    std::string host;
-    int port = tunnel ? 443 : 80;
-    std::string forwardedHeaders;
-    std::istringstream headers(request.substr(lineEnd + 2, headerEnd - lineEnd - 2));
-    std::string header;
-    while (std::getline(headers, header)) {
-        if (!header.empty() && header.back() == '\r') header.pop_back();
-        const size_t colon = header.find(':');
-        if (colon == std::string::npos) continue;
-        const std::string key = lower(trim(header.substr(0, colon)));
-        if (key == "host" && !tunnel) splitHostPort(trim(header.substr(colon + 1)), host, port, 80);
-        if (key != "proxy-connection" && key != "proxy-authorization" && key != "connection") forwardedHeaders += header + "\r\n";
-    }
-    bool valid = version == "HTTP/1.1" || version == "HTTP/1.0";
-    if (tunnel) {
-        valid = valid && splitHostPort(target, host, port, 443);
-    } else if (target.rfind("http://", 0) == 0) {
-        TestTarget absolute;
-        valid = valid && parseTestUrl(target, absolute);
-        if (valid) { host = absolute.host; port = absolute.port; target = absolute.path; }
-    } else valid = valid && !host.empty() && !target.empty() && (target.front() == '/' || target == "*");
-    if (!valid || host.empty()) {
-        sendAll(client, "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
-        closeSocket(client);
-        return;
-    }
-    auto plan = sniffPlan(host, port, clientSourceAddress(client));
-    bool acknowledged = false;
-    std::string prefix = request.substr(headerEnd + 4);
-    if (tunnel && plan.eligible) {
-        if (!sendAll(client, "HTTP/1.1 200 Connection Established\r\n\r\n")) { closeSocket(client); return; }
-        acknowledged = true; sniffTcp(client, plan, prefix);
-    } else if (!tunnel && plan.eligible && sniffProtocolPort(*plan.config, "HTTP", port)) sniffApply(plan, "HTTP", sniffHttp(request));
-    const ProxyNode node = activeProxyNode(plan.route, port, "tcp", plan.source, plan.originalIps.empty() ? nullptr : &plan.originalIps);
-    beginConnection(client, plan.route, port, node.chain, node.matchedRule);
-    ProxyStream stream;
-    std::string error;
-    if (!openProxyStream(node, plan.destination, port, stream, error)) {
-        coreLog("error", host + ":" + std::to_string(port) + " via " + node.name + ": " + error);
-        const std::string status = node.type == "reject" ? "403 Forbidden" : node.type != "ss" && node.type != "direct" && node.type != "vmess" && node.type != "trojan" && node.type != "vless" && node.type != "http" && node.type != "socks5" ? "501 Not Implemented" : "502 Bad Gateway";
-        if (!acknowledged) sendAll(client, "HTTP/1.1 " + status + "\r\nConnection: close\r\n\r\n");
-        closeSocket(client);
-        return;
-    }
-    attachUpstream(client, stream.fd);
-    coreLog("info", host + ":" + std::to_string(port) + " via " + node.name);
-    bool ready = true;
-    if (tunnel) {
-        ready = (acknowledged || sendAll(client, "HTTP/1.1 200 Connection Established\r\n\r\n")) && sendPayload(client, stream, prefix);
-    } else {
-        const std::string forwarded = method + " " + target + " " + version + "\r\n" + forwardedHeaders +
-            "Connection: close\r\n\r\n" + request.substr(headerEnd + 4);
-        ready = sendPayload(client, stream, forwarded);
-    }
-    if (ready) relayStream(client, stream);
-    closePair(client, stream.fd);
-    stream.fd = -1;
-}
+#include "http_message.inc"
+#include "http_ingress.inc"
 
 void socksReply(int client, unsigned char status)
 {

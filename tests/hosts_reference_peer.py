@@ -99,7 +99,7 @@ def main():
         while not request.endswith(b'\r\n\r\n'):
             request += wire.exact(1)
         assert request.startswith(b'GET /test HTTP/1.1\r\n')
-        assert b'\r\nHost: source.fixture.test\r\n' in request
+        assert b'\r\nHost: source.fixture.test:443\r\n' in request
         wire.send(b'HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n')
     else:
         request = read_request(wire, command) if command is not None else wire.exact(len(PAYLOAD))

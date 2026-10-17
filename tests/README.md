@@ -22,6 +22,29 @@ python3 tests/run_native_tests.py --build-dir .host-build/native --config /path/
 `CLAHSOS_REFERENCE_PYTHON` 可指定已安装 cryptography 的 Python。
 原生测试会绑定本机回环端口；限制 socket 绑定的沙箱无法完成这些检查。
 
+HTTP 入站消息、持续连接与升级专项使用独立 Python 标准库对端和 Unix socket：
+
+```sh
+python3 tests/run_native_tests.py --suite http --build-dir .host-build/native
+```
+
+检查跨目标流水请求、每条请求鉴权、代理凭据及逐跳字段隔离、URI Host/IPv6 端口、
+分片定长及分块上传、二进制响应和 trailer、HEAD、100/103、HTTP/1.0 解块、
+非法长度/分块/升级响应、取消后的请求隔离，以及原有 HTTP/SOCKS 转发和流量计数。
+旧内核的负向对照可分别指定 `CLAHSOS_HTTP_CASE=pipeline` 或 `upgrade`。
+`CLAHSOS_HTTP_CASE=closed-response` 让独立 TLS 对端写完响应并退出，再同时排队客户端 FIN，
+稳定检查上传结束通知失败时仍须读取有效响应；无需网络监听或依靠重复运行碰到竞态。
+原生解析依据 [HTTP/1.1 消息边界](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.3)、
+[逐跳字段](https://www.rfc-editor.org/rfc/rfc9110.html#section-7.6.1) 和
+[WebSocket 握手](https://www.rfc-editor.org/rfc/rfc6455.html#section-4.1)。
+
+模拟器验证使用可移除的 `webdav_device_server` 测试应用：启动后向 18088 端口的
+`POST /test-admin/http/start` 开启固定 18105 端口，再通过 `GET /test-admin/http/state` 检查独立计数。
+`fixtures/http/device.yaml` 只允许公开测试域名，其余请求拒绝；可用控制器的临时 payload 加载。
+使用 SDK clang 将 `http_ingress_device_probe.c` 编译为 ARM64 并通过 HDC 执行，
+检查实际 TCP 持续连接、64 KB 上传、分块、HTTP/1.0、Continue、WebSocket 首帧及歧义请求拒绝。
+探针要求代理端口 7890。完成后恢复原配置、移除测试应用、额外 HDC 转发和设备上的探针。
+
 TLS 故障分类专项使用继承的 Unix socket，无需监听权限：
 
 ```sh
