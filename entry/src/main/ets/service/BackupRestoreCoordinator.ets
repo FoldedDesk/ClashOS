@@ -4,6 +4,7 @@ import { AppearanceSettings } from '../theme/AppearanceTypes';
 import { sameAppearance as appearancesEqual } from '../theme/AppearanceTypes';
 import { BackupGlobals, BackupRestoreSelection, BackupRestoreResult } from './BackupTypes';
 import { GroupIconStore } from './GroupIconStore';
+import { NetworkBackupSnapshot } from './NetworkBackupTypes';
 
 export interface BackupRuntime {
   validate: (globals: BackupGlobals) => void;
@@ -23,10 +24,13 @@ export class BackupRestoreCoordinator {
 
   async restore(text: string, selection: BackupRestoreSelection, runtime?: BackupRuntime): Promise<BackupRestoreResult> {
     const preview = this.profiles.inspectBackup(text, selection.globals);
-    if (!selection.profiles.length && !selection.globals && !selection.appearance) throw new Error('请选择配置或需要恢复的设置');
+    if (!selection.profiles.length && !selection.globals && !selection.appearance && !selection.network) throw new Error('请选择配置或需要恢复的设置');
     if (selection.profiles.some((i: number) => !Number.isInteger(i) || i < 0 || i >= preview.rows.length || !preview.rows[i].valid) ||
       new Set(selection.profiles).size !== selection.profiles.length) throw new Error('请选择可以加载的配置');
     if (selection.appearance && (!preview.archive.appearance || !this.appearance)) throw new Error('此备份不包含外观，或当前外观服务不可用');
+    if (selection.network && !preview.archive.network) throw new Error('此备份不包含端口和共享设置');
+    const previousNetwork: NetworkBackupSnapshot | undefined = selection.network ? this.profiles.networkBackupSnapshot() : undefined;
+    if (selection.network && (!selection.expectedNetwork || selection.expectedNetwork !== previousNetwork?.revision)) throw new Error('端口或共享设置已变化，请重新预览备份');
     const restoreIcons: boolean = selection.appearance && preview.archive.groupIcons !== undefined;
     if (restoreIcons && !this.icons) throw new Error('当前图标服务不可用，无法恢复备份中的代理组图标');
     const previousIcons: string = restoreIcons ? this.icons!.revision() : '';
@@ -45,12 +49,17 @@ export class BackupRestoreCoordinator {
       else if (this.active || selection.profiles.length === 0) this.profiles.validateBackupGlobals(this.active, globals);
     }
     let created: ClashProfile[] = [], globalsChanged: boolean = false, runtimeAttempted: boolean = false, appearanceAttempted: boolean = false;
+    let networkChanged: boolean = false, networkApplied: boolean = false, networkRevision: string = '';
     try {
       if (selection.profiles.length) created = this.profiles.restoreBackup(text, selection.profiles, selection.globals);
       if (selection.globals) {
         this.profiles.replaceBackupGlobals(previousGlobals, preview.archive.globals as BackupGlobals); globalsChanged = true;
         if (runtime) { runtimeAttempted = true; await runtime.reload(); }
         if (!this.sameGlobals(this.profiles.backupGlobals(), preview.archive.globals as BackupGlobals)) throw new Error('全局扩展在恢复期间已变化，无法提交本次恢复');
+      }
+      if (selection.network && preview.archive.network && previousNetwork) {
+        const result = this.profiles.replaceBackupNetwork(preview.archive.network, previousNetwork.revision, this.active?.path ?? '');
+        networkChanged = true; networkApplied = result.applied; networkRevision = result.revision;
       }
       if (selection.appearance && this.appearance && preview.archive.appearance) {
         // Native API calls above may yield; do not overwrite a newer preference.
@@ -61,9 +70,18 @@ export class BackupRestoreCoordinator {
       // Last synchronous commit: a failed icon import leaves the old index/images
       // intact, so earlier profile/global/appearance steps can still be rolled back.
       if (restoreIcons) this.icons!.restoreBackup(preview.archive.groupIcons!, previousIcons);
-      return { count: created.length, globals: selection.globals, appearance: selection.appearance, reloaded: runtimeAttempted };
+      return { count: created.length, globals: selection.globals, appearance: selection.appearance, reloaded: runtimeAttempted,
+        network: selection.network === true, networkApplied };
     } catch (error) {
       const problems: string[] = [];
+      if (networkChanged && previousNetwork) {
+        try { this.profiles.replaceBackupNetwork(previousNetwork.settings, networkRevision, this.active?.path ?? ''); }
+        catch (_) { problems.push('端口或共享设置未能撤回'); }
+      }
+      if (previousNetwork) {
+        try { if (this.profiles.networkBackupSnapshot().revision !== previousNetwork.revision) problems.push('端口或共享设置与恢复前不一致'); }
+        catch (_) { problems.push('无法确认端口和共享设置'); }
+      }
       if (appearanceAttempted && previousAppearance && this.appearance) {
         try {
           if (!this.sameAppearance(previousAppearance, this.appearance.savedSettings())) this.appearance.save(previousAppearance.mode, previousAppearance.accent, previousAppearance.styles ?? null);

@@ -2,6 +2,13 @@
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),vm=require('node:vm'),assert=require('node:assert/strict'),crypto=require('node:crypto');
 const ts=require('./test_env.cjs')();
 const root=path.resolve(__dirname,'../entry/src/main/ets'),directory=fs.mkdtempSync(path.join(os.tmpdir(),'clashos-backup-v2-'));
+const native=process.env.CLASHOS_NATIVE_TESTS;let networkRequest=0;
+function networkNative(operation,dir,value,expected='',profile=''){
+ if(!native)throw Error('Set CLASHOS_NATIVE_TESTS for native network-backup integration');
+ const file=path.join(directory,`network-request-${++networkRequest}.json`);
+ fs.writeFileSync(file,JSON.stringify({operation,directory:dir||'',value:value===undefined?'':JSON.stringify(value),expected,profile}),{mode:0o600});
+ try{const result=JSON.parse(require('node:child_process').execFileSync(native,['network-backup-request',file],{encoding:'utf8'}));if(result.error)throw Error(result.error);return result;}finally{fs.unlinkSync(file);}
+}
 const descriptors=new Map(),modules=new Map(),storage=new Map();
 let checks=0,maxWrite=Infinity,failGlobalScript=false,failAppearanceWrite=false,failResource=false,failTokens=false,failPublishOnce=false,failIconWrite=false,failIconRename=false,callback,appliedMode=-1,picked=[],lastBundle;
 const check=(value,label)=>{assert(value,label);checks++;};
@@ -13,6 +20,9 @@ const fileIo={OpenMode:{READ_ONLY:0,CREATE:64,READ_WRITE:2,TRUNC:512},accessSync
  writeSync:(fd,buffer)=>{const p=descriptors.get(fd);if(failGlobalScript&&p.endsWith('/.global-script.js.tmp')||failAppearanceWrite&&p.endsWith('/appearance.json.tmp')||failResource&&p.includes('.provider-')||failIconWrite&&p.includes('/group-icons/'))throw Error('injected file failure');return fs.writeSync(fd,Buffer.from(buffer).subarray(0,maxWrite));},
  fsyncSync:fd=>fs.fsyncSync(fd),renameSync:(a,b)=>{if(failIconRename&&b.endsWith('/group-icons.json'))throw Error('injected icon rename failure');fs.renameSync(a,b);},unlinkSync:p=>fs.unlinkSync(p)};
 class Validator{
+ networkBackupSnapshot(dir){return networkNative('snapshot',dir);}
+ validateNetworkBackup(text){return networkNative('validate','',JSON.parse(text));}
+ restoreNetworkBackup(dir,value,expected,profile){return networkNative('restore',dir,value,expected,profile);}
  protectFile(fd){fs.fchmodSync(fd,0o600);}
  validate(content){if(content.includes('INVALID_CONFIG'))throw Error('invalid config');}
  ruleEditor(content,rules,render,objects='',text=''){
@@ -172,6 +182,46 @@ const same=(a,b)=>a.merge===b.merge&&a.script===b.script;
  await assert.rejects(()=>coordinator.restore(styleText,expectedIcons()));checks++;failIconWrite=false;
  check(appearance.savedSettings().styles===undefined&&icons.revision()===iconsBeforeStyleFailure,'A later image failure rolls back newly introduced custom styles to the previous omitted/default state');
  const invalidStyle=JSON.parse(styleText);invalidStyle.appearance.styles.fontScale='1.15';assert.throws(()=>profiles.inspectBackup(JSON.stringify(invalidStyle)));checks++;
+ if(native){
+  const networkContext={...context,filesDir:path.join(directory,'network-integration')};fs.mkdirSync(networkContext.filesDir);
+  const networkProfiles=new ProfileStore(networkContext),networkAppearance=new AppearanceController(networkContext,fd=>protector.protectFile(fd));
+  try{
+   const emptyNetwork=networkProfiles.networkBackupSnapshot();
+   const networkSettings={version:1,ports:{http:18890,socks:18891,mixed:0},inbound:{'allow-lan':false,'bind-address':'127.0.0.1',authentication:['public-backup:PUBLIC-p@ss:colon'],'skip-auth-prefixes':['127.0.0.0/8'],'lan-allowed-ips':['127.0.0.0/8'],'lan-disallowed-ips':[]}};
+   networkProfiles.replaceBackupNetwork(networkSettings,emptyNetwork.revision);
+   const networkText=networkProfiles.createBackup({profileIds:[],includeGlobals:false,includeAppearance:false,includeNetwork:true});
+   const networkArchive=JSON.parse(networkText),summary=load('service/NetworkBackupTypes.ets').networkBackupSummary(networkArchive.network);
+   check(networkArchive.version===2&&networkArchive.profiles.length===0&&networkArchive.network.inbound.authentication[0]==='public-backup:PUBLIC-p@ss:colon','A settings-only production archive retains explicit private proxy authentication through the real native reader');
+   check(summary.includes('18890')&&summary.includes('1 个代理账号')&&!summary.includes('PUBLIC-p@ss')&&!summary.includes('public-backup'),'The preview summary excludes both proxy usernames and passwords');
+   const networkBackupStore=new BackupStore(networkContext,networkProfiles),storedNetwork=networkBackupStore.create({profileIds:[],includeGlobals:false,includeAppearance:false,includeNetwork:true});
+   check(JSON.parse(networkBackupStore.read(storedNetwork)).network.ports.http===18890,'The normal local backup store preserves a network-only archive');
+   check((fs.statSync(path.join(networkContext.filesDir,'backups',storedNetwork.name)).mode&0o777)===0o600,'Network-bearing archive files remain owner-only');
+   networkProfiles.replaceBackupNetwork(emptyNetwork.settings,networkProfiles.networkBackupSnapshot().revision);
+   const networkCoordinator=new BackupRestoreCoordinator(networkProfiles,networkAppearance);
+   const plan=()=>({profiles:[],globals:false,appearance:false,network:true,expectedNetwork:networkProfiles.networkBackupSnapshot().revision});
+   let migrated=await networkCoordinator.restore(networkText,plan());
+   check(migrated.network&&!migrated.networkApplied&&networkProfiles.networkBackupSnapshot().settings.ports.http===18890,'The production coordinator restores saved offline preferences without starting a proxy');
+   const kept=networkProfiles.networkBackupSnapshot();
+   const olderAppearance=JSON.parse(styleText);delete olderAppearance.groupIcons;
+   await networkCoordinator.restore(JSON.stringify(olderAppearance),{profiles:[],globals:false,appearance:true});
+   check(networkProfiles.networkBackupSnapshot().revision===kept.revision,'Older appearance-only archives leave network preferences intact');
+   const staleNetwork=plan();networkProfiles.replaceBackupNetwork(emptyNetwork.settings,kept.revision);
+   await assert.rejects(()=>networkCoordinator.restore(networkText,staleNetwork),/端口或共享设置已变化/);checks++;
+   check(networkProfiles.networkBackupSnapshot().revision===emptyNetwork.revision,'A stale network preview changes no files');
+   await assert.rejects(()=>networkCoordinator.restore(networkText,{...plan(),expectedNetwork:undefined}),/重新预览/);checks++;
+   const combined=JSON.parse(networkText);combined.appearance={mode:'dark',accent:'#8B5CF6'};
+   failAppearanceWrite=true;await assert.rejects(()=>networkCoordinator.restore(JSON.stringify(combined),{...plan(),appearance:true}));checks++;failAppearanceWrite=false;
+   check(networkProfiles.networkBackupSnapshot().revision===emptyNetwork.revision,'A failure after network commit restores both network files to their original absent state');
+   const newer={...networkSettings,ports:{http:18990,socks:18991,mixed:0}},withGlobals=JSON.parse(networkText);withGlobals.globals={merge:'# public global\n',script:''};
+   let runtimeCalls=0;const changingNetwork={validate:()=>{},reload:async()=>{if(runtimeCalls++===0)networkProfiles.replaceBackupNetwork(newer,networkProfiles.networkBackupSnapshot().revision);}};
+   await assert.rejects(()=>networkCoordinator.restore(JSON.stringify(withGlobals),{...plan(),globals:true},changingNetwork),/Network preferences changed/);checks++;
+   check(networkProfiles.networkBackupSnapshot().settings.ports.http===18990,'A newer concurrent network change survives a failed restoration');
+   networkProfiles.replaceBackupNetwork(emptyNetwork.settings,networkProfiles.networkBackupSnapshot().revision);
+   const badNetwork=JSON.parse(networkText);badNetwork.network.inbound.authentication=['PRIVATE-INVALID'];
+   assert.throws(()=>networkProfiles.inspectBackup(JSON.stringify(badNetwork)),error=>!error.message.includes('PRIVATE-INVALID'));checks++;
+   const legacyNetwork=JSON.parse(networkText);legacyNetwork.version=1;assert.throws(()=>networkProfiles.inspectBackup(JSON.stringify(legacyNetwork)));checks++;
+  }finally{failAppearanceWrite=false;networkAppearance.dispose();}
+ }
  check(descriptors.size===0,'All migration descriptors are released');
- console.log(`Backup migration scenarios passed: ${checks} (production services; native/OS APIs shimmed, real temporary filesystem)`);
+ console.log(`Backup migration scenarios passed: ${checks} (production services, real temporary filesystem${native?', actual native network preferences':' ; set CLASHOS_NATIVE_TESTS for native network preference integration'})`);
 }finally{appearance?.dispose();fs.rmSync(directory,{recursive:true,force:true});}})().catch(e=>{console.error(e);process.exitCode=1;});

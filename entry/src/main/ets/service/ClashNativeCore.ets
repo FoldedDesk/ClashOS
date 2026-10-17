@@ -7,12 +7,17 @@ import { NodeLinkImport } from './NodeLinkTypes';
 import { ScriptPreview } from './ConfigMergeTypes';
 import { ControllerAccessStore } from './ControllerAccessStore';
 import { ControllerAccessHost } from './ControllerAccessController';
+import { NetworkBackup, NetworkBackupSnapshot, NetworkBackupResult } from './NetworkBackupTypes';
+interface NetworkBackupValidation extends NetworkBackup { error?: string; }
 
 interface NativeCoreModule {
   startAsync(configPath: string, port: number): Promise<boolean>;
   stopAsync(): Promise<boolean>;
   info(): string;
   localSocksOptions(): string;
+  networkBackupSnapshot(directory: string): string;
+  validateNetworkBackup(content: string): string;
+  restoreNetworkBackup(directory: string, content: string, expected: string, profile: string): string;
   configureRuntimeDirectory(filesDir: string): boolean;
   setControllerSecret(secret: string): boolean;
   controllerSecret(): string;
@@ -36,6 +41,21 @@ export class ClashNativeCore implements CoreSessionHost, ControllerAccessHost {
   private controllerStore?: ControllerAccessStore;
   backupYaml(content: string): string { return this.module.backupYaml(content); }
   backupInflate(bytes: Uint8Array, expected: number): Uint8Array { return this.module.backupInflate(bytes, expected); }
+  networkBackupSnapshot(directory: string): NetworkBackupSnapshot {
+    const result = JSON.parse(this.module.networkBackupSnapshot(directory)) as NetworkBackupSnapshot;
+    if (result.error) throw new Error(result.error);
+    return result;
+  }
+  validateNetworkBackup(content: string): NetworkBackup {
+    const result = JSON.parse(this.module.validateNetworkBackup(content)) as NetworkBackupValidation;
+    if (result.error) throw new Error('备份中的端口或共享设置无效');
+    return result;
+  }
+  restoreNetworkBackup(directory: string, value: NetworkBackup, expected: string, profile: string): NetworkBackupResult {
+    const result = JSON.parse(this.module.restoreNetworkBackup(directory, JSON.stringify(value), expected, profile)) as NetworkBackupResult;
+    if (result.error) throw new Error(result.error);
+    return result;
+  }
 
   configureControllerStore(filesDir: string): void {
     if (!this.module.configureRuntimeDirectory(filesDir)) throw new Error('无法初始化内核临时配置目录');

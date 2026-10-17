@@ -1,6 +1,6 @@
 {
   "applicationName": "ClashOS",
-  "reviewedCoreVersion": "0.39",
+  "reviewedCoreVersion": "0.40",
   "objective": "实现 Clash Verge 的大部分功能，包括各类右键菜单，并提供可正常使用的 ClashOS。",
   "brandingDecision": "Follow the user's later explicit spelling correction: ClashOS.",
   "referenceInventory": [
@@ -342,12 +342,18 @@
         "Canonical bounded image decoding and dimensions, reference/path validation, stale snapshots and atomic last-step icon commit with complete profile/global/appearance rollback on failures",
         "Actual emulator appearance-only backup/restore and right-click ZIP export/picker import; independent PNG inspection and cold restart after deleting public sources verified",
         "Native typography/layout/palette style backup and stale-preview protection; old archives preserve absent styles and later restore failures roll back newly introduced styles",
-        "Actual style backup/reset/restore and exported JSON field inspection, with test archives removed and original backups preserved"
+        "Actual style backup/reset/restore and exported JSON field inspection, with test archives removed and original backups preserved",
+        "Optional application-managed port and LAN sharing backup, including proxy accounts/passwords, for network-only or combined JSON/ZIP/WebDAV archives; creation and restoration are both opt-in",
+        "Explicit null overrides restore profile-managed defaults; older archives preserve current network preferences, and previews expose only ports/sharing/account counts",
+        "Private NAPI-only network snapshot/validation/replacement; public controller status still omits passwords. Strict bounded schema, owned-directory and regular-file checks, private staging and hashed ownership guards",
+        "Live listener/authentication/access-policy changes and both persisted preference files commit together; occupied ports preserve existing listeners/files, and later migration failures restore the previous network preferences",
+        "62 native network assertions, 112 production migration checks with actual native preference-file operations, 48 independent Python ZIP checks and 1133 controller/API assertions pass; earlier profile-file tests remain passing",
+        "Core 0.40 simulator verifies native network-only backup creation, system-picker archive import with unchecked defaults, exact HTTP 407 without authentication and HTTP/SOCKS5 204 with restored credentials on new ports, occupied-port rollback, stale-preview rejection and right-click restoration of original profile-managed defaults",
+        "Original saved profile, full meaningful runtime, all 11 selections/candidate lists, original backup/profile file lists and window placement restored; test profile/archives/public files/app/extra forwards removed. System proxy settings and clipboard were not changed"
       ],
       "remaining": [
         "Actual Clash Verge desktop restoration and older archive variants",
-        "Cross-client file-provider cache/resource migration and advanced subscription options",
-        "Optional migration of application-managed inbound and port preferences"
+        "Cross-client file-provider cache/resource migration and advanced subscription options"
       ],
       "source": [
         "entry/src/main/ets/service/ProfileStore.ets",
@@ -359,7 +365,11 @@
         "entry/src/main/ets/service/BackupArchiveCodec.ets",
         "entry/src/main/cpp/backup_codec.inc",
         "entry/src/main/ets/service/GroupIconBackup.ets",
-        "entry/src/main/ets/service/GroupIconStore.ets"
+        "entry/src/main/ets/service/GroupIconStore.ets",
+        "entry/src/main/cpp/network_backup.inc",
+        "entry/src/main/ets/service/NetworkBackupTypes.ets",
+        "tests/network_backup_test.inc",
+        "tests/fixtures/backup/network-settings.json"
       ]
     },
     {
@@ -437,7 +447,7 @@
     {
       "feature": "Daily browser connectivity",
       "status": "verified_with_limits",
-      "latest": "Core 0.39 plus the system-network-check UI is installed. Final original-profile checks using the production dialog and actual OS system proxy return Google/Gstatic 204 and GitHub 200, with real core transfer increments. Independent device controls verify alternating 204/503 rows and summary, TLS EOF as an OS network error, cancellation, pending close, runtime staleness, disabled-system-proxy warnings and actual exclusion-list bypass with zero core traffic. Original profile, all 11 selections/candidate lists and system proxy are restored. Original window placement is restored and the owned fixture app/extra forwarding are removed.",
+      "latest": "Final Core 0.40 ARM64/x86_64 HAP installed. After cold startup and original network/profile restoration, the actual production system-proxy check returns Google/Gstatic 204 and GitHub 200; this bounded sample does not establish stability. Native network-backup controls verify real authenticated HTTP/SOCKS forwarding on restored ports, missing-auth rejection, bind-conflict rollback, stale previews and original-state recovery. Meaningful runtime, proxy ports/sharing policy, all 11 selections/candidate lists, original backup/profile file lists and exact window placement match the saved user state. Owned fixture app/public files/extra forwards are removed; existing external-route reliability and true-device TUN limitations remain.",
       "limit": "Intermittent early external closure remains unresolved. A full independent on-device Shadowsocks AES-GCM reference uses OS cryptography/sockets and the same OS HTTP/1.1 client, pinned to the same endpoint and credentials as the native control. Its 287 public Python/OpenSSL vector assertions pass. Across 12 attempts per site/client, native Google succeeds 10/12 and reference 9/12; Gstatic succeeds 12/12 in both, GitHub 12/12 native and 11/12 reference. Each reference failure closes before receiving any encrypted reply, with no decode/authentication error and no core transfer increments. Thus failure also occurs outside the production core; this does not identify a single cause or prove core correctness. A second existing endpoint completes all 16 Google checks but returns HTTP 403 for all 16 GitHub checks across the two clients, so it was not adopted as a default. These are bounded external samples, not evidence of long-term reliability or full browser compatibility. True-device TUN authorization/background survival and broader protocol interoperability remain unverified."
     },
     {
@@ -476,6 +486,6 @@
     "Advanced style assets, full Mihomo schema and downloaded-provider completion"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 19:21:09 UTC",
-  "verificationNotes": "Status summary only; full goal completion remains unproven. Core 0.39 passes HTTP, SS duplex, forward, VLESS, dialer, TLS, hosts, API and YAML host suites with independent peers, plus final simulator crypto diagnostics and all 12 TCP ingress cases. The earlier offline editor remains covered by 240 tests and 25 controller checks. Original user runtime, all 11 groups/selections and window placement are restored. External Google/GitHub TLS failures remain reproducible after the upload-loss fixes; final successful system-proxy samples do not prove stability. Full real-listener host DNS/inbound/sniffer suites remain unavailable because binds return EPERM and are not reported passing. Per-run evidence and HAPs stay outside Git. The production OS system-proxy check adds 44 service assertions and actual device GUI/network controls. A separate removable OS-crypto Shadowsocks reference passes 287 public-vector assertions and completes full HTTPS exchanges without using the production core; planned matched-endpoint and crossed-endpoint samples retain all failures and distinguish HTTP 403 from connection failures. Secrets and per-run data stay outside Git. Goal completion remains unproven."
+  "reviewedAt": "2026-10-17 19:46:29 UTC",
+  "verificationNotes": "Status summary only; full goal completion remains unproven. Core 0.39 passes HTTP, SS duplex, forward, VLESS, dialer, TLS, hosts, API and YAML host suites with independent peers, plus final simulator crypto diagnostics and all 12 TCP ingress cases. The earlier offline editor remains covered by 240 tests and 25 controller checks. Original user runtime, all 11 groups/selections and window placement are restored. External Google/GitHub TLS failures remain reproducible after the upload-loss fixes; final successful system-proxy samples do not prove stability. Full real-listener host DNS/inbound/sniffer suites remain unavailable because binds return EPERM and are not reported passing. Per-run evidence and HAPs stay outside Git. The production OS system-proxy check adds 44 service assertions and actual device GUI/network controls. A separate removable OS-crypto Shadowsocks reference passes 287 public-vector assertions and completes full HTTPS exchanges without using the production core; planned matched-endpoint and crossed-endpoint samples retain all failures and distinguish HTTP 403 from connection failures. Secrets and per-run data stay outside Git. Goal completion remains unproven. Core 0.40 adds optional private application-managed network settings migration: 62 native assertions, 112 migration scenarios with actual native persistence, 48 independent ZIP checks and 1133 API assertions, plus actual simulator authentication, bind-failure rollback, stale-preview and original-state restoration proof. Native network snapshots retain passwords only inside the explicitly chosen private archive path; public controller responses and preview summaries do not return them. True-device VPN and existing external-route reliability limitations remain unresolved. Completion remains unproven."
 }

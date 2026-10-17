@@ -748,6 +748,7 @@ struct Index {
         builder: BackupManagerDialog({ store: new BackupStore(context, this.profileStore), profiles: this.profileStore,
           readAppearance: () => this.appearanceController?.savedSettings(),
           readGroupIconRevision: () => this.groupIconStore?.revision(),
+          readNetworkRevision: () => this.profileStore?.networkBackupSnapshot().revision,
           onRestore: (text: string, selection: BackupRestoreSelection): Promise<BackupRestoreResult> => this.restoreBackup(text, selection) }),
         autoCancel: false, customStyle: true
       });
@@ -758,8 +759,9 @@ struct Index {
   private async restoreBackup(text: string, selection: BackupRestoreSelection): Promise<BackupRestoreResult> {
     if (!this.profileStore) throw new Error('配置目录不可用');
     if (this.updatingProfiles.length || this.tunBusy) throw new Error('配置正在更新，请稍后恢复');
-    if (selection.globals && this.tunEnabled) throw new Error('请先关闭虚拟网卡模式，再恢复全局扩展');
-    if (selection.globals && this.coreConnected && !this.internalCore) throw new Error('当前连接外部内核，请仅恢复配置或外观');
+    if ((selection.globals || selection.network) && this.tunEnabled) throw new Error('请先关闭虚拟网卡模式，再恢复全局扩展或网络设置');
+    if ((selection.globals || selection.network) && this.coreConnected && !this.internalCore) throw new Error('当前连接外部内核，请仅恢复配置或外观');
+    if (selection.network && this.temporaryConfig) throw new Error('请先选择已保存的配置，再恢复端口与共享设置');
     const store: ProfileStore = this.profileStore;
     const active: ClashProfile | undefined = this.profiles.find((p: ClashProfile) => p.id === this.activeProfileId);
     const mode: string = this.coreMode;
@@ -781,7 +783,8 @@ struct Index {
       if (result.count > 0) restored.push(`${result.count} 份配置副本`);
       if (result.globals) restored.push('全局扩展');
       if (result.appearance) restored.push('外观');
-      this.notice = `已恢复${restored.join('、')}，原活动配置保持不变`;
+      if (result.network) restored.push('端口与共享设置');
+      this.notice = `已恢复${restored.join('、')}，原活动配置保持不变${result.network ? '；请确认系统代理端口与当前监听端口一致' : ''}`;
       return result;
     } finally { this.updatingProfiles = []; this.mutationVersion++; this.reloadProfiles(); await this.refreshCore(); }
   }

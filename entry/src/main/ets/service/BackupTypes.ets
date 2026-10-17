@@ -1,20 +1,23 @@
 import { AppearanceSettings } from '../theme/AppearanceTypes';
 import { GroupIconBackup } from './GroupIconBackup';
+import { NetworkBackup } from './NetworkBackupTypes';
 
 export const BACKUP_LIMIT: number = 32 * 1024 * 1024;
 
 export interface BackupGlobals { merge: string; script: string; }
-export interface BackupCreateOptions { profileIds: string[]; includeGlobals: boolean; includeAppearance: boolean; }
+export interface BackupCreateOptions { profileIds: string[]; includeGlobals: boolean; includeAppearance: boolean; includeNetwork?: boolean; }
 export interface BackupRestoreSelection {
   profiles: number[];
   globals: boolean;
   appearance: boolean;
+  network?: boolean;
+  expectedNetwork?: string;
   expectedGlobals?: BackupGlobals;
   expectedAppearance?: AppearanceSettings;
   expectedGroupIcons?: string;
   expectedNames?: string;
 }
-export interface BackupRestoreResult { count: number; globals: boolean; appearance: boolean; reloaded: boolean; }
+export interface BackupRestoreResult { count: number; globals: boolean; appearance: boolean; reloaded: boolean; network?: boolean; networkApplied?: boolean; }
 
 export interface BackupResource {
   suffix: string;
@@ -45,6 +48,7 @@ export interface ProfileBackup {
   globals?: BackupGlobals;
   appearance?: AppearanceSettings;
   groupIcons?: GroupIconBackup;
+  network?: NetworkBackup;
 }
 
 export interface BackupPreviewRow {

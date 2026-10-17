@@ -1,0 +1,18 @@
+{
+  "format": "ClashOS.profile-backup",
+  "version": 2,
+  "createdAt": "2026-10-18T00:00:00.000Z",
+  "profiles": [],
+  "network": {
+    "version": 1,
+    "ports": { "http": 18890, "socks": 18891, "mixed": 0 },
+    "inbound": {
+      "allow-lan": false,
+      "bind-address": "127.0.0.1",
+      "authentication": ["network-fixture:PUBLIC-p@ss"],
+      "skip-auth-prefixes": [],
+      "lan-allowed-ips": ["127.0.0.0/8"],
+      "lan-disallowed-ips": []
+    }
+  }
+}

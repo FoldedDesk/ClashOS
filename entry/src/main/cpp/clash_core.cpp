@@ -1203,6 +1203,7 @@ std::string ruleEditorJson(const std::string& source, const std::string& setting
 #include "controller_config_store.inc"
 #include "inbound_settings.inc"
 #include "sniffer_control.inc"
+#include "network_backup.inc"
 
 void persistSelectionsLocked()
 {
@@ -1548,7 +1549,7 @@ std::string responseFor(const std::string& method, const std::string& path, cons
     if (path.substr(0, path.find('?')) == "/clashos/ports") return proxyPortsControlLocked(method, path, body);
     if (path.substr(0, path.find('?')) == "/clashos/inbound") return inboundControlLocked(method, path, body);
     if (method == "GET" && path == "/version") {
-        return "{\"version\":\"ClashOS Core 0.39 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
+        return "{\"version\":\"ClashOS Core 0.40 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
             "\",\"premium\":false,\"meta\":true,\"features\":[\"http-message-framing\",\"http-upgrade\",\"yaml-merge-keys\",\"dialer-proxy\",\"dialer-proxy-udp\",\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"vless\",\"trojan\",\"http-outbound\",\"socks5-outbound\",\"socks5-udp\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
     }
     if (method == "GET" && path == "/clahsos/diagnostics") return diagnosticsJson();
@@ -3084,6 +3085,28 @@ napi_value LocalSocksOptions(napi_env env, napi_callback_info)
     const auto text = localSocksOptions(); napi_value result;
     napi_create_string_utf8(env, text.data(), text.size(), &result); return result;
 }
+napi_value NetworkBackupSnapshot(napi_env env, napi_callback_info info)
+{
+    size_t argc = 1; napi_value argument = nullptr, result;
+    napi_get_cb_info(env, info, &argc, &argument, nullptr, nullptr);
+    const auto text = networkBackupSnapshot(napiText(env, argument));
+    napi_create_string_utf8(env, text.data(), text.size(), &result); return result;
+}
+napi_value ValidateNetworkBackup(napi_env env, napi_callback_info info)
+{
+    size_t argc = 1; napi_value argument = nullptr, result;
+    napi_get_cb_info(env, info, &argc, &argument, nullptr, nullptr);
+    const auto text = validateNetworkBackup(napiText(env, argument));
+    napi_create_string_utf8(env, text.data(), text.size(), &result); return result;
+}
+napi_value RestoreNetworkBackup(napi_env env, napi_callback_info info)
+{
+    size_t argc = 4; napi_value arguments[4]{}, result;
+    napi_get_cb_info(env, info, &argc, arguments, nullptr, nullptr);
+    const auto text = argc == 4 ? restoreNetworkBackup(napiText(env, arguments[0]), napiText(env, arguments[1]), napiText(env, arguments[2]), napiText(env, arguments[3])) :
+        "{\"error\":\"Invalid network restore request\"}";
+    napi_create_string_utf8(env, text.data(), text.size(), &result); return result;
+}
 napi_value ConfigureRuntimeDirectory(napi_env env, napi_callback_info info)
 {
     size_t argc = 1; napi_value argument = nullptr, result;
@@ -3240,6 +3263,9 @@ napi_value Init(napi_env env, napi_value exports)
         {"stopAsync", nullptr, StopAsync, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"info", nullptr, RuntimeInfo, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"localSocksOptions", nullptr, LocalSocksOptions, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"networkBackupSnapshot", nullptr, NetworkBackupSnapshot, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"validateNetworkBackup", nullptr, ValidateNetworkBackup, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"restoreNetworkBackup", nullptr, RestoreNetworkBackup, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"configureRuntimeDirectory", nullptr, ConfigureRuntimeDirectory, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"setControllerSecret", nullptr, SetControllerSecret, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"controllerSecret", nullptr, ControllerSecret, nullptr, nullptr, nullptr, napi_default, nullptr},

@@ -136,7 +136,7 @@ export class BackupArchiveCodec {
     add('config.yaml', '{}\n');
     add('verge.yaml', JSON.stringify({ theme_mode: archive.appearance?.mode ?? 'system' } as VergeAppearance));
     add('clashos-backup.json', JSON.stringify(archive));
-    add('ClashOS-README.txt', 'ClashOS backup: profiles.yaml and profiles/ follow Clash Verge Rev. Native caches, edits and appearance are preserved in clashos-backup.json for lossless ClashOS restoration. Desktop DNS override, ports, proxy and credentials are not migrated. File providers may need reimport on the destination.\n');
+    add('ClashOS-README.txt', 'ClashOS backup: profiles.yaml and profiles/ follow Clash Verge Rev. Native caches, edits, appearance and any explicitly selected ClashOS network preferences are preserved in clashos-backup.json for lossless ClashOS restoration. Network preferences may contain proxy account passwords; desktop-compatible members do not apply them. Desktop DNS overrides, system proxy, WebDAV accounts and controller keys are not migrated. File providers may need reimport on the destination.\n');
     return writeZip(files);
   }
 }

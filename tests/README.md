@@ -22,6 +22,24 @@ python3 tests/run_native_tests.py --build-dir .host-build/native --config /path/
 `CLAHSOS_REFERENCE_PYTHON` 可指定已安装 cryptography 的 Python。
 原生测试会绑定本机回环端口；限制 socket 绑定的沙箱无法完成这些检查。
 
+网络设置备份专项不需要主机监听权限：
+
+```sh
+python3 tests/run_native_tests.py --suite network-backup --build-dir .host-build/native
+CLASHOS_NATIVE_TESTS="$PWD/.host-build/native/native_tests" node tests/backup_migration_test.cjs
+CLASHOS_NATIVE_TESTS="$PWD/.host-build/native/native_tests" node tests/backup_archive_test.cjs
+```
+
+原生检查覆盖严格备份格式、端口/来源规则/认证、默认跟随语义、私有文件、目录与链接边界、
+过期预览及无监听时的状态提交。生产恢复协调器配合真实原生文件读写，检查网络设置独立迁移、
+凭据不出现在预览、后续外观失败时撤回网络文件，以及并发的新设置不能被旧预览覆盖。
+模拟器另行验证系统选择器导入、默认未勾选、实际 HTTP 407/认证后 204 与 SOCKS5 204，
+使用独立测试应用占用 18097 端口检查监听失败回滚，并验证过期预览和原网络/配置恢复。
+公开归档见 `fixtures/backup/network-settings.json`，账号 `network-fixture` / `PUBLIC-p@ss` 仅供回环测试。
+先保存原网络设置，再加载 `fixtures/probes/device.yaml` 与设备独立对端；导入归档并单独勾选网络恢复。
+将归档的 HTTP 端口改为独立对端占用的 18097 可验证冲突，结束后从原备份恢复网络设置、原配置和选择，
+删除测试配置/备份/公共文件、额外转发及测试应用。
+
 HTTP 入站消息、持续连接与升级专项使用独立 Python 标准库对端和 Unix socket：
 
 ```sh

@@ -37,6 +37,10 @@ const modules=new Map();function load(name){
  same(JSON.parse(codec.decode(codec.encode(cached))),cached,'Native ZIP roundtrip retains opaque cache bytes and metadata independently of Verge members');
  cached.groupIcons={version:1,entries:[{name:'public icon',source:'local:icon-AbC123/icon.png'}],assets:[{name:'icon-AbC123/icon.png',data:Buffer.from('public PNG bytes').toString('base64')}]};
  same(JSON.parse(codec.decode(codec.encode(cached))).groupIcons,cached.groupIcons,'ZIP sidecar preserves icon preferences and image resources without inventing desktop settings');
+ cached.network={version:1,ports:{http:18890,socks:18891,mixed:0},inbound:{'allow-lan':false,'bind-address':'127.0.0.1',authentication:['public-backup:PUBLIC-p@ss'],'skip-auth-prefixes':[],'lan-allowed-ips':['127.0.0.0/8'],'lan-disallowed-ips':[]}};
+ const networkZip=readZip(codec.encode(cached),inflater);
+ same(JSON.parse(codec.decode(codec.encode(cached))).network,cached.network,'The native ZIP sidecar preserves selected network overrides and proxy authentication losslessly');
+ check(!networkZip.filter(e=>e.name!=='clashos-backup.json').some(e=>new TextDecoder().decode(e.bytes).includes('PUBLIC-p@ss')),'Native network preferences are not silently applied through desktop-compatible ZIP members');
  const noSidecar=writeZip(entries.filter(e=>e.name!=='clashos-backup.json')),vergeRoundtrip=JSON.parse(codec.decode(noSidecar));
  same(vergeRoundtrip.profiles.map(x=>[x.name,x.content,x.script,x.sourceUrl,x.sequence]),first.profiles.map(x=>[x.name,x.content,x.script,x.sourceUrl,x.sequence]),'Verge-compatible members work without relying on the native sidecar');
  cp.execFileSync('python3',['-c',`import zipfile,json,sys

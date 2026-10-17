@@ -4,6 +4,9 @@ declare module 'libclash_core.so' {
     stopAsync(): Promise<boolean>;
     info(): string;
     localSocksOptions(): string;
+    networkBackupSnapshot(directory: string): string;
+    validateNetworkBackup(content: string): string;
+    restoreNetworkBackup(directory: string, content: string, expected: string, profile: string): string;
   configureRuntimeDirectory(filesDir: string): boolean;
     setControllerSecret(secret: string): boolean;
     controllerSecret(): string;
