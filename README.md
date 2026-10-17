@@ -4,7 +4,8 @@ HarmonyOS PC 代理客户端，使用 ArkUI 和 C++ 内置内核，采用顶部�
 
 支持配置文件及订阅导入、节点切换与测速、规则分流、连接与日志查看、备份恢复，
 也可连接兼容 Clash REST API 的外部内核。内置协议包括 Shadowsocks AEAD、VMess、VLESS、
-Trojan、HTTP 和 SOCKS5；支持代理/规则集合、地理数据库、DNS、YAML 扩展与 JavaScript 脚本。
+Trojan、HTTP/HTTPS 与 SOCKS5 出站，并提供 HTTP / SOCKS5 入站；
+支持代理/规则集合、地理数据库、DNS、YAML 扩展与 JavaScript 脚本。
 配置编辑器离线打包，提供语法高亮、查找替换、撤销重做与常用字段补全。
 
 编辑配置时点击“补全”，可按当前文档选择节点、代理组、代理集合、规则集合和规则目标。
@@ -19,6 +20,11 @@ VLESS 支持标准 TCP、TLS、WebSocket、WebSocket + TLS 和长度分帧 UDP�
 可从 `vless://` 链接、本地配置或订阅导入，并使用节点表单编辑、切换及测速。
 Reality、Vision、XUDP、额外 VLESS 加密、gRPC / XHTTP 等传输尚不支持；
 配置这些选项时会明确报错，不会自动改为直连。TLS 默认校验证书和服务器名称。
+
+HTTP/HTTPS 节点使用 CONNECT 隧道，支持 Basic 认证及自定义请求头；托管的 CONNECT 请求头不允许覆盖。
+SOCKS5 节点支持匿名或用户名密码认证，以及 TCP / UDP；控制连接关闭后停止对应 UDP 转发。
+两者均可配置 TLS；SOCKS5 的 TLS 只保护 TCP 控制连接，UDP 仍使用原生数据报。
+可在“节点链接”入口导入 `http://`、`https://`、`socks5://` 链接，或通过文件和订阅导入。
 
 ## 构建与运行
 
@@ -111,7 +117,7 @@ sniffer:
 
 ## hosts 映射
 
-配置中的 `hosts` 同时用于 DNS 查询、直连和 SS / VMess / VLESS / Trojan 的 TCP / UDP 目标。
+配置中的 `hosts` 同时用于 DNS 查询、直连及受支持代理协议的 TCP / UDP 目标。
 支持域名别名链、通配域名和多个 IPv4 / IPv6 地址，具体域名优先于较宽的匹配。
 例如以下测试地址需替换为实际服务地址：
 

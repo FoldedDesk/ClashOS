@@ -74,6 +74,8 @@ export default class EntryAbility extends UIAbility {
 
   private handle(client: socket.TCPSocketConnection, method: string, path: string, headers: Record<string, string>, body: string): void {
     if (path === '/test-admin/vless/start' && method === 'POST') { this.vless.start(this.context); this.respond(client, 200, '{}'); return; }
+    if (path === '/test-admin/forward/start' && method === 'POST') { this.vless.start(this.context); this.respond(client, 200, '{}'); return; }
+    if (path === '/test-admin/forward/probe' && method === 'POST') { probeVlessUdp('forward.device.test').then((result: string) => this.respond(client, 200, result)).catch(() => this.respond(client, 500, '{}')); return; }
     if (path === '/test-admin/vless/state') { this.respond(client, 200, this.vless.status()); return; }
     if (path === '/test-admin/vless/probe' && method === 'POST') { probeVlessUdp().then((result: string) => this.respond(client, 200, result)).catch(() => this.respond(client, 500, '{}')); return; }
     if (path === '/test-admin/clipboard' && method === 'POST') {

@@ -25,7 +25,7 @@ The same removable app optionally runs an independent VLESS v0 protocol fixture.
 It is inactive until `POST /test-admin/vless/start`. Plain TCP / WebSocket listen
 on `127.0.0.1:18097`; TLS / WebSocket + TLS listen on `127.0.0.1:18098`.
 `GET /test-admin/vless/state` reports readiness, validated requests and UDP counts.
-Only the fixed public UUID in `../fixtures/vless/device-links.txt` is accepted.
+VLESS mode accepts only the fixed public UUID in `../fixtures/vless/device-links.txt`.
 The server never forwards to arbitrary destinations: `vless.device.test:80`
 returns HTTP 204 for `GET /verify`, and `vless.device.test:443` echoes UDP bytes.
 
@@ -46,3 +46,26 @@ certificate/key in `../fixtures/vmess`, never production credentials.
 These controls prove emulator proxy forwarding, not true-device VPN authorization
 or full interoperability with every VLESS extension. Host-side OpenSSL tests
 separately verify accepted CA chains, SNI, malformed frames and HTTPS destinations.
+
+## HTTP / SOCKS device verification
+
+`POST /test-admin/forward/start` starts the same optional plain/TLS fixture ports.
+`GET /test-admin/vless/state` also reports the `forward` protocol counters.
+The independent ArkTS decoder additionally accepts HTTP CONNECT and SOCKS5.
+It supports anonymous access or the public `fixture` / `p@ss:word` credentials;
+provided wrong credentials are rejected. Only `forward.device.test:80` with
+`GET /verify` and `forward.device.test:443` UDP echoes are permitted.
+
+Import `../fixtures/forward/device-links.txt` through the node-link dialog. For
+all six authenticated/anonymous/TLS nodes, test HTTP and SOCKS ingress and latency
+against `http://forward.device.test/verify`. HTTP nodes must report UDP disabled.
+For SOCKS nodes, `POST /test-admin/forward/probe` verifies an actual on-device UDP
+association, including empty, 8-byte, 4096-byte and maximum-envelope payloads.
+The fixture binds a separate loopback UDP relay for each control connection and
+closes it with the control channel. TLS protects that control channel only.
+
+Check wrong credentials and required test-certificate validation fail. In the
+node form, change a username, apply, restart, and verify the change affects
+authentication; then correct the credentials and verify TCP/UDP after restart.
+Restore the original profile, mode, groups and window, remove the owned test
+profile and forwards, clear only the fixture clipboard and uninstall this app.

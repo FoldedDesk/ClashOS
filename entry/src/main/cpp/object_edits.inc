@@ -123,7 +123,7 @@ bool editorObjectValid(const ObjectEditItem& item, bool group, std::string& erro
     }
     ProxyNode node;
     if (!parseProxyNode(data.document, root, node, error)) return false;
-    if (type != "ss" && type != "vmess" && type != "trojan" && type != "vless" && type != "direct" && type != "reject") {
+    if (type != "ss" && type != "vmess" && type != "trojan" && type != "vless" && type != "http" && type != "socks5" && type != "direct" && type != "reject") {
         error = "This proxy protocol is not implemented by the built-in core"; return false;
     }
     if (type != "direct" && type != "reject") {

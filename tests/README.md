@@ -48,6 +48,21 @@ TCP / TLS / WebSocket / WebSocket + TLS、双向分片、服务器先发数据�
 验证实际数据面；TLS 参考证书属于公开测试 CA，设备正向控制显式跳过该测试证书校验，
 关闭跳过选项的负向控制必须失败。主机专项另验证受信任 CA 和主机名。
 
+HTTP/HTTPS 与 SOCKS5 出站专项：
+
+```sh
+python3 tests/run_native_tests.py --suite forward --build-dir .host-build/native
+python3 tests/run_native_tests.py --suite providers --build-dir .host-build/native
+```
+
+独立 Python/OpenSSL 参考端通过继承的 Unix socket 验证认证协商、IPv4 / IPv6 / 域名、
+CONNECT 临时响应及任意 2xx、握手同包负载、半关闭、实际 HTTP/SOCKS 入站与 HTTPS 测速。
+UDP 检查匿名/认证/TLS 控制连接、服务器指定的中继地址、通配地址回退、真实回复来源、
+空包/大包/最大包、无效分片丢弃、控制连接关闭及关闭后的回复屏蔽。
+文件集合仅更新用户名或自定义请求头时，必须替换实际路由节点，并以新值完成独立对端握手；
+随后检查缓存重载及 API 凭据隐藏。集合专项另覆盖下载、校验、缓存、更新失败及恢复。
+设备测试入口见 [HTTP/SOCKS 设备验证](webdav_device_server/README.md#http--socks-device-verification)。
+
 ArkTS 服务测试通过 TypeScript 转译执行，不需要运行 ArkUI。
 可使用 DevEco Studio 随附的 TypeScript，或安装经过验证的标准版本：
 

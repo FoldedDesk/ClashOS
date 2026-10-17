@@ -16,6 +16,18 @@ function fixture(source,language='yaml') {
   return {result,labels:result?.options.map(x=>x.label)||[],apply(label){const option=result?.options.find(x=>x.label===label);assert(option,'Missing '+label);option.apply(view);return state.doc.toString();},undo(){assert(undo(view));return serializeDocument(state.doc,baseline,text);},text};
 }
 const nodes='proxies:\n  - {name: Public, type: ss}\n  - {name: "🇯🇵 日本 #1", type: trojan}\n';
+for(const protocol of ['http','socks5'])for(const language of ['yaml','json']) {
+  test('Forward proxy network completion follows native TCP support: '+protocol+' '+language,()=>{
+    const source=language==='yaml'?`proxies: [{name: Public, type: ${protocol}, network: ¦}]`:`{"proxies":[{"name":"Public","type":"${protocol}","network":¦}]}`;
+    const f=fixture(source,language);assert.deepEqual(f.labels,['tcp']);const text=f.apply('tcp');
+    if(language==='json')assert.equal(JSON.parse(text).proxies[0].network,'tcp');else assert(text.includes('network: tcp'));
+    assert.equal(f.undo(),f.text);
+  });
+  test('Forward proxy completion never suggests unused SS/VMess ciphers: '+protocol+' '+language,()=>{
+    const source=language==='yaml'?`proxies: [{type: ${protocol}, cipher: ¦}]`:`{"proxies":[{"type":"${protocol}","cipher":¦}]}`;
+    assert.deepEqual(fixture(source,language).labels,[]);
+  });
+}
 for(const tail of ['[¦]','[Pu¦]','["Pu¦blic"]','\n      - ¦','\n      - Pu¦'])test('YAML member references in block/flow/quoted drafts: '+tail,()=>{
   const f=fixture(nodes+'proxy-groups:\n  - name: Main\n    proxies: '+tail+'\n');assert(f.labels.includes('Public'));assert(!f.labels.includes('Main'));
   const text=f.apply('Public');assert(text.includes('"Public"'));assert.equal(f.undo(),f.text);

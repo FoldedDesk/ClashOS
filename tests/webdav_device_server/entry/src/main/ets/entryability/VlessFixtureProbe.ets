@@ -2,7 +2,7 @@ import { socket } from '@kit.NetworkKit';
 import { util } from '@kit.ArkTS';
 
 // Independent SOCKS5 UDP client in an INTERNET-authorized test app. No user data.
-export async function probeVlessUdp(): Promise<string> {
+export async function probeVlessUdp(hostname: string = 'vless.device.test'): Promise<string> {
   const control = socket.constructTCPSocketInstance(), udp = socket.constructUDPSocketInstance();
   let input = new Uint8Array(0); const replies: Uint8Array[] = [];
   let failure: string = ''; const deadline: number = Date.now() + 12000;
@@ -19,7 +19,7 @@ export async function probeVlessUdp(): Promise<string> {
     while (input.length < 12 && !failure && Date.now() < deadline) await pause();
     if (failure || input.length < 12 || input[0] !== 5 || input[1] !== 0 || input[2] !== 5 || input[3] !== 0 || input[5] !== 1) throw new Error(failure || 'socks-associate');
     const port: number = input[10] * 256 + input[11];
-    const host = new util.TextEncoder().encodeInto('vless.device.test');
+    const host = new util.TextEncoder().encodeInto(hostname);
     const header = new Uint8Array(7 + host.length); header.set([0,0,0,3,host.length]); header.set(host, 5); header[header.length - 2] = 1; header[header.length - 1] = 187;
     const lengths: number[] = [0, 8, 4096, 65507 - header.length];
     for (const length of lengths) {

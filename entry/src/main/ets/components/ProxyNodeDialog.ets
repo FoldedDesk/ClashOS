@@ -6,10 +6,10 @@ interface WsHeadersPatch { Host: string | null; }
 interface WsNodePatch { path: string; headers: WsHeadersPatch; }
 interface NodeFormPatch {
   name: string; type: string; udp: boolean;
-  server?: string; port?: number; password?: string; uuid?: string; cipher?: string; alterId?: number;
+  server?: string; port?: number; username?: string; password?: string; uuid?: string; cipher?: string; alterId?: number;
   tls?: boolean; 'skip-cert-verify'?: boolean; servername?: string | null; sni?: string | null; network?: string; 'ws-opts'?: WsNodePatch;
 }
-const NODE_TYPES: string[] = ['ss', 'vmess', 'vless', 'trojan', 'direct', 'reject'];
+const NODE_TYPES: string[] = ['ss', 'vmess', 'vless', 'trojan', 'http', 'socks5', 'direct', 'reject'];
 const SS_CIPHERS: string[] = ['aes-128-gcm', 'aes-256-gcm', 'chacha20-ietf-poly1305', 'chacha20-poly1305', 'aead_aes_128_gcm', 'aead_aes_256_gcm', 'aead_chacha20_poly1305'];
 const VMESS_CIPHERS: string[] = ['auto', 'aes-128-gcm', 'chacha20-poly1305', 'none', 'zero'];
 export const NEW_NODE_CONTENT: string = '{"name":"","type":"ss","server":"","port":443,"cipher":"aes-128-gcm","password":"","udp":true}';
@@ -53,17 +53,18 @@ export struct ProxyNodeDialog {
     return Number(text);
   }
   private patch(): string {
-    const transport: boolean = this.form.type === 'vmess' || this.form.type === 'vless' || this.form.type === 'trojan';
-    const patch: NodeFormPatch = { name: this.lockName ? this.identity : this.form.name.trim(), type: this.form.type, udp: this.form.udp,
+    const transport: boolean = this.form.type === 'vmess' || this.form.type === 'vless' || this.form.type === 'trojan' || this.form.type === 'http' || this.form.type === 'socks5';
+    const patch: NodeFormPatch = { name: this.lockName ? this.identity : this.form.name.trim(), type: this.form.type, udp: this.form.type !== 'http' && this.form.udp,
       'skip-cert-verify': transport ? this.form.skipCertVerify : undefined,
       'ws-opts': transport && this.form.network === 'ws' ? { path: this.form.wsPath || '/', headers: { Host: this.form.wsHost.trim() || null } } : undefined };
     if (this.form.type !== 'direct' && this.form.type !== 'reject') {
       patch.server = this.form.server.trim(); patch.port = this.integer(this.form.port, 65535, 1);
-      if (this.form.type === 'ss' || this.form.type === 'trojan') patch.password = this.form.password;
+      if (this.form.type === 'http' || this.form.type === 'socks5') patch.username = this.form.username;
+      if (this.form.type === 'ss' || this.form.type === 'trojan' || this.form.type === 'http' || this.form.type === 'socks5') patch.password = this.form.password;
       if (this.form.type === 'ss' || this.form.type === 'vmess') patch.cipher = this.form.cipher;
       if (this.form.type === 'vmess' || this.form.type === 'vless') patch.uuid = this.form.uuid.trim();
       if (this.form.type === 'vmess') { patch.alterId = this.integer(this.form.alterId || '0', 65535); }
-      if (this.form.type === 'vmess' || this.form.type === 'vless' || this.form.type === 'trojan') {
+      if (transport) {
         patch.tls = this.form.type === 'trojan' || this.form.tls;
         patch.servername = this.form.type !== 'trojan' ? this.form.serverName.trim() : null;
         patch.sni = this.form.type === 'trojan' ? this.form.serverName.trim() : null; patch.network = this.form.network;
@@ -82,10 +83,10 @@ export struct ProxyNodeDialog {
   }
   private protocol(index: number): void {
     const type: string = NODE_TYPES[index]; if (type === this.form.type) return;
-    const discarded: boolean = this.identity.length > 0 || this.form.password.length > 0 || this.form.uuid.length > 0;
+    const discarded: boolean = this.identity.length > 0 || this.form.username.length > 0 || this.form.password.length > 0 || this.form.uuid.length > 0;
     const next = defaultProxyNodeForm();
     next.name = this.form.name; next.type = type; next.server = this.form.server; next.port = this.form.port || '443';
-    next.cipher = type === 'vmess' ? 'auto' : 'aes-128-gcm'; next.tls = type === 'trojan'; this.form = next;
+    next.cipher = type === 'vmess' ? 'auto' : 'aes-128-gcm'; next.tls = type === 'trojan'; next.udp = type !== 'http'; this.form = next;
     this.base = '{}'; this.changedProtocol = this.changedProtocol || discarded;
   }
   private save(): void {
@@ -131,7 +132,11 @@ export struct ProxyNodeDialog {
                 GridCol() { Column() { this.label('端口'); TextInput({ text: this.form.port, placeholder: '1 至 65535' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).type(InputType.Number)
                   .backgroundColor(this.theme.field).onChange((value: string) => this.form.port = value); }.width('100%'); }
               }.width('100%');
-              if (this.form.type === 'ss' || this.form.type === 'trojan') {
+              if (this.form.type === 'http' || this.form.type === 'socks5') {
+                Column() { this.label('用户名（不认证时留空）'); TextInput({ text: this.form.username, placeholder: '代理用户名' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily)
+                  .backgroundColor(this.theme.field).onChange((value: string) => this.form.username = value); }.width('100%');
+              }
+              if (this.form.type === 'ss' || this.form.type === 'trojan' || this.form.type === 'http' || this.form.type === 'socks5') {
                 Column() { this.label('密码'); TextInput({ text: this.form.password, placeholder: '节点密码' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).type(InputType.Password).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily)
                   .backgroundColor(this.theme.field).onChange((value: string) => this.form.password = value); }.width('100%');
               }
@@ -148,10 +153,12 @@ export struct ProxyNodeDialog {
                 Column() { this.label('alterId（0 为 AEAD）'); TextInput({ text: this.form.alterId }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).type(InputType.Number).backgroundColor(this.theme.field)
                   .onChange((value: string) => this.form.alterId = value); }.width('100%');
               }
-              if (this.form.type === 'vmess' || this.form.type === 'vless' || this.form.type === 'trojan') {
-                Column() { this.label('传输方式'); Select([{ value: 'tcp' }, { value: 'ws' }]).value(this.form.network).selected(this.form.network === 'ws' ? 1 : 0)
-                  .height(38).width('100%').font({ size: this.theme.font(13), family: this.theme.fontFamily }).onSelect((index: number) => this.form.network = index === 1 ? 'ws' : 'tcp'); }.width('100%');
-                if (this.form.type === 'vmess' || this.form.type === 'vless') {
+              if (this.form.type === 'vmess' || this.form.type === 'vless' || this.form.type === 'trojan' || this.form.type === 'http' || this.form.type === 'socks5') {
+                if (this.form.type !== 'http' && this.form.type !== 'socks5') {
+                  Column() { this.label('传输方式'); Select([{ value: 'tcp' }, { value: 'ws' }]).value(this.form.network).selected(this.form.network === 'ws' ? 1 : 0)
+                    .height(38).width('100%').font({ size: this.theme.font(13), family: this.theme.fontFamily }).onSelect((index: number) => this.form.network = index === 1 ? 'ws' : 'tcp'); }.width('100%');
+                }
+                if (this.form.type !== 'trojan') {
                   Row() { Text('TLS').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.tls }).selectedColor(this.theme.primary)
                     .onChange((value: boolean) => this.form.tls = value); }.width('100%');
                 }
@@ -170,7 +177,9 @@ export struct ProxyNodeDialog {
               }
             }
             if (this.form.type === 'vless') Text('支持标准 VLESS TCP / TLS / WebSocket 和 UDP；Reality、Vision、XUDP 及额外加密尚不支持。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
-            if (this.form.type !== 'reject') Row() {
+            if (this.form.type === 'http') Text('HTTP / HTTPS 出站使用 CONNECT 隧道，仅支持 TCP。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
+            if (this.form.type === 'socks5') Text('UDP 需要服务器支持 UDP ASSOCIATE；TLS 保护 TCP 控制连接，UDP 使用原生 SOCKS5 数据报。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
+            if (this.form.type !== 'reject' && this.form.type !== 'http') Row() {
               Text('UDP').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.udp }).selectedColor(this.theme.primary)
                 .onChange((value: boolean) => this.form.udp = value);
             }.width('100%');

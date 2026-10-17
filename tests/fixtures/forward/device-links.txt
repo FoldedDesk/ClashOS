@@ -1,0 +1,6 @@
+http://fixture:p%40ss%3Aword@127.0.0.1:18097#Forward-HTTP
+https://fixture:p%40ss%3Aword@127.0.0.1:18098?sni=vmess.test&allowInsecure=1#Forward-HTTPS
+socks5://fixture:p%40ss%3Aword@127.0.0.1:18097?udp=1#Forward-SOCKS5
+socks5://fixture:p%40ss%3Aword@127.0.0.1:18098?tls=1&sni=vmess.test&allowInsecure=1&udp=1#Forward-SOCKS5-TLS
+http://127.0.0.1:18097#Forward-HTTP-anonymous
+socks5://127.0.0.1:18097#Forward-SOCKS5-anonymous

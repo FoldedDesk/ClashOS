@@ -1,6 +1,6 @@
 {
   "applicationName": "ClashOS",
-  "reviewedCoreVersion": "0.32",
+  "reviewedCoreVersion": "0.33",
   "objective": "实现 Clash Verge 的大部分功能，包括各类右键菜单，并提供可正常使用的 ClashOS。",
   "brandingDecision": "Follow the user's later explicit spelling correction: ClashOS.",
   "referenceInventory": [
@@ -59,12 +59,19 @@
         "VLESS configuration/provider parsing, share-link and Base64 list import, visual node forms, protocol-aware editor completion, API capabilities and device protocol diagnostics",
         "Unsupported VLESS Reality/Vision/XUDP/encryption/transports and malformed security flags fail explicitly, before dialing when applicable; no silent DIRECT fallback",
         "Independent Python/OpenSSL VLESS peers exercise real HTTP/SOCKS ingress, hosts-mapped destinations, UDP empty/maximum/coalesced/truncated packets and independently verified HTTPS probes",
-        "Final Core 0.32 simulator HAP verifies all four VLESS transports through HTTP/SOCKS and actual SOCKS5 UDP (0/8/4096/65483 bytes); node latency, UUID/certificate/Vision negative controls, UI selection and persisted visual edits verified"
+        "Final Core 0.32 simulator HAP verifies all four VLESS transports through HTTP/SOCKS and actual SOCKS5 UDP (0/8/4096/65483 bytes); node latency, UUID/certificate/Vision negative controls, UI selection and persisted visual edits verified",
+        "HTTP/HTTPS CONNECT outbounds with Basic/custom-header authentication, bounded informational/2xx parsing, coalesced payload preservation and verified TLS; SOCKS5 anonymous/RFC1929 TCP and optional TLS outbounds",
+        "Standard SOCKS5 UDP relay with independently retained TCP/TLS control lifetime, returned relay/domain/IPv6/wildcard handling, original reply sources, empty/maximum packets, invalid-fragment dropping and closure cleanup",
+        "HTTP/SOCKS node forms, username/password/TLS settings, URI and configuration import, native draft validation, protocol-aware completion, actual capabilities and hosts-mapped destinations",
+        "Provider username/header-only updates rebuild live routes and revisions; independent wire checks verify new credentials/custom headers, cache-only restart and redacted provider APIs",
+        "Simulator verifies six authenticated/anonymous/TLS nodes through HTTP/SOCKS ingress, latency and actual SOCKS UDP; wrong-auth/CA controls, UI selection, credential edits and cold-start rejection/recovery verified",
+        "Final Core 0.33 HAP repeats six-node forwarding through an inline provider; original profile, full meaningful runtime and 11 selections restored with verified Google HTTPS 204"
       ],
       "remaining": [
         "Protocol and option breadth is below Mihomo, including VLESS Reality/Vision/XUDP/extra encryption, other advanced transports and additional outbound protocols",
         "No bundled Mihomo/Alpha core download/switch workflow",
-        "REST compatibility remains partial: redir/TProxy and broader TUN/general configuration fields"
+        "REST compatibility remains partial: redir/TProxy and broader TUN/general configuration fields",
+        "Chained outbounds via dialer-proxy remain unsupported"
       ],
       "source": [
         "entry/src/main/cpp/clash_core.cpp",
@@ -91,7 +98,14 @@
         "tests/vless_core_test.inc",
         "tests/vless_reference_peer.py",
         "tests/webdav_device_server/entry/src/main/ets/entryability/VlessFixtureServer.ets",
-        "tests/webdav_device_server/entry/src/main/cpp/tls_bridge.cpp"
+        "tests/webdav_device_server/entry/src/main/cpp/tls_bridge.cpp",
+        "entry/src/main/cpp/forward_proxy_options.inc",
+        "entry/src/main/cpp/forward_proxy_protocol.inc",
+        "entry/src/main/cpp/udp_proxy.inc",
+        "entry/src/main/cpp/provider_runtime.inc",
+        "tests/forward_proxy_test.inc",
+        "tests/forward_reference_peer.py",
+        "tests/webdav_device_server/entry/src/main/ets/entryability/ForwardFixtureConnection.ets"
       ]
     },
     {
@@ -271,8 +285,8 @@
     {
       "feature": "Daily browser connectivity",
       "status": "verified_with_limits",
-      "latest": "Core 0.32 installed. The final HAP passes independent on-emulator VLESS TCP/TLS/WS/WSS HTTP and SOCKS 204 controls and actual SOCKS5 UDP echo across empty/small/large/maximum packets. Saved VLESS profile/selection reload on cold start and visual override persists. Original saved profile, rule mode, all 11 group selections and full meaningful runtime settings restored; owned fixture profile/app/clipboard/forwards removed and window restored. Explicit Google HTTPS through the restored device proxy returns 204 / CONNECT 200 / TLS verification 0.",
-      "limit": "VLESS device proof uses a fixed independent ArkTS responder with a native TLS bridge; TLS-positive device fixtures explicitly skip the public test CA, and required-verification negative controls fail. Host-side independent OpenSSL peers separately prove CA/hostname acceptance and rejection plus verified HTTPS destinations. Reality/Vision/XUDP/extra encryption remain unsupported. Ordinary api.github.com domain connections had intermittent TLS failures in earlier controls; cause is still unproven. Full native suite requires loopback binding unavailable in this host sandbox. True-device TUN authorization/background survival remains unproven."
+      "latest": "Core 0.33 final HAP installed. Six HTTP/HTTPS/SOCKS5 authenticated/anonymous/TLS nodes through an inline provider return HTTP 204 via both local HTTP/SOCKS ingress. Actual SOCKS5 UDP echoes 0/8/4096/65481-byte payloads over plain/TLS control connections. UI node selection and username editing change authentication, survive cold restart and recover after correction. Original saved profile, all 11 group selections, full meaningful runtime and original window restored; owned fixture profile/app/clipboard/forwards removed. Explicit restored Google HTTPS returns 204 / CONNECT 200 / TLS verification 0.",
+      "limit": "Device positive fixtures return fixed HTTP/UDP data on loopback and explicitly skip the public test CA; required-verification controls fail. Independent host OpenSSL peers separately verify valid CA/hostname and HTTPS destination checks. SOCKS5 TLS protects its control channel, not native UDP datagrams. Advanced VLESS and other outbound protocols/chain options remain incomplete. Earlier intermittent api.github.com TLS failures remain unexplained. Full native suite requires host loopback binding unavailable here. True-device TUN authorization/background survival remains unproven."
     },
     {
       "feature": "Domain sniffing",
@@ -310,6 +324,6 @@
     "Advanced style assets and full Mihomo schema/alias/downloaded-provider completion"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 12:06:25 UTC",
+  "reviewedAt": "2026-10-17 12:49:42 UTC",
   "verificationNotes": "Status summary only. Historical device screenshots and per-run records are archived outside the source repository. Reproduce host checks with tests/README.md; device and true VPN validation remain separate."
 }

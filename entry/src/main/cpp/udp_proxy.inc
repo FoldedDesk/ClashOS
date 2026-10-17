@@ -270,6 +270,8 @@ struct UdpFlow {
     std::unique_ptr<VmessSession> vmess;
     std::unique_ptr<TrojanSession> trojan;
     std::unique_ptr<VlessSession> vless;
+    std::unique_ptr<ForwardProxySession> socksControl;
+    int socksControlFd = -1;
     std::thread streamThread;
     int notifyMain = -1, notifyWorker = -1;
     std::mutex streamMutex;
@@ -283,7 +285,48 @@ struct UdpFlow {
     bool streamPending() {
         std::lock_guard<std::mutex> lock(streamMutex); return !streamOutput.empty() || streamStopped.load();
     }
-    bool streamed() const { return vmess != nullptr || trojan != nullptr || vless != nullptr; }
+    bool streamed() const { return vmess != nullptr || trojan != nullptr || vless != nullptr || socksControl != nullptr; }
+    void runSocksStream() {
+        while (g_state.running.load() && !streamStopping.load() && !udpConnectionCancelled(fd)) {
+            bool queued; { std::lock_guard<std::mutex> lock(streamMutex); queued = !streamInput.empty(); }
+            pollfd watches[3] = {{fd, POLLIN, 0}, {notifyWorker, POLLIN, 0}, {socksControlFd, POLLIN, 0}};
+            const bool pending = socksControl->pending();
+            const int ready = poll(watches, 3, queued || pending ? 0 : 1000);
+            if (ready < 0) { if (errno == EINTR) continue; streamError.store(errno); break; }
+            // RFC 1928: the TCP/TLS control channel owns the UDP association.
+            // Observe its closure before sending queued datagrams or exposing replies.
+            if (pending || watches[2].revents) {
+                VmBytes unexpected;
+                const bool data = socksControl->read(unexpected, true);
+                if (data || (errno != EAGAIN && errno != EWOULDBLOCK)) { streamError.store(data ? EPROTO : errno); break; }
+            }
+            if (streamStopping.load() || udpConnectionCancelled(fd)) break;
+            if (watches[1].revents) { unsigned char drain[128]; while (recv(notifyWorker, drain, sizeof(drain), 0) > 0) {} }
+            bool ok = true;
+            for (int burst = 0; burst < 16; ++burst) {
+                VmBytes payload;
+                { std::lock_guard<std::mutex> lock(streamMutex); if (streamInput.empty()) break; payload = std::move(streamInput.front()); streamInput.pop_front(); }
+                VmBytes packet(3, 0); vmAppend(packet, shadowsocksAddress(host, port)); vmAppend(packet, payload);
+                ssize_t sent;
+                do { sent = send(fd, packet.data(), packet.size(), UDP_SEND_FLAGS); } while (sent < 0 && errno == EINTR);
+                if (sent < 0 || static_cast<size_t>(sent) != packet.size()) { streamError.store(errno); ok = false; break; }
+                recordTransfer(fd, true, payload.size());
+            }
+            if (!ok) break;
+            if (watches[0].revents) {
+                VmBytes packet(65536); iovec buffer{packet.data(), packet.size()}; msghdr message{}; message.msg_iov = &buffer; message.msg_iovlen = 1;
+                const auto count = recvmsg(fd, &message, 0);
+                if (count < 0) { if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) continue; streamError.store(errno); break; }
+                if ((message.msg_flags & MSG_TRUNC) || static_cast<size_t>(count) > UDP_MAX_PACKET) continue;
+                packet.resize(static_cast<size_t>(count)); UdpTarget source;
+                if (!parseSocksUdp(packet, source)) continue; // Unsupported fragments and malformed replies are dropped.
+                packet.erase(packet.begin(), packet.begin() + 3);
+                { std::lock_guard<std::mutex> lock(streamMutex); if (streamOutput.size() >= 64) streamOutput.pop_front(); streamOutput.push_back(std::move(packet)); }
+                notify(notifyWorker);
+            }
+        }
+        streamStopped.store(true); notify(notifyWorker);
+    }
     void runStream() {
         bool ok = true;
         while (ok && g_state.running.load() && !streamStopping.load()) {
@@ -319,7 +362,7 @@ struct UdpFlow {
         int pair[2]; if (socketpair(AF_UNIX, SOCK_STREAM, 0, pair) != 0) return false;
         notifyMain=pair[0];notifyWorker=pair[1];
         for (int socket : pair) fcntl(socket, F_SETFL, fcntl(socket, F_GETFL, 0) | O_NONBLOCK);
-        try { streamThread=std::thread([this]() { runStream(); }); } catch (...) { return false; }
+        try { streamThread=std::thread([this]() { if (socksControl) runSocksStream(); else runStream(); }); } catch (...) { return false; }
         return true;
     }
     ~UdpFlow() {
@@ -327,6 +370,7 @@ struct UdpFlow {
         if (streamThread.joinable()) { shutdown(fd, SHUT_RDWR); notify(notifyMain); streamThread.join(); }
         if (notifyMain >= 0) close(notifyMain);
         if (notifyWorker >= 0) close(notifyWorker);
+        if (socksControlFd >= 0) closeSocket(socksControlFd);
         if (fd >= 0) closeSocket(fd);
     }
 };
@@ -353,7 +397,14 @@ std::unique_ptr<UdpFlow> openUdpFlow(int owner, const UdpTarget& target, const P
         flow->master = evpBytesToKey(node.password,keySize);
         if (keySize==0||flow->master.size()!=keySize) return nullptr;
     }
-    if (node.type == "vmess" || node.type == "trojan" || node.type == "vless") {
+    if (node.type == "socks5") {
+        flow->socksControlFd = connectUpstream(node.server, node.port, 6000, DnsPurpose::Proxy);
+        if (flow->socksControlFd < 0) return nullptr;
+        socketTimeout(flow->socksControlFd, 6000);
+        flow->socksControl = std::make_unique<ForwardProxySession>(flow->socksControlFd);
+        if (!flow->socksControl->start(node, "0.0.0.0", 0, true, error)) { coreLog("warning", "SOCKS5 UDP startup failed: " + error); return nullptr; }
+        flow->fd = connectUdpOutbound(flow->socksControl->boundHost, flow->socksControl->boundPort, flow->remote, DnsPurpose::Proxy);
+    } else if (node.type == "vmess" || node.type == "trojan" || node.type == "vless") {
         flow->fd = connectUpstream(node.server, node.port, 6000,DnsPurpose::Proxy);
         if (flow->fd < 0) return nullptr;
         socketTimeout(flow->fd, 6000);
@@ -390,7 +441,8 @@ bool writeUdpFlow(UdpFlow& flow, const std::vector<unsigned char>& packet, const
     if (packet.size() < payloadOffset) return false;
     std::vector<unsigned char> wire(packet.begin() + payloadOffset, packet.end());
     if (flow.streamed()) {
-        if ((flow.vmess && (wire.empty() || wire.size() > 1966)) || wire.size() > 65535 || flow.streamStopped.load()) return false;
+        if ((flow.vmess && (wire.empty() || wire.size() > 1966)) || wire.size() > 65535 ||
+            (flow.socksControl && wire.size() + 3 + shadowsocksAddress(flow.host, flow.port).size() > UDP_MAX_PACKET) || flow.streamStopped.load()) return false;
         { std::lock_guard<std::mutex> lock(flow.streamMutex); if (flow.streamInput.size() >= 64) return false; flow.streamInput.push_back(std::move(wire)); }
         UdpFlow::notify(flow.notifyMain); flow.lastActivity = UdpClock::now(); return true;
     }
@@ -419,7 +471,7 @@ bool readUdpFlow(UdpFlow& flow, std::vector<unsigned char>& reply, size_t& paylo
           }
           packet=std::move(flow.streamOutput.front());flow.streamOutput.pop_front(); }
         reply.assign(3,0);
-        if (flow.trojan) {
+        if (flow.trojan || flow.socksControl) {
             UdpTarget source;
             if (!parseUdpAddress(packet, 0, source)) { errno = EPROTO; return false; }
             payloadSize = packet.size() - source.headerSize;
@@ -534,6 +586,7 @@ void handleUdpAssociate(int client, const std::string& requestedHost, int reques
         std::string destination,error;
         if(!proxyDestination(node,udpDestinationHost(target),destination,error)){warn("UDP hosts mapping failed: "+error);return;}
         if (node.type == "ss" && packet.size() - 3 - target.headerSize + shadowsocksAddress(destination, target.port).size() > UDP_MAX_PACKET - shadowsocksKeySize(shadowsocksCipher(node.cipher)) - 16) return;
+        if (node.type == "socks5" && packet.size() - target.headerSize + shadowsocksAddress(destination, target.port).size() > UDP_MAX_PACKET) return;
         if (node.type == "vmess" && (packet.size() == 3 + target.headerSize || packet.size() - 3 - target.headerSize > 1966)) {
             warn("VMess UDP payload must be between 1 and 1966 bytes"); return;
         }

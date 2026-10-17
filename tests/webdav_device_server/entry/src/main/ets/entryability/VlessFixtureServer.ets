@@ -3,9 +3,10 @@ import { util } from '@kit.ArkTS';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { common } from '@kit.AbilityKit';
 import tlsBridge from 'libvlessfixture.so';
+import { ForwardFixtureConnection } from './ForwardFixtureConnection';
 
 interface FixtureTransport { send: (bytes: Uint8Array) => Promise<void>; close: () => Promise<void>; }
-interface FixtureState { wire: Uint8Array; data: Uint8Array; websocket: boolean; header: boolean; udp: boolean; responded: boolean; closing: boolean; queue: Promise<void>; }
+interface FixtureState { wire: Uint8Array; data: Uint8Array; websocket: boolean; header: boolean; udp: boolean; responded: boolean; closing: boolean; queue: Promise<void>; forward?: ForwardFixtureConnection; }
 
 // Independent, loopback-only VLESS server. It never dials a network destination:
 // vless.device.test:80 receives fixed HTTP 204; :443 UDP receives byte echoes.
@@ -22,6 +23,7 @@ export class VlessFixtureServer {
   private rejected: number = 0;
   private ready: string[] = [];
   private failures: string[] = [];
+  private forward: Record<string, number> = {};
 
   start(context: common.UIAbilityContext): void {
     if (this.active) return;
@@ -39,14 +41,14 @@ export class VlessFixtureServer {
     const transport: FixtureTransport = { send: (bytes: Uint8Array): Promise<void> => client.send({ data: bytes.buffer as ArrayBuffer }), close: (): Promise<void> => client.close() };
     const state = this.state(transport);
     client.on('message', (message: socket.SocketMessageInfo): void => this.receive(transport, state, new Uint8Array(message.message), tls));
-    client.on('close', (): void => this.remove(transport));
+    client.on('close', (): void => { state.forward?.stop(); this.remove(transport); });
   }
   stop(): void {
     if (!this.active) return;
     this.active = false; this.clients.forEach((client: FixtureTransport) => client.close().catch(() => {})); this.clients = [];
     tlsBridge.stop(); this.tcp.close().catch(() => {}); this.decrypted.close().catch(() => {});
   }
-  status(): string { return JSON.stringify({ ready: this.ready, failures: this.failures, requests: this.requests, packets: this.packets, rejected: this.rejected }); }
+  status(): string { return JSON.stringify({ ready: this.ready, failures: this.failures, requests: this.requests, packets: this.packets, rejected: this.rejected, forward: this.forward }); }
   private state(client: FixtureTransport): FixtureState {
     this.clients.push(client);
     return { wire: new Uint8Array(0), data: new Uint8Array(0), websocket: false, header: false, udp: false, responded: false, closing: false, queue: Promise.resolve() };
@@ -59,6 +61,12 @@ export class VlessFixtureServer {
       if (state.closing) return;
       if (state.wire.length + state.data.length + bytes.length > 192 * 1024) { this.reject(client, state); return; }
       state.wire = this.join(state.wire, bytes);
+      if (state.forward || (!state.header && !state.websocket && (state.wire[0] === 5 || state.wire[0] === 67))) {
+        if (!state.forward) state.forward = new ForwardFixtureConnection(client.send, client.close, (name: string): void => {
+          const key = name + (tls ? '-tls' : '-tcp'); this.forward[key] = (this.forward[key] || 0) + 1;
+        });
+        await state.forward.receive(state.wire); state.wire = new Uint8Array(0); return;
+      }
       if (!state.header && !state.websocket && state.wire[0] === 71) {
         const request = this.decoder.decodeToString(state.wire); const end: number = request.indexOf('\r\n\r\n');
         if (end < 0) { if (state.wire.length > 16384) this.reject(client, state); return; }

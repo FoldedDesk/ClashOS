@@ -8,6 +8,7 @@ from cryptography.hazmat.primitives import hashes
 from vmess_reference_peer import Wire, decode_header, Mask, kdf
 from trojan_reference_peer import read_header, address as socks_address
 from vless_reference_peer import read_header as read_vless_header
+from forward_reference_peer import read_forward_header
 
 class Tunnel:
     def __init__(self, wire, kind, alter, fault):
@@ -35,8 +36,10 @@ class Tunnel:
             read_header(wire,target_host,password='probe-password')
         elif kind.startswith('vless'):
             read_vless_header(wire,target_host)
+        elif kind.startswith('forward-'):
+            assert read_forward_header(wire,kind.split('-')[1],target_host)
     def receive(self):
-        if self.kind=='direct' or self.kind.startswith(('trojan', 'vless')):
+        if self.kind=='direct' or self.kind.startswith(('trojan', 'vless', 'forward-')):
             if self.wire.buffer:
                 data,self.wire.buffer=self.wire.buffer,b''
                 return data
@@ -61,7 +64,7 @@ class Tunnel:
         if self.kind.startswith('vless'):
             if not self.response_header:self.wire.send(b'\0\0');self.response_header=True
             self.wire.send(data);return
-        if self.kind=='direct' or self.kind.startswith('trojan'):self.wire.send(data);return
+        if self.kind=='direct' or self.kind.startswith(('trojan', 'forward-')):self.wire.send(data);return
         if self.kind.startswith('ss'):
             if not self.response_header:self.wire.send(self.salt);self.response_header=True
             for i in range(0,len(data),1500):

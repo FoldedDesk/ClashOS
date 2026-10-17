@@ -7,8 +7,8 @@ bool sameProviderNodes(const std::vector<ProxyNode>& first,const std::vector<Pro
     if(first.size()!=second.size())return false;
     for(size_t i=0;i<first.size();++i) {
         const auto& a=first[i];const auto& b=second[i];
-        if(std::tie(a.name,a.type,a.server,a.port,a.cipher,a.password,a.uuid,a.alterId,a.tls,a.udp,a.udpConfigured,a.network,a.wsPath,a.wsHeaders,a.serverName,a.skipCertVerify,a.alpn,a.transportError)!=
-           std::tie(b.name,b.type,b.server,b.port,b.cipher,b.password,b.uuid,b.alterId,b.tls,b.udp,b.udpConfigured,b.network,b.wsPath,b.wsHeaders,b.serverName,b.skipCertVerify,b.alpn,b.transportError))return false;
+        if(std::tie(a.name,a.type,a.server,a.port,a.cipher,a.password,a.username,a.httpHeaders,a.uuid,a.alterId,a.tls,a.udp,a.udpConfigured,a.network,a.wsPath,a.wsHeaders,a.serverName,a.skipCertVerify,a.alpn,a.transportError)!=
+           std::tie(b.name,b.type,b.server,b.port,b.cipher,b.password,b.username,b.httpHeaders,b.uuid,b.alterId,b.tls,b.udp,b.udpConfigured,b.network,b.wsPath,b.wsHeaders,b.serverName,b.skipCertVerify,b.alpn,b.transportError))return false;
     }
     return true;
 }

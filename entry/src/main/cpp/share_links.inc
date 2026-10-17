@@ -158,6 +158,38 @@ bool shareTrojan(std::string body, ShareLinkNode& node, std::string& error)
     return true;
 }
 
+bool shareForward(std::string body, const std::string& scheme, ShareLinkNode& node, std::string& error)
+{
+    node.type = scheme == "http" || scheme == "https" ? "http" : "socks5";
+    const size_t query = body.find('?'); std::map<std::string, std::string> params;
+    if (query != std::string::npos) {
+        if (!shareParams(body.substr(query + 1), {"sni", "peer", "allowInsecure", "insecure", "tls", "udp", "alpn"}, params)) { error = "代理链接含有重复或尚不支持的参数"; return false; }
+        body.resize(query);
+    }
+    const size_t at = body.rfind('@'); std::string username, password;
+    if (at != std::string::npos) {
+        const std::string auth = body.substr(0, at); const size_t colon = auth.find(':');
+        if (!sharePercent(auth.substr(0, colon), username) || (colon != std::string::npos && !sharePercent(auth.substr(colon + 1), password))) { error = "代理账号或密码的转义无效"; return false; }
+        body.erase(0, at + 1);
+    }
+    if (!body.empty() && body.back() == '/') body.pop_back();
+    if (body.find(':') == std::string::npos || (!body.empty() && body.front() == '[' && body.back() == ']')) body += scheme == "http" ? ":80" : scheme == "https" ? ":443" : ":1080";
+    if (!shareEndpoint(body, node)) { error = "代理服务器、端口或路径无效"; return false; }
+    bool tls = scheme == "https", insecure = false, udp = node.type == "socks5";
+    if (params.count("tls") && (!shareBoolean(params["tls"], tls) || (scheme == "https" && !tls))) { error = "代理 TLS 选项无效或与 HTTPS 协议冲突"; return false; }
+    if (!shareBoolean(params.count("allowInsecure") ? params["allowInsecure"] : params["insecure"], insecure) ||
+        (params.count("udp") && !shareBoolean(params["udp"], udp)) || (node.type == "http" && udp)) { error = "代理证书或 UDP 选项无效；HTTP 出站仅支持 TCP"; return false; }
+    if ((!params["sni"].empty() && !params["peer"].empty() && params["sni"] != params["peer"]) ||
+        (params.count("insecure") && params.count("allowInsecure") && params["insecure"] != params["allowInsecure"])) { error = "代理链接参数互相冲突"; return false; }
+    node.fields["username"] = shareQuoted(username); node.fields["password"] = shareQuoted(password);
+    node.fields["tls"] = tls ? "true" : "false"; node.fields["skip-cert-verify"] = insecure ? "true" : "false"; node.fields["udp"] = udp ? "true" : "false";
+    node.fields["servername"] = shareQuoted(params["sni"].empty() ? params["peer"] : params["sni"]);
+    std::string alpn;
+    if (!shareAlpn(params["alpn"], node.type == "http" ? "ws" : "tcp", alpn)) { error = "代理 ALPN 无效；HTTP CONNECT 需要 http/1.1"; return false; }
+    if (!alpn.empty()) node.fields["alpn"] = alpn;
+    return true;
+}
+
 bool shareVless(std::string body, ShareLinkNode& node, std::string& error)
 {
     node.type = "vless";
@@ -266,7 +298,8 @@ std::string shareLinksJson(std::string text, const std::string& occupiedJson = "
             else if (protocol == "trojan") ok = shareTrojan(body, node, error);
             else if (protocol == "vmess") ok = shareVmess(body, node, error);
             else if (protocol == "vless") ok = shareVless(body, node, error);
-            else { error = "内置内核支持导入 SS、VMess、VLESS 和 Trojan 链接；此协议尚不支持"; ok = false; }
+            else if (protocol == "http" || protocol == "https" || protocol == "socks5" || protocol == "socks5h" || protocol == "socks") ok = shareForward(body, protocol, node, error);
+            else { error = "内置内核支持导入 SS、VMess、VLESS、Trojan、HTTP 和 SOCKS5 链接；此协议尚不支持"; ok = false; }
         }
         if (!ok) return fail("第 " + std::to_string(number) + " 行：" + (error.empty() ? "链接格式或百分号转义无效" : error));
         if (!fragment.empty()) node.name = fragment;
@@ -274,7 +307,8 @@ std::string shareLinksJson(std::string text, const std::string& occupiedJson = "
         if (!editorName(node.name) || node.name.size() > 900) return fail("第 " + std::to_string(number) + " 行：节点名称无效或过长");
         const std::string base = node.name; size_t suffix = 2;
         while (names.count(node.name)) node.name = base + " (" + std::to_string(suffix++) + ")";
-        names.insert(node.name); node.fields["name"] = shareQuoted(node.name); node.fields["type"] = shareQuoted(node.type); node.fields["server"] = shareQuoted(node.server); node.fields["port"] = std::to_string(node.port); node.fields["udp"] = "true";
+        names.insert(node.name); node.fields["name"] = shareQuoted(node.name); node.fields["type"] = shareQuoted(node.type); node.fields["server"] = shareQuoted(node.server); node.fields["port"] = std::to_string(node.port);
+        if (!node.fields.count("udp")) node.fields["udp"] = "true";
         std::string content = "{";
         for (const auto& field : node.fields) { if (content.size() > 1) content += ','; content += shareQuoted(field.first) + ':' + field.second; } content += '}';
         if (!editorObjectValid({node.name, content}, false, error)) return fail("第 " + std::to_string(number) + " 行：节点参数无效或内核不支持：" + error);
