@@ -1,6 +1,6 @@
 {
   "applicationName": "ClashOS",
-  "reviewedCoreVersion": "0.42",
+  "reviewedCoreVersion": "0.43",
   "objective": "实现 Clash Verge 的大部分功能，包括各类右键菜单，并提供可正常使用的 ClashOS。",
   "brandingDecision": "Follow the user's later explicit spelling correction: ClashOS.",
   "referenceInventory": [
@@ -87,7 +87,13 @@
         "Canceled client records cannot be resurrected by queued requests; a failed protocol/TLS upload-EOF notification preserves the authenticated receive path instead of discarding a fully queued reply",
         "Independent TLS peer queues its valid response and exits before client FIN is relayed: unchanged old receive loop deterministically drops the reply, corrected loop returns it; no certificate or record authentication checks are relaxed",
         "Core 0.39 stops failed uploads while preserving the independent receive direction, including initial HTTP CONNECT/SOCKS optimistic prefixes and upgraded HTTP tunnels; incoming SS/VMess/VLESS/TLS authentication remains mandatory and failed uploads are never replayed",
-        "Independent Python/OpenSSL/AEAD peers cover 18 outbound/transport combinations, 50 KB multi-record replies, already-closed upload directions and corrupted response controls across 51 deterministic cases; the pre-fix core loses its queued SS reply after a late write fails"
+        "Independent Python/OpenSSL/AEAD peers cover 18 outbound/transport combinations, 50 KB multi-record replies, already-closed upload directions and corrupted response controls across 51 deterministic cases; the pre-fix core loses its queued SS reply after a late write fails",
+        "Core 0.43 implements SIP022 Shadowsocks 2022 AES-128-GCM, AES-256-GCM and ChaCha20-Poly1305 TCP/UDP, plus SIP023 AES identity chains of up to eight identity keys and one user key; strict Base64/cipher-size validation runs before dialing",
+        "Independent incremental TCP framing authenticates timestamps, request-salt binding and records across partial reads/EAGAIN; UDP authenticates session/packet identity and bounded replay windows before committing receive state, with nonce exhaustion rejection",
+        "5250 independent Rust-BLAKE3/PyCryptodome assertions cover all three ciphers, zero/one/two AES identities, real HTTP/SOCKS ingress, verified HTTPS, partial/empty/maximum payloads, duplex/half-close, replay/reordering and malformed inputs; 4772 legacy Shadowsocks assertions also pass",
+        "Linux CI runs the production core and SHA256-pinned official Mihomo v1.19.32 as separate real TCP/UDP processes: 26 assertions cover all three ciphers through HTTP/SOCKS, certificate-verified HTTPS, hostname/CA rejection and uncached proxy-routed DNS",
+        "Installed ARM64/x86_64 HAP verifies six cipher/identity variants against an independent HarmonyOS CryptoFramework/socket peer: actual UI selection, HTTP/SOCKS, verified TLS and uncached UDP; invalid-key editing, valid-size wrong-key rejection without DIRECT fallback, corrected-key recovery and cold persistence pass",
+        "Visible native self-test includes Shadowsocks 2022 and passes; original configuration/rules/providers, all 11 group choices, ports and exact window placement restored, owned fixture app/public files/extra forwards removed"
       ],
       "remaining": [
         "Protocol and option breadth is below Mihomo, including VLESS Reality/Vision/XUDP/extra encryption, other advanced transports and additional outbound protocols",
@@ -147,7 +153,17 @@
         "entry/src/main/cpp/http_ingress.inc",
         "tests/http_ingress_test.inc",
         "tests/http_ingress_reference_peer.py",
-        "tests/relay_response_reference_peer.py"
+        "tests/relay_response_reference_peer.py",
+        "entry/src/main/cpp/ss2022_keys.inc",
+        "entry/src/main/cpp/ss2022_protocol.inc",
+        "entry/src/main/cpp/third_party/blake3/UPSTREAM.json",
+        "tests/ss2022_core_test.inc",
+        "tests/ss2022_reference_peer.py",
+        "tests/ss2022_network_test.py",
+        "tests/fixtures/ss2022/device-os-client.yaml",
+        "tests/webdav_device_server/entry/src/main/ets/entryability/OsSs2022Crypto.ets",
+        "tests/webdav_device_server/entry/src/main/ets/entryability/OsSs2022Server.ets",
+        ".github/workflows/native-compatibility.yml"
       ]
     },
     {
@@ -489,7 +505,7 @@
     {
       "feature": "Daily browser connectivity",
       "status": "verified_with_limits",
-      "latest": "Final Core 0.40 ARM64/x86_64 HAP installed. After cold startup and original network/profile restoration, the actual production system-proxy check returns Google/Gstatic 204 and GitHub 200; this bounded sample does not establish stability. Native network-backup controls verify real authenticated HTTP/SOCKS forwarding on restored ports, missing-auth rejection, bind-conflict rollback, stale previews and original-state recovery. Meaningful runtime, proxy ports/sharing policy, all 11 selections/candidate lists, original backup/profile file lists and exact window placement match the saved user state. Owned fixture app/public files/extra forwards are removed; existing external-route reliability and true-device TUN limitations remain.",
+      "latest": "Final Core 0.43 ARM64/x86_64 HAP installed. Six Shadowsocks 2022 cipher/identity variants pass actual UI selection, HTTP/SOCKS, certificate-verified TLS and uncached UDP against an independent OS-crypto peer. Invalid/wrong-key and certificate controls, visual edits and cold persistence pass. After original profile restoration, Google HTTPS through the emulator core returns 204 with successful certificate verification. Configuration/rules/providers and all 11 group choices match the private pre-test snapshot, original ports and exact window placement are restored, and the owned fixture app/public files/extra forwards are removed. This bounded sample does not establish long-term route reliability or true-device TUN behavior.",
       "limit": "Intermittent early external closure remains unresolved. A full independent on-device Shadowsocks AES-GCM reference uses OS cryptography/sockets and the same OS HTTP/1.1 client, pinned to the same endpoint and credentials as the native control. Its 287 public Python/OpenSSL vector assertions pass. Across 12 attempts per site/client, native Google succeeds 10/12 and reference 9/12; Gstatic succeeds 12/12 in both, GitHub 12/12 native and 11/12 reference. Each reference failure closes before receiving any encrypted reply, with no decode/authentication error and no core transfer increments. Thus failure also occurs outside the production core; this does not identify a single cause or prove core correctness. A second existing endpoint completes all 16 Google checks but returns HTTP 403 for all 16 GitHub checks across the two clients, so it was not adopted as a default. These are bounded external samples, not evidence of long-term reliability or full browser compatibility. True-device TUN authorization/background survival and broader protocol interoperability remain unverified."
     },
     {
@@ -523,12 +539,12 @@
   ],
   "nextWork": [
     "Improve actual route reliability; a full independent OS crypto/socket HTTPS reference also reproduces early closure, so investigate shared endpoint/network behavior without assuming a production-codec cause",
-    "Implement documented install-config URL schemes in the launch path and review/import UI",
+    "Broaden native protocol/options interoperability beyond the verified Shadowsocks 2022 and existing protocol matrix",
     "Broader routing and ingress configuration, including redir/TProxy",
     "Supported-device TUN proof and broader archive interoperability",
     "Advanced style assets and full Mihomo schema"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 21:19:23 UTC",
-  "verificationNotes": "Status summary only; full goal completion remains unproven. Core 0.39 passes HTTP, SS duplex, forward, VLESS, dialer, TLS, hosts, API and YAML host suites with independent peers, plus final simulator crypto diagnostics and all 12 TCP ingress cases. The earlier offline editor remains covered by 240 tests and 25 controller checks. Original user runtime, all 11 groups/selections and window placement are restored. External Google/GitHub TLS failures remain reproducible after the upload-loss fixes; final successful system-proxy samples do not prove stability. Full real-listener host DNS/inbound/sniffer suites remain unavailable because binds return EPERM and are not reported passing. Per-run evidence and HAPs stay outside Git. The production OS system-proxy check adds 44 service assertions and actual device GUI/network controls. A separate removable OS-crypto Shadowsocks reference passes 287 public-vector assertions and completes full HTTPS exchanges without using the production core; planned matched-endpoint and crossed-endpoint samples retain all failures and distinguish HTTP 403 from connection failures. Secrets and per-run data stay outside Git. Goal completion remains unproven. Core 0.40 adds optional private application-managed network settings migration: 62 native assertions, 112 migration scenarios with actual native persistence, 48 independent ZIP checks and 1133 API assertions, plus actual simulator authentication, bind-failure rollback, stale-preview and original-state restoration proof. Native network snapshots retain passwords only inside the explicitly chosen private archive path; public controller responses and preview summaries do not return them. True-device VPN and existing external-route reliability limitations remain unresolved. Completion remains unproven. Core 0.41 adds source-bound downloaded-provider references and cache-aware editing/copy/backup/loading, verified by independent serialized caches, actual CodeMirror/native/store integration and the simulator including HTTP/SOCKS forwarding, negative source changes, cold startup, context-menu copies and portable restore. The configs host suite stops at unavailable loopback DNS binding and is not reported passing; related API, rule/object edits, extensions/scripts, YAML, backup and editor suites pass. Full-goal completion remains unproven. Core 0.42 adds per-subscription request settings, response metadata and guarded active-update rollback. Production integration covers 91 subscription scenarios and 70 native network/private-ingress assertions. Actual simulator controls verify direct-versus-authenticated-internal routing with SOCKS disabled, custom UA, quota/name/expiry, server/manual intervals, homepage launch, negative downloads, occupied-port recovery, cold startup and public-only backup/restore/update. Original configuration, rules/providers, all 11 group selections, file lists and window are restored; owned test artifacts are removed. URL-scheme import is confirmed absent in the current launch handlers and remains explicit pending work. Full-goal completion remains unproven."
+  "reviewedAt": "2026-10-17 22:38:27 UTC",
+  "verificationNotes": "Full-goal completion remains unproven; partial categories retain their outstanding requirements. Core 0.43 adds Shadowsocks 2022 TCP/UDP and SIP023 AES identity chains with 5250 independent host assertions, 4772 legacy Shadowsocks assertions, 137 share-link assertions, 58 object-edit assertions and 1133 controller/API assertions. The native network-backup suite passes 70 assertions and the offline editor retains 257 passing checks. Separate-process official Mihomo v1.19.32 interoperability passes all 26 real-listener assertions in Linux CI (commit fa7dbf31bb9ee84f876e8abe27649af116c79d00; https://github.com/FoldedDesk/ClashOS/actions/runs/39075420517), including uncached UDP and certificate negative controls. The installed emulator HAP independently verifies six cipher/identity variants, wrong-key no-fallback, visual editing, cold persistence and visible crypto diagnostics. Both architectures and all seven unmodified BLAKE3 upstream file checksums, notices and generated editor bundle are inspected. Original meaningful runtime, all 11 group selections and exact window placement are restored, with owned test artifacts removed. Install-config URL schemes were implemented and device-verified in commit 071c8b7; they are no longer pending. Public fixtures and reusable source are versioned; private receipts, personal configurations, credentials, downloaded executables, build caches and HAPs stay outside Git. Existing intermittent external closure, broader protocol/options support, desktop archive interoperability and true-device VPN/background lifetime remain unresolved. Earlier host DNS/ingress/sniffer listener restrictions are not reclassified as passing by the SS2022 CI evidence."
 }
