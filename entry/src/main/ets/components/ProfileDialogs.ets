@@ -8,6 +8,7 @@ export struct ProfileEditorDialog {
   title: string = '编辑配置';
   initialName: string = '';
   initialContent: string = '';
+  providerReferences: ((query: string) => Promise<string>) | undefined = undefined;
   onSave: (name: string, content: string) => Promise<void> = async (_name: string, _content: string): Promise<void> => {};
   onValidate: (name: string, content: string) => void = (_name: string, _content: string): void => {};
   @State name: string = '';
@@ -57,6 +58,7 @@ export struct ProfileEditorDialog {
       TextInput({ text: this.name, placeholder: '配置名称' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).height(40)
         .backgroundColor(this.theme.field).borderRadius(this.theme.radius(5)).enabled(!this.saving).onChange((value: string) => this.name = value);
       ConfigCodeEditor({ editor: this.editor, initialContent: this.initialContent, disabled: this.saving,
+        providerReferences: this.providerReferences,
         onReady: (ready: boolean): void => { this.editorReady = ready; },
         onChange: (revision: number): void => { if (this.editor.changedSinceRead(revision)) { this.validation = ''; this.error = ''; } } });
       if (this.error.length > 0) {

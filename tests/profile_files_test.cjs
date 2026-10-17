@@ -107,8 +107,8 @@ const Store=moduleObject.exports.ProfileStore,store=new Store({filesDir:director
     assert.throws(()=>store.save(original,'Public draft','overwrite',text),/已被更新/);checks++;
     requireCheck(fs.readFileSync(original.path,'utf8')===updatedDraft,'A stale editor cannot overwrite a newer source file');fs.writeFileSync(original.path,text);
     requireCheck((fs.statSync(original.path).mode&0o777)===0o600,'Profile files must be private before being committed');
-    const cacheSuffix='.provider-dummy.cache';const cache=original.path+cacheSuffix;const cacheText='# source fixture\nproxies: [{name: private-fixture, type: direct}]\n';fs.writeFileSync(cache,cacheText,{mode:0o600});
-    const ruleSuffix='.rule-provider-dummy.cache',ruleCache=original.path+ruleSuffix;fs.writeFileSync(ruleCache,binary,{mode:0o600});
+    const cacheSuffix='.provider-0123456789abcdef.cache';const cache=original.path+cacheSuffix;const cacheText='# source fixture\nproxies: [{name: private-fixture, type: direct}]\n';fs.writeFileSync(cache,cacheText,{mode:0o600});
+    const ruleSuffix='.rule-provider-fedcba9876543210.cache',ruleCache=original.path+ruleSuffix;fs.writeFileSync(ruleCache,binary,{mode:0o600});
     const duplicate=store.duplicate(original);
     requireCheck(fs.readFileSync(duplicate.path+cacheSuffix,'utf8')===cacheText,'Duplicating a profile must preserve offline provider resources');
     requireCheck((fs.statSync(duplicate.path+cacheSuffix).mode&0o777)===0o600,'Duplicated provider caches must retain private permissions');

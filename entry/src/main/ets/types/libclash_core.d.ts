@@ -4,6 +4,7 @@ declare module 'libclash_core.so' {
     stopAsync(): Promise<boolean>;
     info(): string;
     localSocksOptions(): string;
+    editorProviderReferences(profile: string, source: string, query: string): Promise<string>;
     networkBackupSnapshot(directory: string): string;
     validateNetworkBackup(content: string): string;
     restoreNetworkBackup(directory: string, content: string, expected: string, profile: string): string;
@@ -14,7 +15,7 @@ declare module 'libclash_core.so' {
     start(configPath: string, port: number): boolean;
     stop(): void;
     isRunning(): boolean;
-    validate(content: string): string;
+    validate(content: string, providerContext: string): string;
     validateSniffer(content: string): string;
     protectFile(fd: number): boolean;
     backupYaml(content: string): string;

@@ -821,10 +821,12 @@ struct Index {
   private openEditor(profile?: ClashProfile): void {
     if (this.profileStore === undefined) return;
     try {
+      const store: ProfileStore = this.profileStore;
       const content: string = profile === undefined ? DEFAULT_PROFILE : this.profileStore.read(profile);
       this.dialogController = new CustomDialogController({
         builder: ProfileEditorDialog({ title: profile === undefined ? '新建本地配置' : '编辑配置文件',
           initialName: profile?.name ?? '新建配置', initialContent: content,
+          providerReferences: profile === undefined ? undefined : (query: string): Promise<string> => store.providerReferences(profile!, content, query),
           onValidate: (name: string, text: string): void => {
             if (!this.profileStore) throw new Error('配置目录不可用');
             this.profileStore.checkDraft(name, text, profile, content);
@@ -855,11 +857,11 @@ struct Index {
       const source: string = store.read(selected), previous: string = store.ruleEditsText(selected);
       const objects: string = store.objectEditsText(selected), merges: string = store.mergeSettings(selected);
       const initial: RuleEdits = parseRuleEditsText(previous);
-      const snapshot = store.previewRules(source, initial, false, objects, merges);
+      const snapshot = store.previewRules(source, initial, false, objects, merges, store.providerCacheContext(selected));
       this.dialogController?.close();
       this.dialogController = new CustomDialogController({
         builder: RuleEditorDialog({ profileName: selected.name, initial, snapshot,
-          onValidate: (edits: RuleEdits): void => { store.previewRules(source, edits, false, objects, merges); },
+          onValidate: (edits: RuleEdits): void => { store.previewRules(source, edits, false, objects, merges, store.providerCacheContext(selected)); },
           onCopy: (text: string): void => { this.copyText(text, '规则'); },
           onSave: async (edits: RuleEdits): Promise<void> => {
             if (this.tunBusy || this.updatingProfiles.indexOf(selected.id) >= 0) throw new Error('配置正在更新，请稍后重试');
@@ -904,10 +906,10 @@ struct Index {
       const source: string = store.read(selected), rules: string = store.ruleEditsText(selected), previous: string = store.objectEditsText(selected);
       const merges: string = store.mergeSettings(selected);
       const initial: ObjectEdits = parseObjectEditsText(previous);
-      store.previewObjects(source, initial, rules, true, merges);
+      store.previewObjects(source, initial, rules, true, merges, store.providerCacheContext(selected));
       this.dialogController?.close();
       this.dialogController = new CustomDialogController({ builder: ObjectEditorDialog({ store, profileName: selected.name, sourceContent: source, ruleSettings: rules,
-        initial, mergeSettings: merges, initialKind: kind, focusName, onCopy: (text: string, label: string): void => { this.copyText(text, label); },
+        initial, mergeSettings: merges, providerContext: store.providerCacheContext(selected), initialKind: kind, focusName, onCopy: (text: string, label: string): void => { this.copyText(text, label); },
         onSave: async (edits: ObjectEdits): Promise<void> => {
           if (this.tunBusy || this.updatingProfiles.indexOf(selected.id) >= 0) throw new Error('配置正在更新，请稍后重试');
           this.updatingProfiles = [...this.updatingProfiles, selected.id]; this.mutationVersion++;

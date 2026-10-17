@@ -416,6 +416,7 @@ void latencyAndRuleTests() {
 #include "controller_state_test.inc"
 #include "backup_codec_test.inc"
 #include "network_backup_test.inc"
+#include "editor_provider_references_test.inc"
 #include "controller_configs_test.inc"
 #include "inbound_test.inc"
 #include "sniffer_forward_test.inc"
@@ -431,6 +432,14 @@ void latencyAndRuleTests() {
 int main(int argc, char** argv) {
     std::signal(SIGPIPE, SIG_IGN);
     try {
+        if (argc == 3 && std::string(argv[1]) == "editor-provider-request") {
+            std::ifstream input(argv[2], std::ios::binary); std::string source((std::istreambuf_iterator<char>(input)), {});
+            std::cout << editorProviderTestRequest(source); return 0;
+        }
+        if (argc == 3 && std::string(argv[1]) == "profile-cache-request") {
+            std::ifstream input(argv[2], std::ios::binary); std::string source((std::istreambuf_iterator<char>(input)), {});
+            std::cout << profileCacheTestRequest(source); return 0;
+        }
         if (argc == 3 && std::string(argv[1]) == "network-backup-request") {
             std::ifstream input(argv[2], std::ios::binary); std::string source((std::istreambuf_iterator<char>(input)), {});
             std::cout << networkBackupTestRequest(source); return 0;
@@ -442,6 +451,7 @@ int main(int argc, char** argv) {
         }
         if (argc == 4 && std::string(argv[3]) == "archive") { backupCodecTests(argv[2]); std::cout << "PASS " << checks << " archive assertions\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "network-backup") { networkBackupTests(argv[2]); std::cout << "PASS " << checks << " network backup assertions\n"; return 0; }
+        if (argc == 4 && std::string(argv[3]) == "editor-providers") { editorProviderReferenceTests(argv[2]); std::cout << "PASS " << checks << " editor provider assertions\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "vless") { vlessTests(argv[2]); shareLinkTests(); objectEditsTests(argv[2]); std::cout << "PASS " << checks << " VLESS assertions (independent OpenSSL protocol peer, ingress, UDP, HTTPS, imports and editing)\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "forward") { forwardProxyTests(argv[2]); shareLinkTests(); objectEditsTests(argv[2]); std::cout << "PASS " << checks << " forward proxy assertions (independent HTTP/SOCKS/OpenSSL/UDP peers)\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "providers") { providerTests(argv[2]); std::cout << "PASS " << checks << " provider assertions (independent OpenSSL peers and real cache lifecycle)\n"; return 0; }
@@ -464,6 +474,7 @@ int main(int argc, char** argv) {
         udpProtocolTests(); udpForwardingTests(); vlessTests(argv[2]); forwardProxyTests(argv[2]); dialerProxyTests(argv[2]); tlsFailureTests();
         vmessTests(argv[2]);httpsProbeTests();groupHealthTests(argv[2]);providerTests(argv[2]);loadBalanceTests(argv[2]);ssAeadTests();trojanTests(argv[2]);ruleProviderTests(argv[2]);dnsHostsTests(argv[2]);vmessDuplexTests(argv[2]);dnsTests(argv[2]);dnsListenerTests(argv[2]);geoTests(argv[2]);proxyPortTests(argv[2]);
         networkBackupTests(std::string(argv[2]) + "/network-backup");
+        editorProviderReferenceTests(argv[2]);
         std::cout << "PASS " << checks << " assertions (shipping Mbed TLS backend; Harmony networking still requires device verification)\n";
         return 0;
     } catch (const std::exception& error) {

@@ -73,6 +73,52 @@ function targets(index) {
 function options(values) {
   const seen=new Set();return values.filter(x=>typeof x.name==='string'&&x.name.length>0&&x.name.length<=4096&&!/[\u0000-\u001f\u007f-\u009f]/.test(x.name)&&!seen.has(x.name)&&seen.add(x.name)).map(x=>({label:x.name,value:x.name,type:'variable',detail:x.detail,reference:true}));
 }
+function withCachedProviders(index,data) {
+  if(!Array.isArray(data?.providers)||data.providers.length>256)return index;
+  const snapshots=new Map();let count=0;
+  for(const provider of data.providers){
+    if(!provider||typeof provider.name!=='string'||!Array.isArray(provider.nodes)||snapshots.has(provider.name))return index;
+    const nodes=[];
+    for(const node of provider.nodes){
+      if(++count>16384||!node||typeof node.name!=='string'||typeof node.type!=='string'||typeof node.dialer!=='string'||node.name.length>4096||node.dialer.length>4096)return index;
+      nodes.push({name:node.name,dialer:node.dialer,detail:'集合缓存 · '+provider.name+' · '+node.type});
+    }
+    snapshots.set(provider.name,nodes);
+  }
+  return {...index,providers:index.providers.map(p=>snapshots.has(p.name)&&['http','file'].includes((index.model.text(index.model.property(p.node,'type'))||'').toLowerCase())?{...p,payload:snapshots.get(p.name),definitions:snapshots.get(p.name)}:p),parents:undefined};
+}
+
+// Resolve only provider definitions from the current document. The native side
+// supplies its own source identity/filter/override semantics; node credentials
+// from optional payloads and unrelated mappings never enter this query.
+export function providerReferenceQuery(state,pos,language,info,explicit=true) {
+  try {
+    const index=indexFor(state,pos,language),model=index.model;if(!model)return null;
+    const contexts=contextsAt(index,info,pos),span=scalarSpan(state,pos,info,index.tree);
+    if(!contexts.length||!span||!explicit&&!span.prefix)return null;
+    if(contexts.every(c=>c.kind==='root')&&!ruleOptions(index,span)?.candidates.some(x=>x.detail==='内置出口'))return null;
+    let work=0;
+    const project=(node,depth=0)=>{
+      if(++work>16384||depth>16)throw new RangeError('Provider query work limit');
+      if(model.isMap(node)){
+        const map=model.mapping(node);if(!map||map.duplicate)throw new RangeError('Invalid provider mapping');
+        return Object.fromEntries(model.fields(node).map(field=>[field.name,project(field.node,depth+1)]));
+      }
+      const resolved=model.resolve(node)?.node;
+      if(sequenceTypes.has(resolved?.name))return model.entries(node).map(value=>project(value,depth+1));
+      const value=model.text(node);if(value===null)throw new RangeError('Incomplete provider scalar');return value;
+    };
+    const providers=[];
+    for(const provider of index.providers){
+      if(!['http','file'].includes((model.text(model.property(provider.node,'type'))||'').toLowerCase()))continue;
+      const map=model.mapping(provider.node);if(!map||map.duplicate)return null;
+      providers.push([provider.name,Object.fromEntries(model.fields(provider.node).filter(field=>field.name!=='payload').map(field=>[field.name,project(field.node)]))]);
+    }
+    if(!providers.length||providers.length>256)return null;
+    const query=JSON.stringify({'proxy-providers':Object.fromEntries(providers)});
+    return query.length<=256*1024?query:null;
+  }catch(error){if(!(error instanceof RangeError))throw error;return null;}
+}
 export function scalarSpan(state,pos,info,tree) {
   let node=tree.resolveInner(pos,-1),scalar;
   if(['Alias','Anchor','Tag'].includes(node.name))return null;
@@ -100,8 +146,8 @@ function ruleOptions(index,span) {
   candidates=candidates.filter(x=>!/[(),]/.test(x.value)).map(x=>({...x,value:value.slice(0,left)+x.value+value.slice(Math.max(left,right))}));
   return {...span,prefix,candidates};
 }
-function referenceResult(state,pos,language,info) {
-  const index=indexFor(state,pos,language),contexts=contextsAt(index,info,pos);
+function referenceResult(state,pos,language,info,cached) {
+  const index=withCachedProviders(indexFor(state,pos,language),cached),contexts=contextsAt(index,info,pos);
   if(!contexts.length)return null;
   const span=scalarSpan(state,pos,info,index.tree);if(!span)return null;
   const results=contexts.map(({kind,key,owner})=>{
@@ -126,8 +172,8 @@ function referenceResult(state,pos,language,info) {
   const first=results[0];
   return {...first,candidates:first.candidates.filter(option=>results.every(result=>result.prefix===first.prefix&&result.candidates.some(other=>other.label===option.label&&other.value===option.value)))};
 }
-export function referenceCompletions(state,pos,language,info) {
-  try{return referenceResult(state,pos,language,info);}catch(error){if(!(error instanceof RangeError))throw error;return {...info,candidates:[]};}
+export function referenceCompletions(state,pos,language,info,cached) {
+  try{return referenceResult(state,pos,language,info,cached);}catch(error){if(!(error instanceof RangeError))throw error;return {...info,candidates:[]};}
 }
 export function currentNodeType(state,pos,language='yaml') {
   try {

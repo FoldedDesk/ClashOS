@@ -14,8 +14,10 @@ import {clashCompletions} from './completion.mjs';
 import {serializeDocument,replaceDocument} from './document.mjs';
 import {scriptCompletions} from './script-completion.mjs';
 import {detectLanguage,nativeErrorLocation} from './language.mjs';
+import {ProviderCompletionClient} from './provider-bridge.mjs';
 
 let view,revision=0,currentLanguage='yaml',initialText='',initialDoc,lastStatus='',statusTimer,mode='auto',scriptScope='';
+let providerClient;
 const themeSlot=new Compartment(),languageSlot=new Compartment(),wrapSlot=new Compartment(),readOnlySlot=new Compartment();
 function diagnostics(view){
   if(currentLanguage==='json')return jsonParseLinter()(view);
@@ -26,7 +28,7 @@ function diagnostics(view){
 function grammar(name){
   currentLanguage=name;
   if(name==='javascript')return [javascript(),javascriptLanguage.data.of({autocomplete:scriptCompletions}),autocompletion({icons:false}),linter(diagnostics,{delay:600})];
-  return [name==='json'?json():yaml(),autocompletion({override:[clashCompletions(name)],icons:false}),linter(diagnostics,{delay:600})];
+  return [name==='json'?json():yaml(),autocompletion({override:[clashCompletions(name,providerClient?(query,context)=>providerClient.request(query,context,revision):undefined)],icons:false}),linter(diagnostics,{delay:600})];
 }
 function palette(p){
   return [EditorView.theme({
@@ -55,6 +57,8 @@ function mount(options){
   if(view)return false;
   initialText=options.text;
   mode=['javascript','json'].includes(options.language)?options.language:'auto';scriptScope=options.scriptScope||'';
+  if(options.providerReferences)providerClient=new ProviderCompletionClient(packet=>window.clashosEditorBridge.providers(packet),
+    (context,expected)=>!!view&&expected===revision&&!view.state.readOnly&&!view.composing&&view.state.doc.eq(context.state.doc));
   // Preserve the document's original line separator when serializing. CM's
   // internal line tree uses LF, including for CRLF input and native edits.
   view=new EditorView({parent:document.getElementById('editor'),state:EditorState.create({doc:initialText,extensions:[
@@ -98,4 +102,7 @@ function markError(message){
 function replace(text,expected){
   return replaceDocument(view,text,expected);
 }
-window.ClashOSEditor=Object.freeze({mount,snapshot,command,replace,markError,setTheme(theme){if(view)view.dispatch({effects:themeSlot.reconfigure(palette(theme))});}});
+window.ClashOSEditor=Object.freeze({mount,snapshot,command,replace,markError,
+  providerResult(id,expected,data){return providerClient?.receive(id,expected,data)||false;},
+  dispose(){providerClient?.dispose();},
+  setTheme(theme){if(view)view.dispatch({effects:themeSlot.reconfigure(palette(theme))});}});

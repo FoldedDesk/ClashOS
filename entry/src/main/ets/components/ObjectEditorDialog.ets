@@ -17,6 +17,7 @@ export struct ObjectEditorDialog {
   sourceContent: string = '';
   ruleSettings: string = '';
   mergeSettings: string = '';
+  providerContext: string = '';
   initial: ObjectEdits = emptyObjectEdits();
   initialKind: number = 0;
   focusName: string = '';
@@ -45,7 +46,7 @@ export struct ObjectEditorDialog {
     this.kind = this.initialKind; this.edits = this.clone(this.initial);
     try {
       if (!this.store) throw new Error('配置目录不可用');
-      this.snapshot = this.store.previewObjects(this.sourceContent, this.edits, this.ruleSettings, false, this.mergeSettings);
+      this.snapshot = this.store.previewObjects(this.sourceContent, this.edits, this.ruleSettings, false, this.mergeSettings, this.providerContext);
       if (this.focusName) {
         const section = this.section(); this.query = this.focusName;
         this.lane = section.prepend.some((item: EditorObjectView) => item.name === this.focusName) ? 0 : section.append.some((item: EditorObjectView) => item.name === this.focusName) ? 2 : 1;
@@ -69,7 +70,7 @@ export struct ObjectEditorDialog {
   }
   private update(edits: ObjectEdits): void {
     if (!this.alive || !this.store) throw new Error('编辑窗口已关闭');
-    const snapshot = this.store.previewObjects(this.sourceContent, edits, this.ruleSettings, false, this.mergeSettings);
+    const snapshot = this.store.previewObjects(this.sourceContent, edits, this.ruleSettings, false, this.mergeSettings, this.providerContext);
     const names: Set<string> = new Set();
     [0, 1].forEach((kind: number) => {
       const section = this.section(snapshot, kind), model = this.model(edits, kind);

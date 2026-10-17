@@ -912,12 +912,14 @@ bool parseProxySequence(yaml_document_t& document,yaml_node_t* sequence,std::vec
 #include "object_edits.inc"
 #include "config_scripts.inc"
 #include "backup_codec.inc"
+bool readControllerFile(const std::string& path, size_t maximum, std::string& text, std::string& error);
+#include "provider_cache_context.inc"
 #include "config_merges.inc"
 #include "rule_edits.inc"
 #include "inbound_policy.inc"
 #include "sniffer_config.inc"
 
-bool parseConfigText(const std::string& text, ParsedConfig& config, std::string& error, const RuleEdits* edits = nullptr, const ObjectEdits* objects = nullptr, const ConfigMerges* merges = nullptr, std::vector<ScriptLog>* scriptLogs = nullptr)
+bool parseConfigText(const std::string& text, ParsedConfig& config, std::string& error, const RuleEdits* edits = nullptr, const ObjectEdits* objects = nullptr, const ConfigMerges* merges = nullptr, std::vector<ScriptLog>* scriptLogs = nullptr, const ProviderCacheContext* providerCache = nullptr)
 {
     if (text.empty() || text.size() > 8 * 1024 * 1024) {
         error = "Configuration must be between 1 byte and 8 MB";
@@ -1073,6 +1075,9 @@ bool parseConfigText(const std::string& text, ParsedConfig& config, std::string&
             config.groups.push_back(std::move(group));
         }
     }
+    ProviderCacheContext savedCache;
+    if (!providerCache && merges && !merges->cacheProfile.empty()) { savedCache.profile = merges->cacheProfile; providerCache = &savedCache; }
+    if (valid && providerCache) valid = hydrateParsedProviderCaches(config, *providerCache, error);
     if(valid)for(const ProxyProvider& provider:config.providers)for(const ProxyNode& node:provider.nodes) {
         if(!names.insert(node.name).second){valid=false;error="Provider proxy name conflicts with another proxy or group";break;}
     }
@@ -1170,10 +1175,10 @@ bool parseConfigText(const std::string& text, ParsedConfig& config, std::string&
     return valid;
 }
 
-std::string ruleEditorJson(const std::string& source, const std::string& settings, bool render = false, const std::string& objectSettings = "", const std::string& mergeSettings = "")
+std::string ruleEditorJson(const std::string& source, const std::string& settings, bool render = false, const std::string& objectSettings = "", const std::string& mergeSettings = "", const ProviderCacheContext* providerCache = nullptr)
 {
     RuleEdits edits; ObjectEdits objects; ConfigMerges merges; ParsedConfig parsed; std::string error; std::vector<ScriptLog> logs;
-    if (!parseRuleEdits(settings, edits, error) || !parseObjectEdits(objectSettings, objects, error) || !parseConfigMerges(mergeSettings, merges, error) || !parseConfigText(source, parsed, error, &edits, &objects, &merges, &logs))
+    if (!parseRuleEdits(settings, edits, error) || !parseObjectEdits(objectSettings, objects, error) || !parseConfigMerges(mergeSettings, merges, error) || !parseConfigText(source, parsed, error, &edits, &objects, &merges, &logs, providerCache))
         return "{\"error\":\"" + jsonEscape(error) + "\",\"scriptLogs\":" + scriptLogsJson(logs) + "}";
     // Custom additions use the supported expression parser, including target/provider validation above.
     for (const auto* list : {&edits.prepend, &edits.append}) for (const auto& raw : *list) {
@@ -1204,6 +1209,7 @@ std::string ruleEditorJson(const std::string& source, const std::string& setting
 #include "inbound_settings.inc"
 #include "sniffer_control.inc"
 #include "network_backup.inc"
+#include "editor_provider_references.inc"
 
 void persistSelectionsLocked()
 {
@@ -1549,7 +1555,7 @@ std::string responseFor(const std::string& method, const std::string& path, cons
     if (path.substr(0, path.find('?')) == "/clashos/ports") return proxyPortsControlLocked(method, path, body);
     if (path.substr(0, path.find('?')) == "/clashos/inbound") return inboundControlLocked(method, path, body);
     if (method == "GET" && path == "/version") {
-        return "{\"version\":\"ClashOS Core 0.40 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
+        return "{\"version\":\"ClashOS Core 0.41 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
             "\",\"premium\":false,\"meta\":true,\"features\":[\"http-message-framing\",\"http-upgrade\",\"yaml-merge-keys\",\"dialer-proxy\",\"dialer-proxy-udp\",\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"vless\",\"trojan\",\"http-outbound\",\"socks5-outbound\",\"socks5-udp\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
     }
     if (method == "GET" && path == "/clahsos/diagnostics") return diagnosticsJson();
@@ -3060,6 +3066,42 @@ napi_value ScheduleLifecycle(napi_env env, napi_callback_info info, bool start)
 }
 napi_value StartAsync(napi_env env, napi_callback_info info) { return ScheduleLifecycle(env, info, true); }
 napi_value StopAsync(napi_env env, napi_callback_info info) { return ScheduleLifecycle(env, info, false); }
+std::atomic<unsigned> g_editorProviderReads{0};
+struct EditorProviderRead {
+    napi_async_work work = nullptr; napi_deferred deferred = nullptr;
+    std::string filesRoot, profile, source, query, result = "{\"providers\":[]}";
+};
+napi_value EditorProviderReferences(napi_env env, napi_callback_info info)
+{
+    size_t argc = 3; napi_value args[3]{}, promise, name;
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    auto* read = new EditorProviderRead(); napi_create_promise(env, &read->deferred, &promise);
+    auto finish = [&]() { napi_value result; napi_create_string_utf8(env, read->result.data(), read->result.size(), &result); napi_resolve_deferred(env, read->deferred, result); delete read; };
+    auto argument = [&](size_t index, size_t limit, std::string& text) {
+        size_t size = 0; if (napi_get_value_string_utf8(env, args[index], nullptr, 0, &size) != napi_ok || size > limit) return false;
+        text = napiText(env, args[index]); return true;
+    };
+    if (argc != 3 || !argument(0, PATH_MAX - 1, read->profile) || !argument(1, 8 * 1024 * 1024, read->source) || !argument(2, 256 * 1024, read->query)) { finish(); return promise; }
+    { std::lock_guard<std::mutex> lock(g_state.mutex); const auto slash = g_state.runtimeDirectory.find_last_of('/');
+      if (slash != std::string::npos) read->filesRoot = g_state.runtimeDirectory.substr(0, slash); }
+    if (g_editorProviderReads.fetch_add(1) >= 2) { --g_editorProviderReads; finish(); return promise; }
+    napi_create_string_utf8(env, "ClashOS provider editor references", NAPI_AUTO_LENGTH, &name);
+    const auto created = napi_create_async_work(env, nullptr, name,
+        [](napi_env, void* data) {
+            auto* read = static_cast<EditorProviderRead*>(data);
+            try { read->result = editorProviderReferences(read->filesRoot, read->profile, read->source, read->query); } catch (...) {}
+        },
+        [](napi_env env, napi_status status, void* data) {
+            auto* read = static_cast<EditorProviderRead*>(data); napi_value result;
+            if (status != napi_ok) read->result = "{\"providers\":[]}";
+            napi_create_string_utf8(env, read->result.data(), read->result.size(), &result); napi_resolve_deferred(env, read->deferred, result);
+            napi_delete_async_work(env, read->work); --g_editorProviderReads; delete read;
+        }, read, &read->work);
+    if (created != napi_ok || napi_queue_async_work(env, read->work) != napi_ok) {
+        if (read->work) napi_delete_async_work(env, read->work); --g_editorProviderReads; finish();
+    }
+    return promise;
+}
 napi_value SetControllerSecret(napi_env env, napi_callback_info info)
 {
     size_t argc = 1, length = 0; napi_value argument = nullptr, result; napi_valuetype type = napi_undefined;
@@ -3142,10 +3184,20 @@ napi_value Start(napi_env env, napi_callback_info info)
     return result;
 }
 
+bool editorProviderContext(napi_env env, napi_value argument, ProviderCacheContext& context, std::string& error)
+{
+    if (!parseProviderCacheContext(napiText(env, argument), context, error)) return false;
+    if (context.profile.empty()) return true;
+    std::string files;
+    { std::lock_guard<std::mutex> lock(g_state.mutex); const auto slash = g_state.runtimeDirectory.find_last_of('/');
+      if (slash != std::string::npos) files = g_state.runtimeDirectory.substr(0, slash); }
+    if (ownedProviderProfile(files, context.profile)) return true;
+    error = "Provider cache context is not an owned saved profile"; return false;
+}
 napi_value Validate(napi_env env, napi_callback_info info)
 {
-    size_t argc = 1;
-    napi_value argv[1] = {nullptr};
+    size_t argc = 2;
+    napi_value argv[2] = {nullptr, nullptr};
     napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
     std::string error;
     std::string content;
@@ -3156,8 +3208,8 @@ napi_value Validate(napi_env env, napi_callback_info info)
         napi_get_value_string_utf8(env, argv[0], content.data(), length + 1, &length);
         content.resize(length);
     }
-    ParsedConfig parsed;
-    parseConfigText(content, parsed, error);
+    ParsedConfig parsed; ProviderCacheContext providerCache;
+    if (editorProviderContext(env, argc > 1 ? argv[1] : nullptr, providerCache, error)) parseConfigText(content, parsed, error, nullptr, nullptr, nullptr, nullptr, &providerCache);
     napi_value result;
     napi_create_string_utf8(env, error.c_str(), error.size(), &result);
     return result;
@@ -3181,19 +3233,23 @@ napi_value ValidateSniffer(napi_env env, napi_callback_info info)
 
 napi_value RuleEditor(napi_env env, napi_callback_info info)
 {
-    size_t argc = 5; napi_value args[5] = {nullptr, nullptr, nullptr, nullptr, nullptr}, result; bool render = false;
+    size_t argc = 6; napi_value args[6] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr}, result; bool render = false;
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
     if (argc > 2) napi_get_value_bool(env, args[2], &render);
-    const std::string json = ruleEditorJson(argc > 0 ? napiText(env, args[0]) : "", argc > 1 ? napiText(env, args[1]) : "", render, argc > 3 ? napiText(env, args[3]) : "", argc > 4 ? napiText(env, args[4]) : "");
+    ProviderCacheContext context; std::string error;
+    const std::string json = editorProviderContext(env, argc > 5 ? args[5] : nullptr, context, error) ?
+        ruleEditorJson(argc > 0 ? napiText(env, args[0]) : "", argc > 1 ? napiText(env, args[1]) : "", render, argc > 3 ? napiText(env, args[3]) : "", argc > 4 ? napiText(env, args[4]) : "", &context) : editorError(error);
     napi_create_string_utf8(env, json.data(), json.size(), &result); return result;
 }
 
 napi_value ObjectEditor(napi_env env, napi_callback_info info)
 {
-    size_t argc = 5; napi_value args[5] = {nullptr, nullptr, nullptr, nullptr, nullptr}, result; bool validate = true;
+    size_t argc = 6; napi_value args[6] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr}, result; bool validate = true;
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
     if (argc > 3) napi_get_value_bool(env, args[3], &validate);
-    const std::string json = objectEditorJson(argc > 0 ? napiText(env, args[0]) : "", argc > 1 ? napiText(env, args[1]) : "", argc > 2 ? napiText(env, args[2]) : "", validate, argc > 4 ? napiText(env, args[4]) : "");
+    ProviderCacheContext context; std::string error;
+    const std::string json = editorProviderContext(env, argc > 5 ? args[5] : nullptr, context, error) ?
+        objectEditorJson(argc > 0 ? napiText(env, args[0]) : "", argc > 1 ? napiText(env, args[1]) : "", argc > 2 ? napiText(env, args[2]) : "", validate, argc > 4 ? napiText(env, args[4]) : "", &context) : editorError(error);
     napi_create_string_utf8(env, json.data(), json.size(), &result); return result;
 }
 
@@ -3263,6 +3319,7 @@ napi_value Init(napi_env env, napi_value exports)
         {"stopAsync", nullptr, StopAsync, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"info", nullptr, RuntimeInfo, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"localSocksOptions", nullptr, LocalSocksOptions, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"editorProviderReferences", nullptr, EditorProviderReferences, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"networkBackupSnapshot", nullptr, NetworkBackupSnapshot, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"validateNetworkBackup", nullptr, ValidateNetworkBackup, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"restoreNetworkBackup", nullptr, RestoreNetworkBackup, nullptr, nullptr, nullptr, napi_default, nullptr},

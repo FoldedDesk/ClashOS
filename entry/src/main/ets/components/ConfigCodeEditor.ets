@@ -3,9 +3,13 @@ import { VergePalette } from '../theme/VergeTheme';
 import { ConfigEditorController } from '../service/ConfigEditorController';
 
 interface EditorPosition { line: number; column: number; lines: number; language: string; dirty: boolean; revision: number; }
+interface ProviderReferenceRequest { id: number; revision: number; query: string; }
+interface ProviderReferenceResponse { providers: Object[]; }
 class EditorStatusBridge {
   onStatus: (value: string) => void = (_value: string): void => {};
+  onProviders: (value: string) => void = (_value: string): void => {};
   status(value: string): void { if (typeof value === 'string' && value.length <= 512) this.onStatus(value); }
+  providers(value: string): void { if (typeof value === 'string' && value.length <= 768 * 1024) this.onProviders(value); }
 }
 
 @Component
@@ -15,6 +19,7 @@ export struct ConfigCodeEditor {
   initialContent: string = '';
   language: string = 'auto';
   scriptScope: string = '';
+  providerReferences: ((query: string) => Promise<string>) | undefined = undefined;
   label: string = 'Clash YAML / JSON 配置编辑区';
   @Prop @Watch('updateReadOnly') disabled: boolean = false;
   onReady: (ready: boolean) => void = (_ready: boolean): void => {};
@@ -43,6 +48,7 @@ export struct ConfigCodeEditor {
         if (Number.isSafeInteger(value.revision) && value.revision !== this.lastRevision) { this.lastRevision = value.revision; this.onChange(value.revision); }
       } catch (_) {}
     };
+    this.bridge.onProviders = (raw: string): void => { this.readProviderReferences(raw); };
     this.binding = this.editor.bind({
       read: async (): Promise<string> => {
         if (this.failed) return JSON.stringify({ text: this.fallback, revision: this.lastRevision, composing: false });
@@ -68,12 +74,15 @@ export struct ConfigCodeEditor {
   aboutToDisappear(): void {
     if (this.startupTimer >= 0) clearTimeout(this.startupTimer);
     this.active = false; this.bridge.onStatus = (_value: string): void => {};
+    this.bridge.onProviders = (_value: string): void => {};
+    if (this.ready && !this.failed) this.web.runJavaScript('window.ClashOSEditor.dispose()').catch(() => {});
     this.editor.unbind(this.binding);
   }
   private async initialize(): Promise<void> {
     if (this.mounted || this.failed || !this.active) return;
     try {
-      const payload: string = JSON.stringify({ text: this.initialContent, theme: this.theme, language: this.language, scriptScope: this.scriptScope, label: this.label });
+      const payload: string = JSON.stringify({ text: this.initialContent, theme: this.theme, language: this.language, scriptScope: this.scriptScope, label: this.label,
+        providerReferences: this.providerReferences !== undefined });
       await this.web.runJavaScript(`window.ClashOSEditor.mount(${payload})`);
       if (!this.active) return;
       if (this.startupTimer >= 0) clearTimeout(this.startupTimer);
@@ -88,6 +97,19 @@ export struct ConfigCodeEditor {
   private startupFailed(): void {
     if (!this.active || this.mounted || this.failed) return;
     this.fallback = this.initialContent; this.failed = true; this.status = '代码编辑器不可用，已切换普通编辑'; this.onReady(true);
+  }
+  private async readProviderReferences(raw: string): Promise<void> {
+    let request: ProviderReferenceRequest;
+    try { request = JSON.parse(raw) as ProviderReferenceRequest; } catch (_) { return; }
+    if (!this.active || !this.ready || this.failed || !Number.isSafeInteger(request?.id) || request.id <= 0 ||
+      !Number.isSafeInteger(request.revision) || request.revision < 0 || typeof request.query !== 'string' || request.query.length > 256 * 1024) return;
+    let result: ProviderReferenceResponse = { providers: [] };
+    try {
+      const lookup = this.providerReferences;
+      if (lookup && !this.disabled) result = JSON.parse(await lookup(request.query)) as ProviderReferenceResponse;
+    } catch (_) {}
+    if (!this.active || !this.ready || this.failed) return;
+    try { await this.web.runJavaScript(`window.ClashOSEditor.providerResult(${request.id},${request.revision},${JSON.stringify(result)})`); } catch (_) {}
   }
   private async updateTheme(): Promise<void> {
     if (this.ready && !this.failed) try { await this.web.runJavaScript(`window.ClashOSEditor.setTheme(${JSON.stringify(this.theme)})`); } catch (_) {}
@@ -120,7 +142,7 @@ export struct ConfigCodeEditor {
       } else {
         Web({ src: $rawfile('config-editor/index.html'), controller: this.web })
           .javaScriptAccess(true).fileAccess(false).domStorageAccess(false).databaseAccess(false).blockNetwork(true)
-          .javaScriptProxy({ object: this.bridge, name: 'clashosEditorBridge', methodList: ['status'], controller: this.web })
+          .javaScriptProxy({ object: this.bridge, name: 'clashosEditorBridge', methodList: ['status', 'providers'], controller: this.web })
           .onOverrideUrlLoading(() => this.mounted)
           .onPageEnd(() => this.initialize())
           .width('100%').layoutWeight(1).enabled(!this.disabled);

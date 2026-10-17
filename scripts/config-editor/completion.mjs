@@ -2,7 +2,7 @@ import {ensureSyntaxTree,syntaxTree} from '@codemirror/language';
 import {Transaction} from '@codemirror/state';
 
 import {fieldsFor,valuesFor} from './schema.mjs';
-import {referenceCompletions,currentNodeType} from './references.mjs';
+import {referenceCompletions,currentNodeType,providerReferenceQuery} from './references.mjs';
 import {scalarText} from './reference-model.mjs';
 import {schemaCompletions} from './schema-context.mjs';
 export {clashRootFields} from './schema.mjs';
@@ -76,11 +76,11 @@ export function completionEdit(doc,info,option) {
   const selectValue=info.isKey&&valueAt>1;
   return {from:info.from,to:info.to,insert:text,anchor:info.from+(selectValue?valueAt:text.length),head:info.from+text.length};
 }
-export function clashCompletions(language) {
-  const complete=context=>{
+export function clashCompletions(language,requestProviders) {
+  const complete=(context,cached)=>{
     const base=completionContext(context.state,context.pos,language);
     if(!base)return null;
-    const assistance=referenceCompletions(context.state,context.pos,language,base)||schemaCompletions(context.state,context.pos,language,base),info=assistance||base;
+    const assistance=referenceCompletions(context.state,context.pos,language,base,cached)||schemaCompletions(context.state,context.pos,language,base),info=assistance||base;
     if(!context.explicit&&!info.prefix)return null;
     const candidates=assistance?assistance.candidates:info.isKey?fieldsFor(info.path):valuesFor(info.path,currentNodeType(context.state,context.pos,language)).map(value=>({label:String(value),value,type:typeof value==='boolean'?'keyword':'enum',detail:'Clash 参数值'}));
     const options=candidates.filter(x=>x.label.toLowerCase().startsWith(info.prefix.toLowerCase())).map(option=>({...option,apply:(view)=>{
@@ -90,9 +90,15 @@ export function clashCompletions(language) {
     }}));
     return options.length?{from:info.from,to:info.to,options,filter:false}:null;
   };
+  const prepare=context=>{
+    const base=requestProviders?completionContext(context.state,context.pos,language):null;
+    const query=base?providerReferenceQuery(context.state,context.pos,language,base,context.explicit):null;
+    if(!query)return complete(context);
+    return Promise.resolve().then(()=>context.aborted?null:requestProviders(query,context)).catch(()=>null).then(data=>context.aborted?null:complete(context,data));
+  };
   return context=>{
     if(context.aborted)return null;
-    if(ensureSyntaxTree(context.state,context.state.doc.length,10))return complete(context);
+    if(ensureSyntaxTree(context.state,context.state.doc.length,10))return prepare(context);
     // Large profiles parse in short tasks so typing and cancellation stay
     // responsive. A captured document never borrows names from a newer draft.
     let canceled=false;context.addEventListener('abort',()=>{canceled=true;},{onDocChange:true});
@@ -100,7 +106,7 @@ export function clashCompletions(language) {
     return new Promise(resolve=>{
       const next=()=>{
         if(canceled||context.aborted||Date.now()>deadline){resolve(null);return;}
-        if(ensureSyntaxTree(context.state,context.state.doc.length,10)){resolve(complete(context));return;}
+        if(ensureSyntaxTree(context.state,context.state.doc.length,10)){resolve(prepare(context));return;}
         setTimeout(next,0);
       };
       setTimeout(next,0);

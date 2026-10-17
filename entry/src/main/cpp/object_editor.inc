@@ -22,14 +22,14 @@ std::string editorObjectView(yaml_document_t& document, int id, std::string& err
         ",\"port\":" + editorQuoted(port) + ",\"content\":" + editorQuoted(content) + "}";
 }
 
-std::string objectEditorJson(const std::string& source, const std::string& settings, const std::string& ruleSettings, bool validate = true, const std::string& mergeSettings = "")
+std::string objectEditorJson(const std::string& source, const std::string& settings, const std::string& ruleSettings, bool validate = true, const std::string& mergeSettings = "", const ProviderCacheContext* providerCache = nullptr)
 {
     ObjectEdits edits; RuleEdits rules; ConfigMerges merges; std::string error;
     if (!parseObjectEdits(settings, edits, error) || !parseRuleEdits(ruleSettings, rules, error) || !parseConfigMerges(mergeSettings, merges, error)) return editorError(error);
     std::string enhanced;
     if (validate) {
         ParsedConfig config;
-        if (!parseConfigText(source, config, error, &rules, &edits, &merges)) return editorError(error);
+        if (!parseConfigText(source, config, error, &rules, &edits, &merges, nullptr, providerCache)) return editorError(error);
         enhanced = config.enhancedSource;
     }
     EditorYaml original; if (!original.parse(enhanced.empty() ? source : enhanced, 8 * 1024 * 1024, error)) return editorError(error);
@@ -66,6 +66,17 @@ std::string objectEditorJson(const std::string& source, const std::string& setti
     auto* map = yamlValue(original.document, root, "proxy-providers");
     if (map && map->type == YAML_MAPPING_NODE) for (auto* pair = map->data.mapping.pairs.start; pair < map->data.mapping.pairs.top; ++pair)
         providers.push_back(yamlText(yaml_document_get_node(&original.document, pair->key)));
+    std::vector<ProxyProvider> references;
+    size_t referenceBytes = 0, referenceNodes = 0;
+    if (parseProviderDefinitions(original.document, root, references, error)) for (const auto& provider : references) {
+        if (references.size() > 256) return editorError("Provider choices exceed 256 providers");
+        std::vector<ProxyNode> cached; size_t bytes = 0;
+        const bool loaded = providerCache && provider.type != "inline" && providerCacheNodes(*providerCache, provider, cached, bytes);
+        const auto& nodes = loaded ? cached : provider.nodes;
+        referenceBytes += bytes; referenceNodes += nodes.size();
+        if (referenceBytes > 32 * 1024 * 1024 || referenceNodes > 16384) return editorError("Provider choices exceed their resource limit");
+        for (const auto& node : nodes) choices.push_back(node.name);
+    }
     std::vector<std::string> unique; std::set<std::string> seen;
     for (const auto& name : choices) if (!name.empty() && seen.insert(name).second) unique.push_back(name);
     return "{\"error\":\"\",\"proxies\":" + proxies + ",\"groups\":" + groups + ",\"choices\":" + ruleStringsJson(unique) + ",\"providers\":" + ruleStringsJson(providers) + "}";

@@ -15,6 +15,7 @@ interface NativeCoreModule {
   stopAsync(): Promise<boolean>;
   info(): string;
   localSocksOptions(): string;
+  editorProviderReferences(profile: string, source: string, query: string): Promise<string>;
   networkBackupSnapshot(directory: string): string;
   validateNetworkBackup(content: string): string;
   restoreNetworkBackup(directory: string, content: string, expected: string, profile: string): string;
@@ -25,10 +26,10 @@ interface NativeCoreModule {
   start(configPath: string, port: number): boolean;
   stop(): void;
   isRunning(): boolean;
-  validate(content: string): string;
+  validate(content: string, providerContext: string): string;
   validateSniffer(content: string): string;
-  ruleEditor(content: string, edits: string, render: boolean, objects: string, merges: string): string;
-  objectEditor(content: string, edits: string, rules: string, validate: boolean, merges: string): string;
+  ruleEditor(content: string, edits: string, render: boolean, objects: string, merges: string, providerContext: string): string;
+  objectEditor(content: string, edits: string, rules: string, validate: boolean, merges: string, providerContext: string): string;
   objectDraft(kind: string, content: string, patch: string, validate: boolean): string;
   shareLinks(content: string, occupied: string): string;
   protectFile(fd: number): boolean;
@@ -41,6 +42,9 @@ export class ClashNativeCore implements CoreSessionHost, ControllerAccessHost {
   private controllerStore?: ControllerAccessStore;
   backupYaml(content: string): string { return this.module.backupYaml(content); }
   backupInflate(bytes: Uint8Array, expected: number): Uint8Array { return this.module.backupInflate(bytes, expected); }
+  editorProviderReferences(profile: string, source: string, query: string): Promise<string> {
+    return this.module.editorProviderReferences(profile, source, query);
+  }
   networkBackupSnapshot(directory: string): NetworkBackupSnapshot {
     const result = JSON.parse(this.module.networkBackupSnapshot(directory)) as NetworkBackupSnapshot;
     if (result.error) throw new Error(result.error);
@@ -105,8 +109,8 @@ export class ClashNativeCore implements CoreSessionHost, ControllerAccessHost {
     if (!this.module.protectFile(fd)) throw new Error('无法设置私有文件权限');
   }
 
-  validate(content: string): void {
-    const error: string = this.module.validate(content);
+  validate(content: string, providerContext: string = ''): void {
+    const error: string = this.module.validate(content, providerContext);
     if (error.length > 0) {
       throw new Error(error);
     }
@@ -117,19 +121,19 @@ export class ClashNativeCore implements CoreSessionHost, ControllerAccessHost {
     if (error.length > 0) throw new Error(error);
   }
 
-  ruleEditor(content: string, edits: string = '', render: boolean = false, objects: string = '', merges: string = ''): RuleEditorSnapshot {
-    const result: RuleEditorSnapshot = JSON.parse(this.module.ruleEditor(content, edits, render, objects, merges)) as RuleEditorSnapshot;
+  ruleEditor(content: string, edits: string = '', render: boolean = false, objects: string = '', merges: string = '', providerContext: string = ''): RuleEditorSnapshot {
+    const result: RuleEditorSnapshot = JSON.parse(this.module.ruleEditor(content, edits, render, objects, merges, providerContext)) as RuleEditorSnapshot;
     if (result.error) throw new Error(result.error);
     return result;
   }
 
-  previewExtensions(content: string, rules: string, objects: string, extensions: string): ScriptPreview {
-    const result: RuleEditorSnapshot = JSON.parse(this.module.ruleEditor(content, rules, true, objects, extensions)) as RuleEditorSnapshot;
+  previewExtensions(content: string, rules: string, objects: string, extensions: string, providerContext: string = ''): ScriptPreview {
+    const result: RuleEditorSnapshot = JSON.parse(this.module.ruleEditor(content, rules, true, objects, extensions, providerContext)) as RuleEditorSnapshot;
     return { error: result.error ?? '', content: result.content ?? '', logs: result.scriptLogs ?? [] };
   }
 
-  objectEditor(content: string, edits: string, rules: string = '', validate: boolean = true, merges: string = ''): ObjectEditorSnapshot {
-    const result: ObjectEditorSnapshot = JSON.parse(this.module.objectEditor(content, edits, rules, validate, merges)) as ObjectEditorSnapshot;
+  objectEditor(content: string, edits: string, rules: string = '', validate: boolean = true, merges: string = '', providerContext: string = ''): ObjectEditorSnapshot {
+    const result: ObjectEditorSnapshot = JSON.parse(this.module.objectEditor(content, edits, rules, validate, merges, providerContext)) as ObjectEditorSnapshot;
     if (result.error) throw new Error(result.error);
     return result;
   }

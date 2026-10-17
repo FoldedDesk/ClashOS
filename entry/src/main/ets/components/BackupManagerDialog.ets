@@ -413,7 +413,7 @@ export struct BackupManagerDialog {
       } else if (this.previewing) {
         this.previewContent();
       } else {
-        Text('备份可包含配置原文及其凭据、扩展/脚本、可视化修改、集合缓存，以及可选的全局扩展和外观。不会额外收集应用端口覆盖、WebDAV 账户、内置控制器密钥和地理数据库。')
+          Text('备份可包含配置原文及其凭据、扩展/脚本、可视化修改和集合缓存，也可选全局扩展、外观及端口与共享设置（含代理账号密码）。不会额外收集 WebDAV 账户、内置控制器密钥和地理数据库。')
           .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
         Row({ space: 8 }) {
           Button('本地备份', { type: ButtonType.Normal }).height(36).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))

@@ -174,9 +174,9 @@ export class ProfileStore {
     return this.create(fileName.replace(/\.(yaml|yml|json)$/i, ''), content);
   }
 
-  create(name: string, content: string = DEFAULT_PROFILE, sourceUrl: string = '', rules: string = '', objects: string = '', merge: string = '', script: string = '', globals?: BackupGlobals, sequence: string = ''): ClashProfile {
+  create(name: string, content: string = DEFAULT_PROFILE, sourceUrl: string = '', rules: string = '', objects: string = '', merge: string = '', script: string = '', globals?: BackupGlobals, sequence: string = '', resources: BackupResource[] = []): ClashProfile {
     const cleanName: string = this.validName(name);
-    this.validateConfig(content, rules, objects, mergeSettingsText(globals?.merge ?? this.globalMergeText(), merge, globals?.script ?? this.globalScriptText(), script, cleanName, sequence));
+    this.validateConfig(content, rules, objects, mergeSettingsText(globals?.merge ?? this.globalMergeText(), merge, globals?.script ?? this.globalScriptText(), script, cleanName, sequence), this.providerCacheContext(undefined, resources));
     let id: string;
     do { id = `${Date.now()}-${this.idCounter++}`; }
     while (['.yaml', '.yml', '.json', '.meta.json', '.yaml.rules.json', '.json.rules.json', '.yaml.objects.json', '.json.objects.json', '.yaml.merge.yaml', '.json.merge.yaml', '.yaml.script.js', '.json.script.js', '.yaml.selections', '.json.selections'].some((suffix: string) => this.exists(`${this.profileDir}/${id}${suffix}`)));
@@ -262,7 +262,7 @@ export class ProfileStore {
   validateBackupGlobals(profile: ClashProfile | undefined, globals: BackupGlobals): void {
     this.validator.ruleEditor(profile ? this.read(profile) : DEFAULT_PROFILE, profile ? this.ruleEditsText(profile) : '', true,
       profile ? this.objectEditsText(profile) : '', mergeSettingsText(globals.merge, profile ? this.profileMergeText(profile) : '',
-        globals.script, profile ? this.profileScriptText(profile) : '', profile?.name ?? '默认配置', profile ? this.sequenceText(profile) : ''));
+        globals.script, profile ? this.profileScriptText(profile) : '', profile?.name ?? '默认配置', profile ? this.sequenceText(profile) : ''), this.providerCacheContext(profile));
   }
   replaceBackupGlobals(expected: BackupGlobals, next: BackupGlobals): void {
     const current: BackupGlobals = this.backupGlobals();
@@ -307,13 +307,13 @@ export class ProfileStore {
 
   previewMerge(snapshot: MergeEditSnapshot, text: string): string {
     const merges: string = this.editedExtensions(snapshot, text);
-    const result = this.validator.ruleEditor(snapshot.source, snapshot.rules, true, snapshot.objects, merges);
+    const result = this.validator.ruleEditor(snapshot.source, snapshot.rules, true, snapshot.objects, merges, this.providerCacheContext(snapshot.profile));
     if (result.content === undefined) throw new Error('内核未能生成合并配置');
     return result.content;
   }
 
   previewScript(snapshot: MergeEditSnapshot, text: string): ScriptPreview {
-    return this.validator.previewExtensions(snapshot.source, snapshot.rules, snapshot.objects, this.editedExtensions(snapshot, text));
+    return this.validator.previewExtensions(snapshot.source, snapshot.rules, snapshot.objects, this.editedExtensions(snapshot, text), this.providerCacheContext(snapshot.profile));
   }
 
   saveMerge(snapshot: MergeEditSnapshot, text: string): string {
@@ -335,9 +335,9 @@ export class ProfileStore {
     if (previous) this.atomicWrite(path, previous); else if (this.exists(path)) fileIo.unlinkSync(path);
   }
 
-  previewObjects(content: string, edits: ObjectEdits, rules: string = '', validate: boolean = true, merges: string = ''): ObjectEditorSnapshot {
+  previewObjects(content: string, edits: ObjectEdits, rules: string = '', validate: boolean = true, merges: string = '', providerContext: string = ''): ObjectEditorSnapshot {
     const text: string = JSON.stringify(edits); parseObjectEditsText(text); parseRuleEditsText(rules);
-    return this.validator.objectEditor(content, text, rules, validate, merges);
+    return this.validator.objectEditor(content, text, rules, validate, merges, providerContext);
   }
 
   nodeDraft(content: string, patch: string = '', validate: boolean = true): ProxyNodeDraft { return this.validator.nodeDraft(content, patch, validate); }
@@ -347,7 +347,7 @@ export class ProfileStore {
     if (this.read(profile) !== expectedContent || this.ruleEditsText(profile) !== expectedRules || this.objectEditsText(profile) !== expectedObjects) throw new Error('配置、规则或节点已变化，请重新打开编辑器');
     const merges: string = this.mergeSettings(profile);
     if (expectedMerges !== undefined && merges !== expectedMerges) throw new Error('扩展配置已变化，请重新打开编辑器');
-    this.previewObjects(expectedContent, edits, expectedRules, true, merges);
+    this.previewObjects(expectedContent, edits, expectedRules, true, merges, this.providerCacheContext(profile));
     const text: string = JSON.stringify(edits); this.atomicWrite(`${this.profilePath(profile)}.objects.json`, text); return text;
   }
 
@@ -357,10 +357,10 @@ export class ProfileStore {
     if (previous) this.atomicWrite(path, previous); else fileIo.unlinkSync(path);
   }
 
-  previewRules(content: string, edits: RuleEdits, render: boolean = false, objects: string = '', merges: string = ''): RuleEditorSnapshot {
+  previewRules(content: string, edits: RuleEdits, render: boolean = false, objects: string = '', merges: string = '', providerContext: string = ''): RuleEditorSnapshot {
     const text: string = JSON.stringify(edits);
     parseRuleEditsText(text); parseObjectEditsText(objects);
-    return this.validator.ruleEditor(content, text, render, objects, merges);
+    return this.validator.ruleEditor(content, text, render, objects, merges, providerContext);
   }
 
   saveRuleEdits(profile: ClashProfile, expectedContent: string, expectedEdits: string, edits: RuleEdits, expectedObjects?: string, expectedMerges?: string): string {
@@ -368,7 +368,7 @@ export class ProfileStore {
     if (this.read(profile) !== expectedContent || this.ruleEditsText(profile) !== expectedEdits || (expectedObjects !== undefined && objects !== expectedObjects)) throw new Error('配置、规则或节点已变化，请重新打开编辑器');
     const merges: string = this.mergeSettings(profile);
     if (expectedMerges !== undefined && merges !== expectedMerges) throw new Error('扩展配置已变化，请重新打开编辑器');
-    this.previewRules(expectedContent, edits, false, objects, merges);
+    this.previewRules(expectedContent, edits, false, objects, merges, this.providerCacheContext(profile));
     const text: string = JSON.stringify(edits);
     this.atomicWrite(`${this.profilePath(profile)}.rules.json`, text);
     return text;
@@ -385,7 +385,7 @@ export class ProfileStore {
     const content: string = this.read(profile), edits: string = this.ruleEditsText(profile), objects: string = this.objectEditsText(profile);
     const merges: string = this.mergeSettings(profile);
     if (!edits && !objects && !merges) return content;
-    const rendered: string | undefined = this.previewRules(content, parseRuleEditsText(edits), true, objects, merges).content;
+    const rendered: string | undefined = this.previewRules(content, parseRuleEditsText(edits), true, objects, merges, this.providerCacheContext(profile)).content;
     if (rendered === undefined) throw new Error('内核未能生成完整配置');
     return rendered;
   }
@@ -437,6 +437,13 @@ export class ProfileStore {
   }
 
   networkBackupSnapshot(): NetworkBackupSnapshot { return this.validator.networkBackupSnapshot(this.profileDir); }
+  providerReferences(profile: ClashProfile, source: string, query: string): Promise<string> {
+    return this.validator.editorProviderReferences(this.profilePath(profile), source, query);
+  }
+  providerCacheContext(profile?: ClashProfile, resources: BackupResource[] = []): string {
+    const caches: BackupResource[] = resources.filter((resource: BackupResource) => /^\.provider-[0-9a-f]{16}\.cache$/.test(resource.suffix));
+    return profile || caches.length > 0 ? JSON.stringify({ version: 1, profile: profile ? this.profilePath(profile) : '', resources: profile ? [] : caches }) : '';
+  }
   replaceBackupNetwork(value: NetworkBackup, expected: string, profile: string = ''): NetworkBackupResult {
     return this.validator.restoreNetworkBackup(this.profileDir, value, expected, profile);
   }
@@ -560,7 +567,7 @@ export class ProfileStore {
       names.push(restoreName);
       let valid: boolean = true, error: string = '';
       try {
-        this.validateConfig(entry.content, entry.ruleEdits ?? '', entry.objectEdits ?? '', mergeSettingsText(globals.merge, entry.merge ?? '', globals.script, entry.script ?? '', restoreName, entry.sequence ?? ''));
+        this.validateConfig(entry.content, entry.ruleEdits ?? '', entry.objectEdits ?? '', mergeSettingsText(globals.merge, entry.merge ?? '', globals.script, entry.script ?? '', restoreName, entry.sequence ?? ''), this.providerCacheContext(undefined, entry.resources));
       } catch (failure) { valid = false; error = (failure as Error).message || '当前内核无法加载'; }
       rows.push({ index, name: entry.name, valid, resources: entry.resources.length, restoreName, error });
     });
@@ -579,7 +586,7 @@ export class ProfileStore {
         const entry: BackupProfile = preview.archive.profiles[index];
         const name: string = preview.rows[index].restoreName;
         const profile: ClashProfile = this.create(name, entry.content, entry.sourceUrl, entry.ruleEdits ?? '', entry.objectEdits ?? '', entry.merge ?? '', entry.script ?? '',
-          useArchiveGlobals ? preview.archive.globals : undefined, entry.sequence ?? '');
+          useArchiveGlobals ? preview.archive.globals : undefined, entry.sequence ?? '', entry.resources);
         created.push(profile);
         this.writeMetadata(profile.id, { name, sourceUrl: entry.sourceUrl, updateInterval: entry.updateInterval,
           updatedAt: Date.now(), pinned: entry.pinned });
@@ -612,12 +619,12 @@ export class ProfileStore {
     if (profile) this.checkDraftSource(profile, expectedSource);
     const cleanName: string = this.validName(name);
     this.validateConfig(content, profile ? this.ruleEditsText(profile) : '', profile ? this.objectEditsText(profile) : '',
-      profile ? this.mergeSettings(profile, cleanName) : mergeSettingsText(this.globalMergeText(), '', this.globalScriptText(), '', cleanName));
+      profile ? this.mergeSettings(profile, cleanName) : mergeSettingsText(this.globalMergeText(), '', this.globalScriptText(), '', cleanName), this.providerCacheContext(profile));
   }
 
   save(profile: ClashProfile, name: string, content: string, expectedSource?: string): ClashProfile {
     this.checkDraftSource(profile, expectedSource);
-    this.validateConfig(content, this.ruleEditsText(profile), this.objectEditsText(profile), this.mergeSettings(profile, this.validName(name)));
+    this.validateConfig(content, this.ruleEditsText(profile), this.objectEditsText(profile), this.mergeSettings(profile, this.validName(name)), this.providerCacheContext(profile));
     const metadata: ProfileMetadata = this.readMetadata(profile.id, profile.fileName);
     metadata.name = this.validName(name);
     metadata.updatedAt = Date.now();
@@ -633,7 +640,7 @@ export class ProfileStore {
     }
     const metadata: ProfileMetadata = this.readMetadata(profile.id, profile.fileName);
     if (name.trim() !== metadata.name && (this.globalScriptText() || this.profileScriptText(profile)))
-      this.validateConfig(this.read(profile), this.ruleEditsText(profile), this.objectEditsText(profile), this.mergeSettings(profile, this.validName(name)));
+      this.validateConfig(this.read(profile), this.ruleEditsText(profile), this.objectEditsText(profile), this.mergeSettings(profile, this.validName(name)), this.providerCacheContext(profile));
     metadata.name = this.validName(name);
     metadata.sourceUrl = url.trim();
     metadata.updateInterval = interval;
@@ -649,15 +656,21 @@ export class ProfileStore {
   }
 
   duplicate(profile: ClashProfile): ClashProfile {
-    const duplicate: ClashProfile = this.create(`${profile.name} 副本`, this.read(profile), '', this.ruleEditsText(profile), this.objectEditsText(profile), this.profileMergeText(profile), this.profileScriptText(profile), undefined, this.sequenceText(profile));
+    const resources: BackupResource[] = [];
+    const base64 = new util.Base64Helper(); let total: number = 0;
+    fileIo.listFileSync(this.profileDir).forEach((name: string) => {
+      if (!name.startsWith(profile.fileName)) return;
+      const suffix: string = name.substring(profile.fileName.length);
+      if (!BACKUP_RESOURCE_PATTERN.test(suffix)) return;
+      const data: string = base64.encodeToStringSync(this.readBackupResource(`${this.profileDir}/${name}`));
+      resources.push({ suffix, data }); total += data.length;
+      if (resources.length > 256 || total > BACKUP_LIMIT) throw new Error('复制超过 32 MB 或集合数量上限');
+    });
+    const duplicate: ClashProfile = this.create(`${profile.name} 副本`, this.read(profile), '', this.ruleEditsText(profile), this.objectEditsText(profile), this.profileMergeText(profile), this.profileScriptText(profile), undefined, this.sequenceText(profile), resources);
     try {
       const selections: string = `${this.profilePath(profile)}.selections`;
       if (this.exists(selections)) this.copyResourceFile(selections, `${duplicate.path}.selections`, 65536);
-      fileIo.listFileSync(this.profileDir).forEach((name: string) => {
-        if ((name.startsWith(`${profile.fileName}.provider-`) || name.startsWith(`${profile.fileName}.rule-provider-`)) && name.endsWith('.cache')) {
-          this.copyResourceFile(`${this.profileDir}/${name}`, `${this.profileDir}/${duplicate.fileName}${name.substring(profile.fileName.length)}`, 8 * 1024 * 1024 + 256);
-        }
-      });
+      resources.forEach((resource: BackupResource) => this.atomicWriteBytes(`${duplicate.path}${resource.suffix}`, base64.decodeSync(resource.data)));
       return duplicate;
     } catch (error) {
       this.remove(duplicate);
@@ -679,7 +692,7 @@ export class ProfileStore {
 
   async updateSubscription(profile: ClashProfile): Promise<ClashProfile> {
     if (profile.sourceUrl.length === 0) throw new Error('本地配置没有订阅地址');
-    const content: string = await this.download(profile.sourceUrl, this.ruleEditsText(profile), this.objectEditsText(profile), this.mergeSettings(profile));
+    const content: string = await this.download(profile.sourceUrl, this.ruleEditsText(profile), this.objectEditsText(profile), this.mergeSettings(profile), this.providerCacheContext(profile));
     return this.save(profile, profile.name, content);
   }
 
@@ -734,7 +747,7 @@ export class ProfileStore {
     return Date.now() - metadata.updatedAt >= profile.updateInterval * 60000;
   }
 
-  private async download(url: string, rules: string = '', objects: string = '', merges: string = ''): Promise<string> {
+  private async download(url: string, rules: string = '', objects: string = '', merges: string = '', providerContext: string = ''): Promise<string> {
     this.checkUrl(url);
     const request = http.createHttp();
     try {
@@ -750,7 +763,7 @@ export class ProfileStore {
         throw new Error(`订阅服务器返回 HTTP ${result.responseCode}`);
       }
       const content: string = result.result.toString();
-      this.validateConfig(content, rules, objects, merges);
+      this.validateConfig(content, rules, objects, merges, providerContext);
       return content;
     } catch (error) {
       // Avoid putting token-bearing subscription URLs in logs or error banners.
@@ -766,12 +779,12 @@ export class ProfileStore {
     if (!/^https?:\/\/[^\s/]+(?:\/[^\s]*)?$/i.test(url.trim())) throw new Error('请输入完整的 HTTP 或 HTTPS 订阅地址');
   }
 
-  private validateConfig(text: string, rules: string = '', objects: string = '', merges: string = ''): void {
+  private validateConfig(text: string, rules: string = '', objects: string = '', merges: string = '', providerContext: string = ''): void {
     if (utf8Bytes(text).byteLength > 8 * 1024 * 1024) throw new Error('配置超过 8 MB');
     try {
       parseRuleEditsText(rules); parseObjectEditsText(objects);
-      if (rules || objects || merges) this.validator.ruleEditor(text, rules, false, objects, merges);
-      else this.validator.validate(text);
+      if (rules || objects || merges) this.validator.ruleEditor(text, rules, false, objects, merges, providerContext);
+      else this.validator.validate(text, providerContext);
     } catch (error) {
       throw new Error(`配置校验失败：${(error as Error).message}`);
     }

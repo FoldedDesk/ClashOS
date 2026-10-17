@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test editor.test.mjs completion.test.mjs template-completion.test.mjs schema-templates.test.mjs"
+    "test": "node --test editor.test.mjs completion.test.mjs template-completion.test.mjs schema-templates.test.mjs provider-completion.test.mjs",
+    "test:native": "node --test provider-native.test.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.3",

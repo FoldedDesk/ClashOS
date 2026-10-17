@@ -1,5 +1,5 @@
 // YAML extensions preserve source bytes. Each extension is applied to a fresh AST.
-struct ConfigMerges { std::string global, profile, globalScript, profileScript, profileName, sequence; };
+struct ConfigMerges { std::string global, profile, globalScript, profileScript, profileName, sequence, cacheProfile; };
 
 bool mergeDocument(const std::string& text, EditorYaml& document, std::string& error)
 {
@@ -75,6 +75,7 @@ bool readMergeFile(const std::string& path, std::string& text, std::string& erro
 
 bool readConfigMerges(const std::string& profile, ConfigMerges& merges, std::string& error)
 {
+    merges.cacheProfile = profile;
     const size_t slash = profile.rfind('/');
     if (!readMergeFile((slash == std::string::npos ? "." : profile.substr(0, slash)) + "/.global-merge.yaml", merges.global, error) || !readMergeFile(profile + ".merge.yaml", merges.profile, error)) return false;
     auto readScript = [&](const std::string& path, std::string& destination) {

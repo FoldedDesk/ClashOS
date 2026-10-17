@@ -1,6 +1,6 @@
 {
   "applicationName": "ClashOS",
-  "reviewedCoreVersion": "0.40",
+  "reviewedCoreVersion": "0.41",
   "objective": "实现 Clash Verge 的大部分功能，包括各类右键菜单，并提供可正常使用的 ClashOS。",
   "brandingDecision": "Follow the user's later explicit spelling correction: ClashOS.",
   "referenceInventory": [
@@ -252,10 +252,17 @@
         "Final installed HAP also verifies completion after an escaped apostrophe in a single-quoted YAML prefix, native validation and persisted double-quoted exact node name on reopen; JSON escaped-quote prefixes have independent regression coverage",
         "Schema hints inside actively consumed arbitrary YAML templates project the shipping parser schema through effective root/node/group/provider/DNS/sniffer/nested-map aliases and merges, without expanding shared objects; unconsumed, overridden, secret, invalid and cross-document sources do not acquire speculative schema hints",
         "Shared field/value suggestions intersect actual consumer contexts and protocol enums; explicit scalar overrides do not constrain the template, and an undispatched prospective colon supports the first partial block key without changing source bytes or undo history",
-        "Two original-source regression controls lack the template-key/template-value hints that the final bundle supplies; the final ARM64/x86_64 HAP verifies actual right-click editor entry, template network and UDP field/value popups, accepted insertion, native validation, save, exact rendered-text reopen after cold startup and an actual HTTP proxy request through the compiled public profile; original runtime/all 11 groups/selections/window restored and owned public profile/file removed"
+        "Two original-source regression controls lack the template-key/template-value hints that the final bundle supplies; the final ARM64/x86_64 HAP verifies actual right-click editor entry, template network and UDP field/value popups, accepted insertion, native validation, save, exact rendered-text reopen after cold startup and an actual HTTP proxy request through the compiled public profile; original runtime/all 11 groups/selections/window restored and owned public profile/file removed",
+        "Downloaded/imported HTTP and file-provider cache references in saved-profile YAML/JSON completion; private asynchronous NAPI returns names, protocols and dialer dependencies only, with exact saved-source and provider-source identity guards",
+        "Native RE2 filters, exclusions, name affixes and dialer overrides are applied once from the current draft; missing/changed-source caches cause no download or speculative node suggestions, and cached dependencies participate in cycle exclusion",
+        "Provider-cache contexts hydrate native validation before explicit member, routing and download-route checks; saved editing, rules/objects, extensions/scripts, subscription updates, effective exports and cold startup share source-bound resources",
+        "Profile duplication validates and writes the same captured cache bytes; archive inspection/restoration validates explicit portable resources independently of live files, including fresh-installation offline restores",
+        "257 offline editor checks, 69 native cache assertions, an actual YAML/JSON CodeMirror-to-native insertion/loading pipeline and 21 real-store/native scenarios cover cache boundaries, cycles, cancellation, source changes, copy races and restoration",
+        "Core 0.40/0.41 simulator popup comparison verifies downloaded-name assistance and cycle exclusion; actual insertion, undo/redo, native validation, saving and cold startup retain the exact Unicode cache member",
+        "Actual literal-member routes, right-click copies and independently serialized archive imports/restores forward HTTP/SOCKS 204 through an independent device proxy; changed provider path is rejected, undo restores validation and original runtime/all 11 selections are restored"
       ],
       "remaining": [
-        "Full Mihomo schema and downloaded remote-provider node-reference completion"
+        "Full Mihomo schema"
       ],
       "source": [
         "entry/src/main/ets/service/ProfileStore.ets",
@@ -280,7 +287,15 @@
         "tests/fixtures/yaml/editor-templates.yaml",
         "scripts/config-editor/schema-context.mjs",
         "scripts/config-editor/schema-templates.test.mjs",
-        "tests/fixtures/config-editor/schema-templates.yaml"
+        "tests/fixtures/config-editor/schema-templates.yaml",
+        "entry/src/main/cpp/editor_provider_references.inc",
+        "entry/src/main/cpp/provider_cache_context.inc",
+        "scripts/config-editor/provider-bridge.mjs",
+        "scripts/config-editor/provider-completion.test.mjs",
+        "scripts/config-editor/provider-native.test.mjs",
+        "tests/editor_provider_references_test.inc",
+        "tests/profile_provider_cache_test.cjs",
+        "tests/provider_cache_fixture.cjs"
       ]
     },
     {
@@ -483,9 +498,9 @@
     "Improve actual route reliability; a full independent OS crypto/socket HTTPS reference also reproduces early closure, so investigate shared endpoint/network behavior without assuming a production-codec cause",
     "Broader routing and ingress configuration, including redir/TProxy",
     "Supported-device TUN proof and broader archive interoperability",
-    "Advanced style assets, full Mihomo schema and downloaded-provider completion"
+    "Advanced style assets and full Mihomo schema"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 19:46:29 UTC",
-  "verificationNotes": "Status summary only; full goal completion remains unproven. Core 0.39 passes HTTP, SS duplex, forward, VLESS, dialer, TLS, hosts, API and YAML host suites with independent peers, plus final simulator crypto diagnostics and all 12 TCP ingress cases. The earlier offline editor remains covered by 240 tests and 25 controller checks. Original user runtime, all 11 groups/selections and window placement are restored. External Google/GitHub TLS failures remain reproducible after the upload-loss fixes; final successful system-proxy samples do not prove stability. Full real-listener host DNS/inbound/sniffer suites remain unavailable because binds return EPERM and are not reported passing. Per-run evidence and HAPs stay outside Git. The production OS system-proxy check adds 44 service assertions and actual device GUI/network controls. A separate removable OS-crypto Shadowsocks reference passes 287 public-vector assertions and completes full HTTPS exchanges without using the production core; planned matched-endpoint and crossed-endpoint samples retain all failures and distinguish HTTP 403 from connection failures. Secrets and per-run data stay outside Git. Goal completion remains unproven. Core 0.40 adds optional private application-managed network settings migration: 62 native assertions, 112 migration scenarios with actual native persistence, 48 independent ZIP checks and 1133 API assertions, plus actual simulator authentication, bind-failure rollback, stale-preview and original-state restoration proof. Native network snapshots retain passwords only inside the explicitly chosen private archive path; public controller responses and preview summaries do not return them. True-device VPN and existing external-route reliability limitations remain unresolved. Completion remains unproven."
+  "reviewedAt": "2026-10-17 20:32:26 UTC",
+  "verificationNotes": "Status summary only; full goal completion remains unproven. Core 0.39 passes HTTP, SS duplex, forward, VLESS, dialer, TLS, hosts, API and YAML host suites with independent peers, plus final simulator crypto diagnostics and all 12 TCP ingress cases. The earlier offline editor remains covered by 240 tests and 25 controller checks. Original user runtime, all 11 groups/selections and window placement are restored. External Google/GitHub TLS failures remain reproducible after the upload-loss fixes; final successful system-proxy samples do not prove stability. Full real-listener host DNS/inbound/sniffer suites remain unavailable because binds return EPERM and are not reported passing. Per-run evidence and HAPs stay outside Git. The production OS system-proxy check adds 44 service assertions and actual device GUI/network controls. A separate removable OS-crypto Shadowsocks reference passes 287 public-vector assertions and completes full HTTPS exchanges without using the production core; planned matched-endpoint and crossed-endpoint samples retain all failures and distinguish HTTP 403 from connection failures. Secrets and per-run data stay outside Git. Goal completion remains unproven. Core 0.40 adds optional private application-managed network settings migration: 62 native assertions, 112 migration scenarios with actual native persistence, 48 independent ZIP checks and 1133 API assertions, plus actual simulator authentication, bind-failure rollback, stale-preview and original-state restoration proof. Native network snapshots retain passwords only inside the explicitly chosen private archive path; public controller responses and preview summaries do not return them. True-device VPN and existing external-route reliability limitations remain unresolved. Completion remains unproven. Core 0.41 adds source-bound downloaded-provider references and cache-aware editing/copy/backup/loading, verified by independent serialized caches, actual CodeMirror/native/store integration and the simulator including HTTP/SOCKS forwarding, negative source changes, cold startup, context-menu copies and portable restore. The configs host suite stops at unavailable loopback DNS binding and is not reported passing; related API, rule/object edits, extensions/scripts, YAML, backup and editor suites pass. Full-goal completion remains unproven."
 }

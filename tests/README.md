@@ -212,6 +212,21 @@ npm test --prefix scripts/config-editor
 npm run build --prefix scripts/config-editor
 ```
 
+下载/导入集合的编辑器引用与缓存校验使用真实原生解析器及独立生成的公开缓存，不需要主机监听权限：
+
+```sh
+python3 tests/run_native_tests.py --suite editor-providers --build-dir .host-build/native
+CLASHOS_NATIVE_TESTS="$PWD/.host-build/native/native_tests" npm run test:native --prefix scripts/config-editor
+CLASHOS_NATIVE_TESTS="$PWD/.host-build/native/native_tests" node tests/profile_provider_cache_test.cjs
+```
+
+覆盖来源指纹、RE2 过滤与名称前后缀、链式循环、目录/文件边界、异步取消和过期结果，
+以及实际 CodeMirror YAML/JSON 补全插入到原生保存、冷加载、规则/节点编辑和归档校验的链路。
+配置存储专项还检查扩展/脚本、订阅更新、复制时缓存刷新、写入失败撤回，以及无本机缓存的新目录恢复。
+设备验证可导入公开的文件集合，再在配置右键菜单中编辑成员；确认补全、撤销/重做、校验、
+保存重开、冷启动、右键创建副本和备份恢复都保留同一名称，并通过独立代理对端检查实际转发。
+结束后恢复原配置及选择，删除本次公开配置、缓存、备份、测试应用和转发规则。
+
 编辑器回归包含 YAML 锚点、标量/列表/映射别名、根级合并、合并优先级、显式空值、
 共享模板的重复及循环过滤、协议选项、转义名称、无效草稿、缓存更新和 CRLF 撤销。
 `fixtures/yaml/editor-templates.yaml` 同时供编辑器与原生 `--suite yaml` 使用，
