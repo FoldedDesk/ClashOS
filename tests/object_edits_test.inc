@@ -89,8 +89,10 @@ void objectEditsTests(const std::string& directory)
     const std::string ss = "{name: Public, type: ss, server: fixture.test, port: 443, cipher: aes-128-gcm, password: fixture}";
     const std::string password = objectDraftJson("proxies", ss, "{\"password\":\"null\"}");
     require(password.find("\"error\":\"\"") != std::string::npos && password.find("\\\"null\\\"") != std::string::npos, "Literal null passwords must remain strings rather than erase instructions");
-    const std::string groupDraft = objectDraftJson("groups", "{name: G, type: select, proxies: [DIRECT], opaque: {keep: true}}", "{\"type\":\"url-test\",\"url\":\"https://fixture.test/\",\"interval\":60}");
+    const std::string groupDraft = objectDraftJson("groups", "{name: G, type: select, proxies: [DIRECT], icon: 'https://icons.fixture.test/g.svg', hidden: true, opaque: {keep: true}}", "{\"type\":\"url-test\",\"url\":\"https://fixture.test/\",\"interval\":60}");
     require(groupDraft.find("\"error\":\"\"") != std::string::npos && groupDraft.find("\"interval\":\"60\"") != std::string::npos, "Group form metadata must reflect typed patch values and defaults");
+    require(groupDraft.find("\"hidden\":true") != std::string::npos && groupDraft.find("\"icon\":\"https://icons.fixture.test/g.svg\"") != std::string::npos,
+        "Visual group editing preserves source icons and hidden flags while changing health fields");
     const std::string profile = directory + "/object-edits.yaml";
     { std::ofstream out(profile); out << source; }
     { std::ofstream out(profile + ".objects.json"); out << settings; }

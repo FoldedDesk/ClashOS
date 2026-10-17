@@ -36,6 +36,7 @@ node tests/backup_migration_test.cjs
 node tests/backup_archive_test.cjs
 node tests/webdav_client_test.cjs
 node tests/config_editor_controller_test.cjs
+node tests/group_icons_test.cjs
 ```
 
 归档测试需要先完成上述原生构建；`CLASHOS_NATIVE_TESTS` 可覆盖原生测试程序路径。
@@ -86,3 +87,21 @@ QUIC 探针直接在设备访问 SOCKS5 UDP；参考端通过 Trojan TLS 接收�
 这个 UDP 参考节点仅为公开测试证书设置 `skip-cert-verify`，不提供任意转发。
 设备检查后应恢复原配置，删除探针与输入文件，并移除三个反向端口。
 这些检查验证独立客户端、实际设备内核和数据面，不等同于真机 VPN 验证。
+
+代理组图标测试使用真实临时文件，覆盖偏好事务、过期编辑、私有图片的引用与清理、
+系统选择器路径回退及图片资源释放；主机上的 ImageKit 编解码使用替身。
+设备上的实际编解码、图片加载和界面需另行检查：
+
+```sh
+python3 tests/group_icons_device_server.py --ready-file /tmp/clashos-icon-peer.json
+hdc rport tcp:18095 tcp:18095
+hdc file send tests/fixtures/icons/quadrants.png /storage/media/100/local/files/Docs/Download/clashos-icon-test.png
+```
+
+临时加载 `fixtures/icons/device.yaml`，检查配置 PNG、隐藏组、右键菜单、内置图标、
+`http://127.0.0.1:18095/check.svg` 预览和不存在的 `/broken.svg` 加载回退。
+从系统文件选择器导入四象限图片，保存后删除公共目录原图、停止图片参考端并重启应用，
+确认本机图片仍显示；切换配置后同名组应继续使用覆盖图标。
+四个可见组用于检查宽窗口分组导航，并分别检查深色、浅色和窄窗口布局。
+结束后恢复图标、原配置及外观，删除公共目录测试图片，并移除 18095 反向端口。
+该参考端只提供两张固定公开图片，其余路径返回 404。

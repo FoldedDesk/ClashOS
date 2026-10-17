@@ -1,6 +1,11 @@
 import { VergePalette } from '../theme/VergeTheme';
 import { DEFAULT_ACCENT } from '../theme/VergeTheme';
 import { AppearanceController } from '../service/AppearanceController';
+import { GroupIconStore } from '../service/GroupIconStore';
+import { GroupIconEntry, iconImageUrl } from '../service/GroupIconTypes';
+import { pickGroupIcon } from '../service/GroupIconPicker';
+import { GroupIconDialog } from '../components/GroupIconDialog';
+import { ProxyGroupIcon } from '../components/ProxyGroupIcon';
 import { RuntimeConfigDialog } from '../components/RuntimeConfigDialog';
 import { InboundSettingsDialog } from '../components/InboundSettingsDialog';
 import { SnifferSettingsDialog } from '../components/SnifferSettingsDialog';
@@ -69,6 +74,9 @@ struct Index {
   @State accentInput: string = DEFAULT_ACCENT;
   @State appearanceError: string = '';
   private appearanceController: AppearanceController | undefined = undefined;
+  private groupIconStore?: GroupIconStore;
+  @State groupIcons: GroupIconEntry[] = [];
+  @State groupIconRevision: number = 0;
   private accentOptions: string[] = ['#3478F6', '#8B5CF6', '#199A70', '#D94C86', '#D87724', '#64748B'];
   private accentNames: string[] = ['蓝色', '紫色', '绿色', '粉色', '橙色', '灰色'];
   @State selectedTab: number = 0;
@@ -211,6 +219,9 @@ struct Index {
         this.accentInput = this.appearanceController.settings.accent;
         this.appearanceError = this.appearanceController.loadError;
       } catch (_) { this.appearanceError = '外观初始化失败，请重新打开应用'; }
+      this.groupIconStore = new GroupIconStore(context.filesDir, (fd: number) => this.nativeCore.protectFile(fd));
+      try { this.groupIcons = this.groupIconStore.load(); }
+      catch (_) { this.notice = '代理组图标设置无法读取，已恢复默认显示'; }
       this.vpnService = new VpnTunnelService(context.filesDir, context.abilityInfo.bundleName);
       this.coreApi.setLocalCredentialProvider((endpoint: string): string | undefined => {
         const store: ControllerAccessStore | undefined = this.controllerAccessStore;
@@ -1362,6 +1373,49 @@ struct Index {
       type === 'LoadBalance' ? $r('app.media.verge_balance') : $r('app.media.verge_selector');
   }
 
+  private groupIconSource(group: ClashProxyGroup): string {
+    const custom: string = this.groupIcons.find((entry: GroupIconEntry) => entry.name === group.name)?.source ?? '';
+    return custom ? this.groupIconStore?.displaySource(custom) ?? '' : iconImageUrl(group.icon ?? '');
+  }
+
+  private openGroupIcon(group: ClashProxyGroup): void {
+    const store: GroupIconStore | undefined = this.groupIconStore;
+    if (!store) { this.notice = '图标设置暂不可用，请重新打开应用'; return; }
+    try {
+      const snapshot = store.snapshot(group.name);
+      const staged: string[] = []; let active: boolean = true;
+      const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      this.dialogController?.close();
+      this.dialogController = new CustomDialogController({ builder: GroupIconDialog({ groupName: group.name,
+        initialSource: snapshot.source, configured: group.icon ?? '', storageError: snapshot.error,
+        fallback: this.groupIcon(group.type), emoji: this.groupEmoji(group.name), resolve: (source: string): string => store.displaySource(source),
+        onPick: async (): Promise<string | undefined> => {
+          const source: string | undefined = await pickGroupIcon(context, store);
+          if (source) {
+            if (!active || !this.pageActive) { store.releaseImage(source); throw new Error('图标编辑已结束，请重新打开'); }
+            staged.push(source);
+          }
+          return source;
+        },
+        onSave: (source: string): void => {
+          if (!active || !this.pageActive) throw new Error('图标编辑已结束，请重新打开');
+          this.groupIcons = store.save(snapshot, source); ++this.groupIconRevision;
+          this.notice = source ? '代理组图标已保存，订阅更新后仍保留' : '已恢复配置中的代理组图标';
+        },
+        onClose: (): void => { active = false; staged.forEach((source: string) => store.releaseImage(source)); }
+      }), autoCancel: false, customStyle: true });
+      this.dialogController.open();
+    } catch (error) { this.notice = `无法打开图标设置：${(error as Error).message}`; }
+  }
+
+  private resetGroupIcon(group: ClashProxyGroup): void {
+    try {
+      if (!this.groupIconStore) throw new Error('图标设置暂不可用');
+      this.groupIcons = this.groupIconStore.save(this.groupIconStore.snapshot(group.name), ''); ++this.groupIconRevision;
+      this.notice = '已恢复配置中的代理组图标';
+    } catch (error) { this.notice = `图标未能恢复：${(error as Error).message}`; }
+  }
+
   private nodeColumns(): number {
     return this.windowWidth >= 1320 ? 4 : this.windowWidth >= 1000 ? 3 : this.windowWidth >= 660 ? 2 : 1;
   }
@@ -1381,8 +1435,8 @@ struct Index {
   }
 
   private visibleGroups(): ClashProxyGroup[] {
-    return this.proxyGroups.filter((group: ClashProxyGroup) => this.proxyQuery.trim().length === 0 ||
-      this.visibleProxies(group).length > 0);
+    return this.proxyGroups.filter((group: ClashProxyGroup) => group.hidden !== true && (this.proxyQuery.trim().length === 0 ||
+      this.visibleProxies(group).length > 0));
   }
 
   private visibleProfiles(): ClashProfile[] {
@@ -1868,6 +1922,9 @@ struct Index {
     Menu() {
       MenuItem({ content: '编辑代理组配置' }).enabled(!this.temporaryConfig && this.activeProfileId.length > 0 && (!this.coreConnected || this.internalCore))
         .onClick(() => this.openObjectEditor(undefined, 1, group.name));
+      MenuItem({ content: '自定义图标' }).onClick(() => this.openGroupIcon(group));
+      MenuItem({ content: '恢复配置图标' }).enabled(this.groupIcons.some((entry: GroupIconEntry) => entry.name === group.name))
+        .onClick(() => this.resetGroupIcon(group));
       MenuItem({ content: this.collapsedGroups.indexOf(group.name) >= 0 ? '展开代理组' : '收起代理组' })
         .onClick(() => this.toggleGroup(group.name));
       MenuItem({ content: '测试此组延迟', startIcon: $r('app.media.verge_chart') })
@@ -1888,7 +1945,7 @@ struct Index {
         .enabled(this.isBalancedGroup(group) ? (group.lastSelected ?? '').length > 0 : group.now.length > 0)
         .onClick(() => this.copyText(this.isBalancedGroup(group) ? group.lastSelected ?? '' : group.now, '节点名称'));
       MenuItem({ content: '复制全部节点名称' }).onClick(() => this.copyText(group.proxies.join('\n'), '节点列表'));
-      MenuItem({ content: '刷新代理组', startIcon: $r('app.media.verge_refresh') }).onClick(() => this.refreshCore());
+      MenuItem({ content: '刷新代理组', startIcon: $r('app.media.verge_refresh') }).onClick(() => { ++this.groupIconRevision; this.refreshCore(); });
     }.backgroundColor(this.theme.surface).backgroundBlurStyle(BlurStyle.NONE)
   }
 
@@ -2651,12 +2708,9 @@ struct Index {
     Column({ space: 0 }) {
       Row({ space: 14 }) {
         Stack() {
-          if (this.groupEmoji(group.name).length > 0) {
-            Text(this.groupEmoji(group.name)).fontSize(30).textAlign(TextAlign.Center);
-          } else {
-            this.icon(this.groupIcon(group.type), 32, group.type === 'Fallback' ? 'warning' :
-              group.type === 'URLTest' ? 'primary' : group.type === 'LoadBalance' ? 'purple' : 'success');
-          }
+          ProxyGroupIcon({ source: this.groupIconSource(group), revision: this.groupIconRevision, emoji: this.groupEmoji(group.name),
+            fallback: this.groupIcon(group.type), iconSize: 32, color: group.type === 'Fallback' ? this.theme.warning :
+              group.type === 'URLTest' ? this.theme.primary : group.type === 'LoadBalance' ? this.theme.purple : this.theme.success });
         }.width(38).height(42);
         Column({ space: 8 }) {
           Text(this.groupTitle(group.name)).fontSize(18).fontWeight(FontWeight.Bold).fontColor(this.theme.text)
@@ -2710,10 +2764,13 @@ struct Index {
       Column({ space: 2 }) {
         ForEach(this.visibleGroups(), (group: ClashProxyGroup) => {
           Button({ type: ButtonType.Normal }) {
-            Text(this.groupInitial(group.name))
-              .fontSize(11)
-              .fontWeight(this.focusedProxyGroup === group.name ? FontWeight.Bold : FontWeight.Regular)
-              .fontColor(this.focusedProxyGroup === group.name ? this.theme.primary : this.theme.textMuted);
+            if (this.groupIconSource(group)) {
+              ProxyGroupIcon({ source: this.groupIconSource(group), revision: this.groupIconRevision, iconSize: 16, fallback: this.groupIcon(group.type) });
+            } else {
+              Text(this.groupInitial(group.name)).fontSize(11)
+                .fontWeight(this.focusedProxyGroup === group.name ? FontWeight.Bold : FontWeight.Regular)
+                .fontColor(this.focusedProxyGroup === group.name ? this.theme.primary : this.theme.textMuted);
+            }
           }
           .width(24).height(24).borderRadius(5)
           .backgroundColor(this.focusedProxyGroup === group.name || this.hoveredProxyGroup === group.name ?

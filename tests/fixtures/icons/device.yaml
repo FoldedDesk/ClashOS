@@ -1,0 +1,23 @@
+port: 7890
+socks-port: 7891
+mode: rule
+proxy-groups:
+  - name: Icon Fixture
+    type: select
+    proxies: [DIRECT, REJECT]
+    icon: http://127.0.0.1:18095/quadrants.png
+  - name: Other Fixture
+    type: select
+    proxies: [DIRECT]
+  - name: Third Fixture
+    type: select
+    proxies: [DIRECT]
+  - name: Fourth Fixture
+    type: select
+    proxies: [DIRECT]
+  - name: Hidden Fixture
+    type: select
+    proxies: [DIRECT]
+    hidden: true
+rules:
+  - MATCH,REJECT

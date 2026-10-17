@@ -111,6 +111,8 @@ struct ProxyGroup {
     std::string strategy="consistent-hashing",lastSelected;
     uint64_t roundRobin=0,sessionSerial=0;
     std::map<std::string,BalancedSession> sessions;
+    std::string icon;
+    bool hidden = false;
 };
 
 struct ProxyNode {
@@ -905,6 +907,17 @@ bool parseConfigText(const std::string& text, ParsedConfig& config, std::string&
             ProxyGroup group;
             group.name = value(source, "name");
             group.type = groupType(value(source, "type"));
+            yaml_node_t* icon = yamlValue(document, source, "icon");
+            if (icon && (icon->type != YAML_SCALAR_NODE || yamlText(icon).size() > 16384)) {
+                valid = false; error = "Proxy-group icon must be a string within 16 KiB"; break;
+            }
+            group.icon = value(source, "icon");
+            yaml_node_t* hiddenNode = yamlValue(document, source, "hidden");
+            const std::string hidden = lower(value(source, "hidden"));
+            if ((hiddenNode && hiddenNode->type != YAML_SCALAR_NODE) || (!hidden.empty() && hidden != "true" && hidden != "false")) {
+                valid = false; error = "Proxy-group hidden must be true or false"; break;
+            }
+            group.hidden = hidden == "true";
             const std::string probeUrl=value(source,"url");if(!probeUrl.empty())group.url=probeUrl;
             const std::string expected=value(source,"expected-status");if(!expected.empty())group.expectedStatus=expected;
             auto integer=[&](const char* field,int& output,int minimum,int maximum) {
@@ -1252,6 +1265,7 @@ std::string proxyGroupJsonLocked(const ProxyGroup& group)
         output << '"' << jsonEscape(group.proxies[i]) << '"';
     }
     output << "],\"udp\":" << (proxyUdpLocked(group.name) ? "true" : "false")
+        << ",\"icon\":\"" << jsonEscape(group.icon) << "\",\"hidden\":" << (group.hidden ? "true" : "false")
         << ",\"history\":[],\"checking\":" << (group.checking ? "true" : "false") << ",\"manual\":\"" << jsonEscape(group.manual)
         << "\",\"url\":\"" << jsonEscape(group.url) << "\",\"testUrl\":\"" << jsonEscape(group.url) << '"';
     if (group.type == "LoadBalance") output << ",\"strategy\":\"" << group.strategy
@@ -1418,8 +1432,8 @@ std::string responseFor(const std::string& method, const std::string& path, cons
     if (path.substr(0, path.find('?')) == "/clashos/ports") return proxyPortsControlLocked(method, path, body);
     if (path.substr(0, path.find('?')) == "/clashos/inbound") return inboundControlLocked(method, path, body);
     if (method == "GET" && path == "/version") {
-        return "{\"version\":\"ClashOS Core 0.27 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
-            "\",\"premium\":false,\"meta\":true,\"features\":[\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"trojan\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
+        return "{\"version\":\"ClashOS Core 0.28 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
+            "\",\"premium\":false,\"meta\":true,\"features\":[\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"trojan\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
     }
     if (method == "GET" && path == "/clahsos/diagnostics") return diagnosticsJson();
     const std::string resource=path.substr(0,path.find('?'));

@@ -3,6 +3,7 @@ import { ProfileStore } from '../service/ProfileStore';
 import { ProxyGroupForm, EditorObjectView, defaultProxyGroupForm } from '../service/ObjectEditsTypes';
 
 interface GroupFormPatch {
+  icon: string | null; hidden: boolean;
   name: string; type: string; proxies: string[]; use: string[]; 'include-all': null; 'include-all-proxies': boolean; 'include-all-providers': boolean;
   'disable-udp': boolean; lazy: boolean; filter: string | null; 'exclude-filter': string | null; 'default-selected': string | null;
   url?: string; interval?: number; timeout?: number; tolerance?: number; 'expected-status'?: string; strategy?: string;
@@ -66,7 +67,8 @@ export struct ProxyGroupDialog {
     return Number(text);
   }
   private patch(): string {
-    const patch: GroupFormPatch = { name: this.lockName ? this.identity : this.form.name.trim(), type: this.form.type, proxies: this.form.members, use: this.form.providers,
+    const patch: GroupFormPatch = { name: this.lockName ? this.identity : this.form.name.trim(), type: this.form.type, icon: this.form.icon.trim() || null, hidden: this.form.hidden,
+      proxies: this.form.members, use: this.form.providers,
       'include-all': null, 'include-all-proxies': this.form.includeAllProxies, 'include-all-providers': this.form.includeAllProviders,
       'disable-udp': this.form.disableUdp, lazy: this.form.lazy, filter: this.form.filter || null, 'exclude-filter': this.form.excludeFilter || null,
       'default-selected': this.form.type === 'load-balance' ? null : this.form.defaultSelected || null,
@@ -132,6 +134,11 @@ export struct ProxyGroupDialog {
                 .height(38).width('100%').font({ size: 13 }).onSelect((index: number) => this.form.type = GROUP_TYPES[index]); }.width('100%'); }
             }.width('100%');
             if (this.lockName) Text('名称用于规则引用；需要改名可创建副本，再更新引用。').fontSize(11).fontColor(this.theme.textMuted).width('100%');
+            Column() { this.label('代理组图标链接（可选）'); TextInput({ text: this.form.icon, placeholder: 'https://…/icon.png 或 icon.svg' })
+              .fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).backgroundColor(this.theme.field)
+              .onChange((value: string) => this.form.icon = value); }.width('100%');
+            Row() { Text('在代理页隐藏此组').fontSize(13).fontColor(this.theme.text).layoutWeight(1);
+              Toggle({ type: ToggleType.Switch, isOn: this.form.hidden }).selectedColor(this.theme.primary).onChange((value: boolean) => this.form.hidden = value); }.width('100%');
             Column({ space: 8 }) {
               Text(`成员 ${this.form.members.length} · 按列表顺序使用`).fontSize(13).fontColor(this.theme.text).width('100%');
               if (this.memberChoices().length > 0) Row({ space: 10 }) {

@@ -1,6 +1,6 @@
 {
   "applicationName": "ClashOS",
-  "reviewedCoreVersion": "0.27",
+  "reviewedCoreVersion": "0.28",
   "objective": "实现 Clash Verge 的大部分功能，包括各类右键菜单，并提供可正常使用的 ClashOS。",
   "brandingDecision": "Follow the user's later explicit spelling correction: ClashOS.",
   "referenceInventory": [
@@ -79,17 +79,25 @@
         "Shared light/dark semantic palette across all pages and dialogs",
         "Dark/light/system switching including OS environment callbacks and cold startup",
         "Six preset accents and #RRGGBB custom colors with persistence and failure rollback",
-        "Responsive native cards/dialogs/menus, dark SVG resources and live icon recoloring"
+        "Responsive native cards/dialogs/menus, dark SVG resources and live icon recoloring",
+        "Proxy-group configuration icon/hidden metadata with safe HTTP(S) rendering and fallback",
+        "Right-click persistent per-group icon overrides: native presets, image URLs and local images normalized by ImageKit",
+        "Private atomic preferences and owned PNG copies, stale revision guards, canceled import cleanup and shared-image reference retention",
+        "Actual system-picker import, offline restart after source deletion, configuration reload, shared card/navigation icons, dark and narrow layouts verified on the emulator"
       ],
       "remaining": [
-        "User-custom proxy-group icons",
-        "Native equivalent for custom styles"
+        "Native equivalent for custom styles",
+        "Local group-icon preferences and imported PNG resources are not yet included in appearance backups"
       ],
       "source": [
         "entry/src/main/ets/theme/VergeTheme.ets",
         "entry/src/main/ets/service/AppearanceController.ets",
         "entry/src/main/ets/service/AppearanceStore.ets",
-        "entry/src/main/ets/entryability/EntryAbility.ets"
+        "entry/src/main/ets/entryability/EntryAbility.ets",
+        "entry/src/main/ets/components/GroupIconDialog.ets",
+        "entry/src/main/ets/components/ProxyGroupIcon.ets",
+        "entry/src/main/ets/service/GroupIconStore.ets",
+        "entry/src/main/ets/service/GroupIconPicker.ets"
       ]
     },
     {
@@ -158,7 +166,8 @@
         "Protocol forms and advanced YAML",
         "Group candidates/providers, ordering and health settings",
         "Prepend/append/exclude/restore editors",
-        "Reference/dependency checks, rollback and independent YAML export"
+        "Reference/dependency checks, rollback and independent YAML export",
+        "Group icon URL and hidden controls preserve unrelated group metadata and retain API/rule access to hidden groups"
       ],
       "source": [
         "entry/src/main/ets/components/ObjectEditorDialog.ets",
@@ -206,7 +215,8 @@
         "Connections/logs/rules/DNS/provider/geodata/backup menus",
         "Editor entry actions and group-member actions",
         "Backup right-click ZIP export with current upstream layout and lossless native data",
-        "LAN sharing row context menu for configuration and current local proxy address"
+        "LAN sharing row context menu for configuration and current local proxy address",
+        "Proxy-group custom icon and restore-config-icon menu actions"
       ],
       "source": [
         "entry/src/main/ets/pages/Index.ets",
@@ -217,7 +227,7 @@
     {
       "feature": "Daily browser connectivity",
       "status": "verified_with_limits",
-      "latest": "Core 0.27 installed and restarted after independent HTTP/TLS/QUIC sniffer verification. Original saved profile, rule mode, node selection, ports 7890/7891 and enabled system proxy restored. Explicit HTTPS through the device proxy returns 204 / CONNECT 200 / TLS verification 0. Prior Core 0.26 authenticated LAN ingress checks remain covered by production regressions.",
+      "latest": "Core 0.28 installed and restarted after actual custom icon rendering and offline local-image persistence checks. Original saved profile, rule mode, all 11 group selections, ports 7890/7891, system-following appearance and enabled system proxy restored. Explicit Google HTTPS through the device proxy returns 204 / CONNECT 200 / TLS verification 0. Core 0.27 independent sniffer and earlier authenticated LAN checks remain covered by production regressions.",
       "limit": "Latest check is an explicit HTTP-proxy request. Earlier simulator browser screenshots prove system-proxy browser use. Closing the app with TUN is not proven on this simulator."
     },
     {
@@ -255,6 +265,6 @@
     "Additional appearance customization, full-schema/reference completion"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 08:00:10 UTC",
+  "reviewedAt": "2026-10-17 08:42:18 UTC",
   "verificationNotes": "Status summary only. Historical device screenshots and per-run records are archived outside the source repository. Reproduce host checks with tests/README.md; device and true VPN validation remain separate."
 }

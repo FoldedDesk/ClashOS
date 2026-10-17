@@ -9,6 +9,8 @@ export interface ClashProxyGroup {
   manual?: string;
   strategy?: string;
   lastSelected?: string;
+  icon?: string;
+  hidden?: boolean;
 }
 
 export interface ClashProxyProvider {
@@ -213,6 +215,8 @@ interface ClashProxyResponse {
   proxies?: string[];
   history?: ClashProxyHistory[];
   udp?: boolean;
+  icon?: string;
+  hidden?: boolean;
 }
 
 interface ClashProviderResponse {
@@ -671,7 +675,8 @@ export class ClashApi {
           checking: item.checking ?? false,
           manual: item.manual ?? '',
           strategy: item.strategy ?? '',
-          lastSelected: item.lastSelected ?? ''
+          lastSelected: item.lastSelected ?? '',
+          icon: typeof item.icon === 'string' ? item.icon : '', hidden: item.hidden === true
         });
       }
     });

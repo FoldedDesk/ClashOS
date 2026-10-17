@@ -7,6 +7,7 @@ let checks=0,maxWrite=Infinity,failWrite=false,failRename=false,failProtect=fals
 const descriptors=new Set(),requests=[];
 let configValues={mode:'Rule',port:7890,'socks-port':7891,'log-level':'warning',ipv6:true,sniffing:true,
  sniffer:{enable:true,sniff:{TLS:{ports:[443],'override-destination':false}}},path:'/public/profiles/配置 😀.yaml',temporary:false,revision:7};
+let proxyValues={};
 const check=(value,message)=>{assert(value,message);checks++;};
 const fileIo={OpenMode:{CREATE:1,READ_WRITE:2,TRUNC:4},accessSync:p=>fs.existsSync(p),statSync:p=>fs.statSync(p),readTextSync:p=>fs.readFileSync(p,'utf8'),
  openSync:p=>{const fd=fs.openSync(p,'w+');descriptors.add(fd);return{fd};},closeSync:v=>{const fd=typeof v==='number'?v:v.fd;fs.closeSync(fd);descriptors.delete(fd);},
@@ -15,7 +16,7 @@ const fileIo={OpenMode:{CREATE:1,READ_WRITE:2,TRUNC:4},accessSync:p=>fs.existsSy
 const http={RequestMethod:{GET:'GET',PUT:'PUT',DELETE:'DELETE'},createHttp:()=>{created++;return{destroy:()=>destroyed++,request:async(url,options)=>{
  requests.push({url,header:{...options.header},usingProxy:options.usingProxy,method:options.method,body:options.extraData});let value={};const endpoint=new URL(url).pathname;
  if(endpoint==='/version')value={version:'ClashOS Core 0.23 native',instance:'public-test'};
- if(endpoint==='/proxies')value={proxies:{}};if(endpoint==='/configs'){value=configValues;if(options.method==='PUT'||options.method==='PATCH')return{responseCode:204,result:''};}
+ if(endpoint==='/proxies')value={proxies:proxyValues};if(endpoint==='/configs'){value=configValues;if(options.method==='PUT'||options.method==='PATCH')return{responseCode:204,result:''};}
  if(endpoint==='/connections')value={connections:[],memory:connectionMemory};if(endpoint==='/rules')value={rules:[]};
  return{responseCode:200,result:JSON.stringify(value)};
  }}}};
@@ -60,6 +61,9 @@ function loader(native){const modules=new Map();function load(name){const filena
  check(backgroundNative.startedWith===second,'Independent VPN/native process reads the same private settings before startup');
  const api=new Api();api.setLocalCredentialProvider(endpoint=>localControllerCredential(endpoint,store,core.info()));
  const memorySnapshot=await api.readSnapshot();check(memorySnapshot.memoryBytes===64*1024*1024,'Dashboard snapshot carries the controller process RSS');
+ proxyValues={visible:{type:'Selector',all:['DIRECT'],icon:'https://icons.fixture.test/g.svg',hidden:false},hidden:{type:'Selector',all:['DIRECT'],hidden:true},malformed:{type:'Selector',all:[],icon:5,hidden:'true'}};
+ const icons=await api.readSnapshot();check(icons.groups.find(g=>g.name==='visible').icon==='https://icons.fixture.test/g.svg'&&icons.groups.find(g=>g.name==='hidden').hidden===true,'Group metadata crosses the actual controller response adapter for presentation and navigation');
+ check(icons.groups.find(g=>g.name==='malformed').icon===''&&icons.groups.find(g=>g.name==='malformed').hidden===false,'Incorrect optional metadata types cannot become image sources or hide a visible group');proxyValues={};
  check(requests.length>0&&requests.every(r=>r.header.Authorization==='Bearer '+second),'All requests to the owned controller authenticate automatically');
  check(requests.every(r=>r.usingProxy===false),'Managed loopback credentials must never be routed through the system proxy');
  const config=await api.runtimeConfig();check(config.mode==='Rule'&&config.logLevel==='warning'&&config.ipv6&&config.path===configValues.path&&config.revision===7&&!config.temporary,'Runtime config maps real controller fields without exposing payload YAML');

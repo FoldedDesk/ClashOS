@@ -71,8 +71,8 @@ proxies:
   - {name: 节点😀, type: ss, server: private-server.invalid, port: 443, cipher: aes-128-gcm, password: SYNTHETIC-API-SECRET, udp: true}
   - {name: 'a+b /?%"尾', type: direct}
 proxy-groups:
-  - {name: '分组+空 格/测试', type: select, proxies: [DIRECT, 节点😀, REJECT]}
-  - {name: 'a+b', type: select, proxies: [DIRECT, REJECT]}
+  - {name: '分组+空 格/测试', type: select, proxies: [DIRECT, 节点😀, REJECT], icon: 'https://icons.fixture.test/图标.svg?label="🧭"&v=1'}
+  - {name: 'a+b', type: select, proxies: [DIRECT, REJECT], hidden: true}
   - {name: no-udp, type: select, proxies: [DIRECT], disable-udp: true}
 proxy-providers:
   inline-test:
@@ -104,6 +104,15 @@ rules: ['MATCH,DIRECT']
     g_state.delays["节点😀"] = 123;
     require(detail("节点😀").find("\"alive\":true") != std::string::npos && detail("节点😀").find("\"delay\":123") != std::string::npos, "Detail must expose real latest health results");
     require(detail("no-udp").find("\"udp\":false") != std::string::npos && detail("分组+空 格/测试").find("\"udp\":true") != std::string::npos, "Group UDP capability must follow actual selection and disable-udp");
+    require(detail("分组+空 格/测试").find("\"icon\":\"" + jsonEscape("https://icons.fixture.test/图标.svg?label=\"🧭\"&v=1") + "\"") != std::string::npos,
+        "Group icons preserve Unicode, queries and JSON escaping through list and detail serialization");
+    require(detail("a+b").find("\"hidden\":true") != std::string::npos && detail("no-udp").find("\"hidden\":false") != std::string::npos &&
+        detail("no-udp").find("\"icon\":\"\"") != std::string::npos, "Hidden groups remain API-addressable while omitted presentation metadata has stable defaults");
+    for (const std::string& field : {std::string("icon: []"), std::string("hidden: []"), std::string("hidden: yes"), "icon: '" + std::string(16385, 'x') + "'"}) {
+        ParsedConfig invalid;
+        require(!parseConfigText("proxy-groups: [{name: Invalid, type: select, proxies: [DIRECT], " + field + "}]", invalid, error),
+            "Invalid group presentation metadata fails before replacing the running configuration");
+    }
     require(readTestFile(profile) == source, "Controller selections must not rewrite source configurations");
     g_state.running.store(true);
     require(apiHttp("GET /proxies/missing HTTP/1.1\r\nHost: localhost\r\n\r\n").rfind("HTTP/1.1 404", 0) == 0, "Missing proxies need a real HTTP 404");

@@ -12,6 +12,7 @@ export interface ProxyNodeForm {
   tls: boolean; udp: boolean; skipCertVerify: boolean; serverName: string; network: string; wsPath: string; wsHost: string;
 }
 export interface ProxyGroupForm {
+  icon: string; hidden: boolean;
   name: string; type: string; members: string[]; providers: string[]; url: string; interval: string; timeout: string; tolerance: string;
   expectedStatus: string; strategy: string; filter: string; excludeFilter: string; defaultSelected: string;
   lazy: boolean; disableUdp: boolean; includeAllProxies: boolean; includeAllProviders: boolean;
@@ -24,7 +25,7 @@ export function defaultProxyNodeForm(): ProxyNodeForm {
     skipCertVerify: false, serverName: '', network: 'tcp', wsPath: '/', wsHost: '' };
 }
 export function defaultProxyGroupForm(): ProxyGroupForm {
-  return { name: '', type: 'select', members: ['DIRECT'], providers: [], url: 'https://www.gstatic.com/generate_204', interval: '300', timeout: '5000', tolerance: '50',
+  return { name: '', type: 'select', icon: '', hidden: false, members: ['DIRECT'], providers: [], url: 'https://www.gstatic.com/generate_204', interval: '300', timeout: '5000', tolerance: '50',
     expectedStatus: '*', strategy: 'consistent-hashing', filter: '', excludeFilter: '', defaultSelected: '', lazy: true, disableUdp: false, includeAllProxies: false, includeAllProviders: false };
 }
 

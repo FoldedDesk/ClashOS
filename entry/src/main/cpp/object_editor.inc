@@ -137,7 +137,7 @@ std::string editorFormJson(yaml_document_t& document, yaml_node_t* root, bool gr
             ",\"network\":" + editorQuoted(network) + ",\"wsPath\":" + editorQuoted(path) + ",\"wsHost\":" + editorQuoted(host);
     } else {
         ProxyGroup defaults;
-        for (const char* field : {"url", "interval", "timeout", "tolerance", "expected-status", "strategy", "filter", "exclude-filter", "default-selected"}) {
+        for (const char* field : {"icon", "url", "interval", "timeout", "tolerance", "expected-status", "strategy", "filter", "exclude-filter", "default-selected"}) {
             std::string value = text(root, field);
             if (value.empty()) {
                 if (std::string(field) == "url") value = defaults.url;
@@ -154,7 +154,7 @@ std::string editorFormJson(yaml_document_t& document, yaml_node_t* root, bool gr
             result += ",\"" + property + "\":" + editorQuoted(value);
         }
         result += ",\"members\":" + ruleStringsJson(editorStringList(document, root, "proxies")) + ",\"providers\":" + ruleStringsJson(editorStringList(document, root, "use")) +
-            ",\"lazy\":" + boolean(flag("lazy", true)) + ",\"disableUdp\":" + boolean(flag("disable-udp")) +
+            ",\"hidden\":" + boolean(flag("hidden")) + ",\"lazy\":" + boolean(flag("lazy", true)) + ",\"disableUdp\":" + boolean(flag("disable-udp")) +
             ",\"includeAllProxies\":" + boolean(flag("include-all-proxies") || flag("include-all")) + ",\"includeAllProviders\":" + boolean(flag("include-all-providers") || flag("include-all"));
     }
     return result + "}";

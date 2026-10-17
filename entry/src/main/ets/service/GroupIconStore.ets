@@ -1,0 +1,87 @@
+import { fileIo } from '@kit.CoreFileKit';
+import { utf8Bytes } from './TextCodec';
+import { GroupIconEntry, GroupIconSettings, GroupIconSnapshot, groupIconName, groupIconSource, localIconName, parseGroupIcons } from './GroupIconTypes';
+
+export class GroupIconStore {
+  private path: string;
+  private directory: string;
+  private protect: (fd: number) => void;
+  constructor(filesDir: string, protect: (fd: number) => void) {
+    this.path = `${filesDir}/group-icons.json`; this.directory = `${filesDir}/group-icons`;
+    this.protect = protect;
+  }
+  private text(): string {
+    if (!fileIo.accessSync(this.path)) return '';
+    if (fileIo.statSync(this.path).size > 512 * 1024) throw new Error('图标设置文件过大');
+    return fileIo.readTextSync(this.path);
+  }
+  load(): GroupIconEntry[] { return parseGroupIcons(this.text()); }
+  snapshot(name: string): GroupIconSnapshot {
+    groupIconName(name);
+    const revision: string = this.text();
+    try { return { name, source: parseGroupIcons(revision).find((entry: GroupIconEntry) => entry.name === name)?.source ?? '', revision, error: '' }; }
+    catch (_) { return { name, source: '', revision, error: '现有图标设置无法读取，保存将重建图标设置' }; }
+  }
+  displaySource(source: string): string {
+    const name: string = localIconName(source);
+    return name ? `file://${this.directory}/${name}` : source;
+  }
+  private write(path: string, bytes: Uint8Array): void {
+    const file = fileIo.openSync(path, fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.TRUNC);
+    try {
+      this.protect(file.fd); let offset: number = 0;
+      while (offset < bytes.length) {
+        const count: number = fileIo.writeSync(file.fd, bytes.slice(offset).buffer as ArrayBuffer);
+        if (count <= 0 || count > bytes.length - offset) throw new Error('图标设置未完整写入');
+        offset += count;
+      }
+      fileIo.fsyncSync(file.fd);
+    } finally { fileIo.closeSync(file); }
+  }
+  save(snapshot: GroupIconSnapshot, raw: string): GroupIconEntry[] {
+    groupIconName(snapshot.name); const source: string = groupIconSource(raw);
+    if (this.text() !== snapshot.revision) throw new Error('图标设置已变化，请重新打开');
+    let previous: GroupIconEntry[] = [];
+    if (!snapshot.error) previous = parseGroupIcons(snapshot.revision);
+    const entries: GroupIconEntry[] = previous.filter((entry: GroupIconEntry) => entry.name !== snapshot.name);
+    if (source) entries.push({ name: snapshot.name, source });
+    const data: GroupIconSettings = { version: 1, entries };
+    const encoded: string = JSON.stringify(data); parseGroupIcons(encoded);
+    const file: string = localIconName(source);
+    if (file && !fileIo.accessSync(`${this.directory}/${file}`)) throw new Error('导入的图标已不可用，请重新选择图片');
+    const temporary: string = `${this.path}.tmp`; let committed: boolean = false;
+    try {
+      this.write(temporary, utf8Bytes(encoded));
+      if (this.text() !== snapshot.revision) throw new Error('图标设置已变化，请重新打开');
+      fileIo.renameSync(temporary, this.path); committed = true;
+    }
+    finally { if (!committed && fileIo.accessSync(temporary)) fileIo.unlinkSync(temporary); }
+    const old: string = previous.find((entry: GroupIconEntry) => entry.name === snapshot.name)?.source ?? '';
+    if (old !== source) this.releaseImage(old);
+    return entries;
+  }
+  stageImage(png: ArrayBuffer): string {
+    const bytes: Uint8Array = new Uint8Array(png);
+    if (bytes.length < 8 || bytes.length > 512 * 1024 || bytes.slice(0, 8).join(',') !== '137,80,78,71,13,10,26,10') throw new Error('图标图片格式或大小无效');
+    if (!fileIo.accessSync(this.directory)) fileIo.mkdirSync(this.directory);
+    // Each import owns an atomically allocated directory.
+    const folder: string = fileIo.mkdtempSync(`${this.directory}/icon-XXXXXX`);
+    const path: string = `${folder}/icon.png`;
+    try { this.write(path, bytes); }
+    catch (error) {
+      try { if (fileIo.accessSync(path)) fileIo.unlinkSync(path); fileIo.rmdirSync(folder); } catch (_) {}
+      throw new Error((error as Error).message || '图片未能保存');
+    }
+    return `local:${folder.slice(this.directory.length + 1)}/icon.png`;
+  }
+  releaseImage(source: string): void {
+    const name: string = localIconName(source); if (!name) return;
+    // Never let optional cleanup invalidate a committed display choice.
+    try {
+      if (this.load().some((entry: GroupIconEntry) => entry.source === source)) return;
+      const path: string = `${this.directory}/${name}`;
+      if (fileIo.accessSync(path)) fileIo.unlinkSync(path);
+      fileIo.rmdirSync(path.slice(0, path.lastIndexOf('/')));
+    } catch (_) {}
+  }
+}
