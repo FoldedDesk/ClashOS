@@ -1,0 +1,22 @@
+# PUBLIC fixture. No subscriptions, passwords or external proxy servers.
+port: 7890
+socks-port: 7891
+mode: rule
+allow-lan: false
+protocol: &protocol http
+node-template: &node
+  type: *protocol
+  server: 127.0.0.1
+  port: 18097
+  network: tcp
+group-template: &group
+  type: select
+  proxies: [DIRECT, Schema HTTP]
+proxies:
+  - <<: *node
+    name: Schema HTTP
+proxy-groups:
+  - <<: *group
+    name: Schema Main
+rules:
+  - MATCH,DIRECT

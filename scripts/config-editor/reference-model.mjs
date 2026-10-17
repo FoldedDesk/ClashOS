@@ -111,15 +111,24 @@ export class ReferenceModel {
       else {if(own.has(name))duplicate=true;else own.set(name,{name,node:valueOf(pair,this.doc),pair});}
     }
     if(merges.length>1||merges.length&&duplicate)return null;
+    const inheritedMaps=[];
     if(merges.length){
       const value=merges[0],resolved=this.resolve(value)?.node;
       const sources=sequences.has(resolved?.name)?this.entries(value):[value];
       for(const source of sources){
         const inherited=this.mapping(source,depth+1,new Set(seen));if(!inherited||inherited.duplicate)return null;
+        inheritedMaps.push(inherited);
         for(const [name,field] of inherited.fields){this.step();if(!own.has(name))own.set(name,field);}
       }
     }
-    const result={fields:own,duplicate};this.maps.set(key,result);return result;
+    const result={node,fields:own,duplicate,merges:inheritedMaps};this.maps.set(key,result);return result;
+  }
+  contributes(input,source) {
+    const pending=[this.mapping(input)],seen=new Set(),target=id(source);
+    while(pending.length){
+      this.step();const map=pending.pop();if(!map||seen.has(map))continue;seen.add(map);
+      if(id(map.node)===target)return true;pending.push(...map.merges);
+    }return false;
   }
   fields(node){return [...this.mapping(node)?.fields.values()||[]];}
   field(node,key){return this.mapping(node)?.fields.get(key);}

@@ -8,7 +8,7 @@ const scalarTypes=new Set(['Literal','QuotedLiteral','String']);
 const cache=new WeakMap();
 const ruleTypes=['DOMAIN','DOMAIN-SUFFIX','DOMAIN-KEYWORD','DOMAIN-WILDCARD','DOMAIN-REGEX','IP-CIDR','IP-CIDR6','SRC-IP-CIDR','SRC-IP-CIDR6','GEOIP','SRC-GEOIP','GEOSITE','IP-ASN','SRC-IP-ASN','DST-PORT','NETWORK','RULE-SET','AND','OR','NOT','MATCH'];
 
-function indexFor(state,pos,language) {
+export function indexFor(state,pos,language) {
   const complete=ensureSyntaxTree(state,state.doc.length,40),tree=complete||syntaxTree(state),doc=state.doc;
   const active=language==='json'?tree.topNode:children(tree.topNode,n=>n.name==='Document').filter(n=>n.from<=pos).at(-1);
   const key=language+':'+active?.from+':'+active?.to,old=cache.get(doc)?.get(key);if(old){old.model.work=0;return {...old,tree};}
@@ -26,7 +26,7 @@ function indexFor(state,pos,language) {
     });
     const ruleProviders=fields(property(root,'rule-providers')).map(pair=>({node:pair.node,name:pair.name,detail:'规则集合'}));
     const groups=entries(property(root,'proxy-groups')).filter(n=>model.isMap(n)).map(node=>({node,name:text(property(node,'name')),detail:'代理组 · '+(text(property(node,'type'))||'select'),members:model.strings(property(node,'proxies')),uses:model.strings(property(node,'use')),includeNodes:text(property(node,'include-all-proxies'))==='true'||text(property(node,'include-all'))==='true',includeProviders:text(property(node,'include-all-providers'))==='true'||text(property(node,'include-all'))==='true'}));
-    const data={nodes,groups,providers,ruleProviders,model,root};if(complete){let map=cache.get(doc);if(!map){map=new Map();cache.set(doc,map);}map.set(key,data);}return {...data,tree};
+    const data={nodes,groups,providers,ruleProviders,model,root,schema:{views:null}};if(complete){let map=cache.get(doc);if(!map){map=new Map();cache.set(doc,map);}map.set(key,data);}return {...data,tree};
   } catch(error) {
     if(!(error instanceof RangeError))throw error;
     return {tree,nodes:[],groups:[],providers:[],ruleProviders:[],model:null};
@@ -73,9 +73,10 @@ function targets(index) {
 function options(values) {
   const seen=new Set();return values.filter(x=>typeof x.name==='string'&&x.name.length>0&&x.name.length<=4096&&!/[\u0000-\u001f\u007f-\u009f]/.test(x.name)&&!seen.has(x.name)&&seen.add(x.name)).map(x=>({label:x.name,value:x.name,type:'variable',detail:x.detail,reference:true}));
 }
-function scalarSpan(state,pos,info,tree) {
+export function scalarSpan(state,pos,info,tree) {
   let node=tree.resolveInner(pos,-1),scalar;
   if(['Alias','Anchor','Tag'].includes(node.name))return null;
+  const next=tree.resolveInner(pos,1);if(scalarTypes.has(next.name)&&next.from===pos)node=next;
   let sequence=false;for(let n=node;n;n=n.parent){if(sequenceTypes.has(n.name)){sequence=true;break;}if(n.name==='Pair'||n.name==='Property'||mappingTypes.has(n.name))break;}
   const line=state.doc.lineAt(pos),before=state.doc.sliceString(line.from,pos),block=info.language==='yaml'&&/^\s*-\s*$/.test(before);sequence=sequence||block;
   for(let n=node;n;n=n.parent){if(n.name==='Key'||n.name==='PropertyName')break;if(scalarTypes.has(n.name)){scalar=n;break;}if(n.name==='Pair'||n.name==='Property'||sequenceTypes.has(n.name))break;}

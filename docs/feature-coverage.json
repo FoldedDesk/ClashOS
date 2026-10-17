@@ -238,13 +238,16 @@
         "Template-aware references reuse the current Lezer syntax graph: document-scoped scalar/sequence/map aliases, root and nested merges, explicit merge tags/key aliases, literal merge-like keys, explicit empty overrides and shallow/earlier-source precedence",
         "Inherited protocol types constrain native node enums; shared member, provider-use and dialer template edits exclude duplicates and cycles for every actual consumer, including provider-prefixed names and provider overrides targeting their own nodes",
         "YAML scalar decoding preserves native lexical numeric names, quoted escapes, folded/quoted names and aliased keys; forward/duplicate/cross-document aliases and bounded invalid/cyclic/expansion drafts never fabricate referenced nodes",
-        "202 offline editor tests pass, including 45 template cases, dense shared profiles, semantic-cache invalidation and exact CRLF insertion/undo; the shared public fixture also passes native parsing/provider hydration within 150 complete YAML assertions",
+        "240 offline editor tests pass, covering shared schema inference, protocol/consumer intersections, explicit overrides, scalar aliases, first partial block keys, empty mapping drafts, dense shared profiles, semantic-cache invalidation and exact CRLF insertion/undo; the earlier shared public fixture also passes native parsing/provider hydration within 150 complete YAML assertions",
         "Final ARM64/x86_64 HAP simulator verifies actual profile right-click editor entry, inherited default and shared-member completion lists, accepted selection, undo/redo, native validation, save/reopen and cold-start persistence of anchors/aliases/merges",
         "Edited template profile forwards actual HTTP 204 through its selected prefixed provider node before and after cold startup; original profile, full meaningful runtime, all 11 selections and original window restored, owned fixture profile/app/public file/forward removed",
-        "Final installed HAP also verifies completion after an escaped apostrophe in a single-quoted YAML prefix, native validation and persisted double-quoted exact node name on reopen; JSON escaped-quote prefixes have independent regression coverage"
+        "Final installed HAP also verifies completion after an escaped apostrophe in a single-quoted YAML prefix, native validation and persisted double-quoted exact node name on reopen; JSON escaped-quote prefixes have independent regression coverage",
+        "Schema hints inside actively consumed arbitrary YAML templates project the shipping parser schema through effective root/node/group/provider/DNS/sniffer/nested-map aliases and merges, without expanding shared objects; unconsumed, overridden, secret, invalid and cross-document sources do not acquire speculative schema hints",
+        "Shared field/value suggestions intersect actual consumer contexts and protocol enums; explicit scalar overrides do not constrain the template, and an undispatched prospective colon supports the first partial block key without changing source bytes or undo history",
+        "Two original-source regression controls lack the template-key/template-value hints that the final bundle supplies; the final ARM64/x86_64 HAP verifies actual right-click editor entry, template network and UDP field/value popups, accepted insertion, native validation, save, exact rendered-text reopen after cold startup and an actual HTTP proxy request through the compiled public profile; original runtime/all 11 groups/selections/window restored and owned public profile/file removed"
       ],
       "remaining": [
-        "Full Mihomo schema, general schema hints inside arbitrary shared template definitions and downloaded remote-provider node-reference completion"
+        "Full Mihomo schema and downloaded remote-provider node-reference completion"
       ],
       "source": [
         "entry/src/main/ets/service/ProfileStore.ets",
@@ -266,7 +269,10 @@
         "tests/fixtures/yaml/device-templates.yaml",
         "scripts/config-editor/reference-model.mjs",
         "scripts/config-editor/template-completion.test.mjs",
-        "tests/fixtures/yaml/editor-templates.yaml"
+        "tests/fixtures/yaml/editor-templates.yaml",
+        "scripts/config-editor/schema-context.mjs",
+        "scripts/config-editor/schema-templates.test.mjs",
+        "tests/fixtures/config-editor/schema-templates.yaml"
       ]
     },
     {
@@ -432,9 +438,9 @@
     "Improve intermittent route reliability; independent first-flight and OS client controls reproduce failure beyond one core/client path, while end-to-end root cause remains incomplete",
     "Broader routing and ingress configuration, including redir/TProxy",
     "Supported-device TUN proof and broader archive interoperability",
-    "Advanced style assets, full Mihomo schema, generic shared-template schema hints and downloaded-provider completion"
+    "Advanced style assets, full Mihomo schema and downloaded-provider completion"
   ],
   "goalCompletionProven": false,
   "reviewedAt": "2026-10-17 17:16:54 UTC",
-  "verificationNotes": "Status summary only; goal completion remains unproven. Final Core 0.38 sources pass HTTP/forward/hosts/VLESS/dialer/API/TLS/YAML suites with independent protocol peers and a deterministic pre-fix closed-TLS-response witness. The final simulator HAP passes nine actual HTTP ingress cases, independent origin counters and native diagnostics. Original runtime/selections/window are restored and final OS system-proxy Google HTTPS returns verified success with actual counters. Full real-listener host DNS/inbound/sniffer suites remain unavailable because loopback binds return EPERM; these are not reported passing. Existing intermittent external TLS closure remains unresolved. Per-run data, screenshots and unsigned HAPs stay outside Git."
+  "verificationNotes": "Status summary only; goal completion remains unproven. Final Core 0.38 sources pass HTTP/forward/hosts/VLESS/dialer/API/TLS/YAML suites with independent protocol peers and a deterministic pre-fix closed-TLS-response witness. The final simulator HAP passes nine actual HTTP ingress cases, independent origin counters and native diagnostics. Original runtime/selections/window are restored and final OS system-proxy Google HTTPS returns verified success with actual counters. Full real-listener host DNS/inbound/sniffer suites remain unavailable because loopback binds return EPERM; these are not reported passing. Existing intermittent external TLS closure remains unresolved. Per-run data, screenshots and unsigned HAPs stay outside Git. Shared-template schema assistance now passes 240 offline editor tests and 25 production-controller transport checks, plus actual simulator insertion/validation/save/cold-reopen proof. The attempted full external Shadowsocks reference control is not evidence of route success or failure: device shell binds and app execution were denied, and host listener binds returned EPERM; temporary code, private inputs and device fixture were removed. Intermittent external TLS closure is still unresolved."
 }

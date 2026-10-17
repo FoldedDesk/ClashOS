@@ -4,6 +4,7 @@ import {Transaction} from '@codemirror/state';
 import {fieldsFor,valuesFor} from './schema.mjs';
 import {referenceCompletions,currentNodeType} from './references.mjs';
 import {scalarText} from './reference-model.mjs';
+import {schemaCompletions} from './schema-context.mjs';
 export {clashRootFields} from './schema.mjs';
 function unquote(text) {
   return scalarText(text)??text;
@@ -18,7 +19,7 @@ export function completionContext(state, pos, language) {
   const tree=ensureSyntaxTree(state,pos,25)||syntaxTree(state);
   const probe=pos-(/[ \t]*$/.exec(before)[0].length);
   let node=tree.resolveInner(probe,-1);
-  if(/Comment|BlockLiteral|BlockFolded/.test(node.name))return null;
+  if(/Comment|BlockLiteral|BlockFolded/.test(node.name)||['Alias','Anchor','Tag'].includes(node.name)&&pos<=node.to)return null;
   const path=[];let pair=null,keyNode=null;
   for(let n=node;n;n=n.parent)if(n.name==='Pair'||n.name==='Property'){
     if(!pair){pair=n;keyNode=n.getChild('Key')||n.getChild('PropertyName');}
@@ -44,7 +45,8 @@ export function completionContext(state, pos, language) {
     return {path:stack.map(x=>x.key),isKey:true,from:pos-plain[2].length,to:pos,prefix:plain[2],indent,language};
   }
   let isKey=!!keyNode&&pos>=keyNode.from&&pos<=keyNode.to;
-  let container=node;while(container&&!['Object','Array'].includes(container.name))container=container.parent;
+  let container=node;while(container&&!['Object','Array','FlowMapping','FlowSequence'].includes(container.name))container=container.parent;
+  if(language==='yaml'&&!isKey&&container?.name==='FlowMapping'&&/[{,]\s*$/.test(before)&&!['Literal','QuotedLiteral','Alias'].includes(node.name))isKey=true;
   if(language==='json'&&!isKey&&container?.name==='Object'&&/[{,]\s*"?[\w-]*$/.test(before)&&!['String','Number','True','False','Null'].includes(node.name))isKey=true;
   let from=pos,to=pos;
   const match=/[\w-]*$/.exec(before);if(match)from=pos-match[0].length;
@@ -78,9 +80,9 @@ export function clashCompletions(language) {
   const complete=context=>{
     const base=completionContext(context.state,context.pos,language);
     if(!base)return null;
-    const references=referenceCompletions(context.state,context.pos,language,base),info=references||base;
+    const assistance=referenceCompletions(context.state,context.pos,language,base)||schemaCompletions(context.state,context.pos,language,base),info=assistance||base;
     if(!context.explicit&&!info.prefix)return null;
-    const candidates=references?references.candidates:info.isKey?fieldsFor(info.path):valuesFor(info.path,currentNodeType(context.state,context.pos,language)).map(value=>({label:String(value),value,type:typeof value==='boolean'?'keyword':'enum',detail:'Clash 参数值'}));
+    const candidates=assistance?assistance.candidates:info.isKey?fieldsFor(info.path):valuesFor(info.path,currentNodeType(context.state,context.pos,language)).map(value=>({label:String(value),value,type:typeof value==='boolean'?'keyword':'enum',detail:'Clash 参数值'}));
     const options=candidates.filter(x=>x.label.toLowerCase().startsWith(info.prefix.toLowerCase())).map(option=>({...option,apply:(view)=>{
       if(view.state.readOnly||view.composing||!view.state.doc.eq(context.state.doc))return;
       const edit=completionEdit(view.state.doc,info,option);
