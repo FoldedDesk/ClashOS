@@ -1,6 +1,6 @@
 {
   "applicationName": "ClashOS",
-  "reviewedCoreVersion": "0.29",
+  "reviewedCoreVersion": "0.30",
   "objective": "实现 Clash Verge 的大部分功能，包括各类右键菜单，并提供可正常使用的 ClashOS。",
   "brandingDecision": "Follow the user's later explicit spelling correction: ClashOS.",
   "referenceInventory": [
@@ -84,10 +84,14 @@
         "Right-click persistent per-group icon overrides: native presets, image URLs and local images normalized by ImageKit",
         "Private atomic preferences and owned PNG copies, stale revision guards, canceled import cleanup and shared-image reference retention",
         "Actual system-picker import, offline restart after source deletion, configuration reload, shared card/navigation icons, dark and narrow layouts verified on the emulator",
-        "Appearance backups include icon preferences and shared private PNG resources; opt-in restoration replaces overrides while older archives preserve them"
+        "Appearance backups include icon preferences and shared private PNG resources; opt-in restoration replaces overrides while older archives preserve them",
+        "Native style settings for font family, 85-130% text scale, shared corner radii, page margins and separate light/dark palette overrides across pages and custom dialogs",
+        "Offline JSON style editor with undoable presets, font choices, live dual-mode previews, validation/copy/apply and right-click reset",
+        "Independent contrast correction and validation, stale appearance guards, atomic native/shared/file rollback and recovery from unreadable persisted palettes",
+        "Actual 130% monospace UI, node layouts, narrow style editor, invalid-range rejection/undo, mode-button sizing, cold startup and appearance backup restoration verified on the emulator"
       ],
       "remaining": [
-        "Native equivalent for custom styles"
+        "Arbitrary CSS selectors, image backgrounds and imported/remote font resources remain unsupported by the native style settings"
       ],
       "source": [
         "entry/src/main/ets/theme/VergeTheme.ets",
@@ -97,7 +101,9 @@
         "entry/src/main/ets/components/GroupIconDialog.ets",
         "entry/src/main/ets/components/ProxyGroupIcon.ets",
         "entry/src/main/ets/service/GroupIconStore.ets",
-        "entry/src/main/ets/service/GroupIconPicker.ets"
+        "entry/src/main/ets/service/GroupIconPicker.ets",
+        "entry/src/main/ets/theme/NativeStyles.ets",
+        "entry/src/main/ets/components/NativeStyleDialog.ets"
       ]
     },
     {
@@ -191,7 +197,9 @@
         "Actual system picker selective restoration, opt-in globals, live migrated groups/rules, subscription update and independent exported ZIP reimport verified",
         "Optional appearance backup includes proxy-group presets, URLs and deduplicated owned PNG copies in JSON/ZIP/WebDAV archives",
         "Canonical bounded image decoding and dimensions, reference/path validation, stale snapshots and atomic last-step icon commit with complete profile/global/appearance rollback on failures",
-        "Actual emulator appearance-only backup/restore and right-click ZIP export/picker import; independent PNG inspection and cold restart after deleting public sources verified"
+        "Actual emulator appearance-only backup/restore and right-click ZIP export/picker import; independent PNG inspection and cold restart after deleting public sources verified",
+        "Native typography/layout/palette style backup and stale-preview protection; old archives preserve absent styles and later restore failures roll back newly introduced styles",
+        "Actual style backup/reset/restore and exported JSON field inspection, with test archives removed and original backups preserved"
       ],
       "remaining": [
         "Actual Clash Verge desktop restoration and older archive variants",
@@ -221,7 +229,8 @@
         "Editor entry actions and group-member actions",
         "Backup right-click ZIP export with current upstream layout and lossless native data",
         "LAN sharing row context menu for configuration and current local proxy address",
-        "Proxy-group custom icon and restore-config-icon menu actions"
+        "Proxy-group custom icon and restore-config-icon menu actions",
+        "Appearance card custom-style editor and restore-default-style menu actions"
       ],
       "source": [
         "entry/src/main/ets/pages/Index.ets",
@@ -232,7 +241,7 @@
     {
       "feature": "Daily browser connectivity",
       "status": "verified_with_limits",
-      "latest": "Core 0.29 installed after actual appearance-only icon backup/restore, independent exported ZIP PNG inspection, system-picker ZIP reimport and offline cold restart. The final HAP also restores the exported image correctly. Original saved profile, rule mode, all 11 group selections, ports 7890/7891, system-following appearance and enabled system proxy restored. Explicit Google HTTPS through the device proxy returns 204 / CONNECT 200 / TLS verification 0. Test-created archives and public inputs removed; original backups preserved.",
+      "latest": "Core 0.30 installed after actual native style editing, font/size/color previews, invalid-range rejection/undo, narrow layouts, right-click reset and appearance backup restoration. Original saved profile, rule mode, all 11 group selections, ports 7890/7891, default typography/layout, system-following appearance and enabled system proxy restored. Explicit Google HTTPS through the device proxy returns 204 / CONNECT 200 / TLS verification 0. Test-created archives/public inputs removed; original backups and window position preserved.",
       "limit": "Latest check is an explicit HTTP-proxy request. Earlier simulator browser screenshots prove system-proxy browser use. Closing the app with TUN is not proven on this simulator."
     },
     {
@@ -267,9 +276,9 @@
   "nextWork": [
     "Broader routing and ingress configuration, including redir/TProxy",
     "Supported-device TUN proof and broader archive interoperability",
-    "Additional appearance customization, full-schema/reference completion"
+    "Advanced style assets and full-schema/reference completion"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 09:00:19 UTC",
+  "reviewedAt": "2026-10-17 09:40:51 UTC",
   "verificationNotes": "Status summary only. Historical device screenshots and per-run records are archived outside the source repository. Reproduce host checks with tests/README.md; device and true VPN validation remain separate."
 }

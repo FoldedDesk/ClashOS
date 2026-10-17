@@ -56,12 +56,12 @@ export struct ConfigCodeEditor {
       markError: async (message: string): Promise<void> => {
         if (this.ready && !this.failed) await this.web.runJavaScript(`window.ClashOSEditor.markError(${JSON.stringify(message)})`);
       },
-      replace: async (text: string): Promise<void> => {
+      replace: async (text: string, expected?: string): Promise<void> => {
         if (this.disabled) throw new Error('编辑器当前只读');
-        if (this.failed) { this.fallback = text; this.onChange(++this.lastRevision); return; }
+        if (this.failed) { if (expected !== undefined && this.fallback !== expected) throw new Error('编辑内容已变化，请重试'); this.fallback = text; this.onChange(++this.lastRevision); return; }
         if (!this.ready) throw new Error('编辑器尚未就绪');
-        const result: string = await this.web.runJavaScript(`window.ClashOSEditor.replace(${JSON.stringify(text)})`);
-        if (result !== 'true') throw new Error('请先完成输入，再填入配置');
+        const result: string = await this.web.runJavaScript(`window.ClashOSEditor.replace(${JSON.stringify(text)}${expected === undefined ? '' : ',' + JSON.stringify(expected)})`);
+        if (result !== 'true') throw new Error('内容已变化或输入尚未完成，请重试');
       }
     });
   }
@@ -101,21 +101,21 @@ export struct ConfigCodeEditor {
     Column({ space: 0 }) {
       if (!this.failed) Row({ space: 6 }) {
         Button('补全', { type: ButtonType.Normal }).onClick(() => this.action('complete'))
-          .fontSize(12).height(30).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).borderRadius(4).enabled(this.ready && !this.disabled);
+          .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).height(30).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).borderRadius(this.theme.radius(4)).enabled(this.ready && !this.disabled);
         Button('查找', { type: ButtonType.Normal }).onClick(() => this.action('search'))
-          .fontSize(12).height(30).fontColor(this.theme.textSecondary).backgroundColor(this.theme.surface).borderRadius(4).enabled(this.ready);
+          .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).height(30).fontColor(this.theme.textSecondary).backgroundColor(this.theme.surface).borderRadius(this.theme.radius(4)).enabled(this.ready);
         Button('撤销', { type: ButtonType.Normal }).onClick(() => this.action('undo'))
-          .fontSize(12).height(30).fontColor(this.theme.textSecondary).backgroundColor(this.theme.surface).borderRadius(4).enabled(this.ready && !this.disabled);
+          .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).height(30).fontColor(this.theme.textSecondary).backgroundColor(this.theme.surface).borderRadius(this.theme.radius(4)).enabled(this.ready && !this.disabled);
         Button('重做', { type: ButtonType.Normal }).onClick(() => this.action('redo'))
-          .fontSize(12).height(30).fontColor(this.theme.textSecondary).backgroundColor(this.theme.surface).borderRadius(4).enabled(this.ready && !this.disabled);
+          .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).height(30).fontColor(this.theme.textSecondary).backgroundColor(this.theme.surface).borderRadius(this.theme.radius(4)).enabled(this.ready && !this.disabled);
         Blank();
         Button(this.wrapped ? '自动换行 ✓' : '自动换行', { type: ButtonType.Normal }).onClick(() => {
           this.wrapped = !this.wrapped; this.editor.command('wrap', this.wrapped ? 1 : 0).catch(() => {});
-        }).fontSize(11).height(30).fontColor(this.theme.textSecondary).backgroundColor(this.theme.surface).borderRadius(4).enabled(this.ready);
+        }).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).height(30).fontColor(this.theme.textSecondary).backgroundColor(this.theme.surface).borderRadius(this.theme.radius(4)).enabled(this.ready);
       }.width('100%').padding(6).backgroundColor(this.theme.surface);
       if (this.failed) {
         TextArea({ text: this.fallback, placeholder: this.language === 'javascript' ? '输入 JavaScript 扩展脚本' : '输入 Clash YAML 或 JSON 配置' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted)
-          .fontSize(13).fontFamily('monospace').backgroundColor(this.theme.field).width('100%').layoutWeight(1).enabled(!this.disabled)
+          .fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontFamily('monospace').backgroundColor(this.theme.field).width('100%').layoutWeight(1).enabled(!this.disabled)
           .onChange((text: string) => { this.fallback = text; this.onChange(++this.lastRevision); });
       } else {
         Web({ src: $rawfile('config-editor/index.html'), controller: this.web })
@@ -125,8 +125,8 @@ export struct ConfigCodeEditor {
           .onPageEnd(() => this.initialize())
           .width('100%').layoutWeight(1).enabled(!this.disabled);
       }
-      Text(this.status).fontSize(11).fontColor(this.theme.textMuted).width('100%').padding({ left: 10, right: 10, top: 6, bottom: 6 })
+      Text(this.status).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%').padding({ left: 10, right: 10, top: 6, bottom: 6 })
         .backgroundColor(this.theme.surface).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
-    }.width('100%').layoutWeight(1).border({ width: 1, color: this.theme.border }).borderRadius(6).clip(true);
+    }.width('100%').layoutWeight(1).border({ width: 1, color: this.theme.border }).borderRadius(this.theme.radius(6)).clip(true);
   }
 }

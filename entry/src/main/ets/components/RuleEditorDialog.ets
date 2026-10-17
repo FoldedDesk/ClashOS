@@ -92,7 +92,7 @@ export struct RuleEditorDialog {
 
   @Builder
   private button(label: string, callback: () => void, primary: boolean = false) {
-    Button(label, { type: ButtonType.Normal }).height(32).fontSize(12).borderRadius(5).enabled(!this.saving)
+    Button(label, { type: ButtonType.Normal }).height(32).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).enabled(!this.saving)
       .fontColor(primary ? this.theme.onPrimary : this.theme.primary).backgroundColor(primary ? this.theme.primary : this.theme.primarySoft).onClick(callback);
   }
   @Builder
@@ -116,96 +116,96 @@ export struct RuleEditorDialog {
   private form() {
     Column({ space: 10 }) {
       Row() {
-        Text(this.editing >= 0 ? '编辑自定义规则' : this.replacedOriginal ? '覆写原始规则' : '添加自定义规则').fontSize(13).fontColor(this.theme.text).layoutWeight(1);
-        Button(this.rawMode ? '使用表单' : '使用完整规则', { type: ButtonType.Normal }).height(32).fontSize(12).borderRadius(5)
+        Text(this.editing >= 0 ? '编辑自定义规则' : this.replacedOriginal ? '覆写原始规则' : '添加自定义规则').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1);
+        Button(this.rawMode ? '使用表单' : '使用完整规则', { type: ButtonType.Normal }).height(32).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .enabled(!this.saving).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft)
           .onClick(() => { this.rawMode = !this.rawMode; this.raw = ''; });
       }.width('100%');
       if (this.rawMode) {
-        TextInput({ text: this.raw, placeholder: '例如 DOMAIN-SUFFIX,example.com,DIRECT' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).fontSize(13).height(38)
+        TextInput({ text: this.raw, placeholder: '例如 DOMAIN-SUFFIX,example.com,DIRECT' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).height(38)
           .backgroundColor(this.theme.surface).enabled(!this.saving).onChange((value: string) => this.raw = value);
       } else {
         GridRow({ columns: this.dialogWidth < 640 ? 1 : 6, gutter: 10 }) {
           GridCol({ span: this.dialogWidth < 640 ? 1 : 2 }) {
           Select(RULE_TYPES.map((text: string): SelectOption => ({ value: text }))).value(this.kind).selected(RULE_TYPES.indexOf(this.kind))
-            .height(38).font({ size: 12 }).width('100%').enabled(!this.saving)
+            .height(38).font({ size: this.theme.font(12), family: this.theme.fontFamily }).width('100%').enabled(!this.saving)
             .onSelect((index: number) => { this.kind = RULE_TYPES[index]; this.noResolve = false; });
           }
           if (this.kind !== 'MATCH') {
             GridCol({ span: this.dialogWidth < 640 ? 1 : 2 }) {
-              TextInput({ text: this.payload, placeholder: this.kind === 'RULE-SET' ? '规则集合名称' : '匹配内容' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).fontSize(13).height(38).width('100%')
+              TextInput({ text: this.payload, placeholder: this.kind === 'RULE-SET' ? '规则集合名称' : '匹配内容' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).height(38).width('100%')
                 .backgroundColor(this.theme.surface).enabled(!this.saving).onChange((value: string) => this.payload = value);
             }
           }
           GridCol({ span: this.dialogWidth < 640 ? 1 : this.kind === 'MATCH' ? 4 : 2 }) {
           Select(this.snapshot.policies.map((text: string): SelectOption => ({ value: text }))).value(this.target).selected(this.snapshot.policies.indexOf(this.target))
-            .height(38).font({ size: 12 }).width('100%').enabled(!this.saving)
+            .height(38).font({ size: this.theme.font(12), family: this.theme.fontFamily }).width('100%').enabled(!this.saving)
             .onSelect((index: number) => this.target = this.snapshot.policies[index]);
           }
         }.width('100%');
         if (['IP-CIDR', 'IP-CIDR6', 'SRC-IP-CIDR', 'SRC-IP-CIDR6', 'GEOIP', 'SRC-GEOIP', 'IP-ASN', 'SRC-IP-ASN', 'RULE-SET'].indexOf(this.kind) >= 0) {
           Row({ space: 8 }) {
             Checkbox().select(this.noResolve).selectedColor(this.theme.primary).enabled(!this.saving).onChange((value: boolean) => this.noResolve = value);
-            Text('no-resolve · 不为此规则触发域名解析').fontSize(11).fontColor(this.theme.textMuted);
+            Text('no-resolve · 不为此规则触发域名解析').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
           }.width('100%');
         }
       }
       Row({ space: 10 }) {
-        Text(this.lane === 2 ? '添加到后置规则' : '添加到前置规则').fontSize(11).fontColor(this.theme.textMuted).layoutWeight(1);
+        Text(this.lane === 2 ? '添加到后置规则' : '添加到前置规则').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).layoutWeight(1);
         if (this.editing >= 0 || this.replacedOriginal) this.button('取消编辑', () => this.cancelEdit());
-        Button(this.editing >= 0 ? '确认修改' : '添加规则', { type: ButtonType.Normal }).height(32).fontSize(12).borderRadius(5)
+        Button(this.editing >= 0 ? '确认修改' : '添加规则', { type: ButtonType.Normal }).height(32).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .enabled(!this.saving).fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary).onClick(() => this.add());
       }.width('100%');
-    }.padding(12).borderRadius(6).backgroundColor(this.theme.field).width('100%');
+    }.padding(12).borderRadius(this.theme.radius(6)).backgroundColor(this.theme.field).width('100%');
   }
   build() {
     Column({ space: 12 }) {
       Row() {
-        Text('编辑规则').fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.theme.text).layoutWeight(1);
+        Text('编辑规则').fontSize(this.theme.font(20)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold).fontColor(this.theme.text).layoutWeight(1);
         this.button('取消', (): void => { this.controller?.close(); });
       }.width('100%');
-      Text(`${this.profileName} · 自定义规则在订阅更新后保留；使用中的配置保存后立即应用。`).fontSize(12).fontColor(this.theme.textSecondary).width('100%');
+      Text(`${this.profileName} · 自定义规则在订阅更新后保留；使用中的配置保存后立即应用。`).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
       Row({ space: 8 }) {
         ForEach([0, 1, 2, 3], (value: number) => {
           Button(value === 0 ? `前置规则 ${this.prepend.length}` : value === 1 ? `原始规则 ${this.snapshot.rules.length}` : value === 2 ? `后置规则 ${this.append.length}` : `排除项 ${this.excluded.length}`,
-            { type: ButtonType.Normal }).height(32).fontSize(12).borderRadius(5).enabled(!this.saving)
+            { type: ButtonType.Normal }).height(32).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).enabled(!this.saving)
             .fontColor(this.lane === value ? this.theme.onPrimary : this.theme.primary).backgroundColor(this.lane === value ? this.theme.primary : this.theme.primarySoft)
             .onClick(() => { this.lane = value; this.maximum = 100; this.query = ''; });
         }, (value: number) => `${value}`);
       }.width('100%');
       Text(this.lane === 0 ? '前置规则优先于订阅规则，按从上到下的顺序匹配。' : this.lane === 1 ? `已排除 ${this.excluded.length} 种原始规则；排除项按完整文本匹配，原文件保持不变。` :
         this.lane === 2 ? '后置规则在订阅规则之后匹配；前面已有 MATCH 时，后置规则不会被命中。' :
-        '按完整文本排除原始规则；订阅更新后暂未出现的排除项也可在此恢复。').fontSize(11).fontColor(this.theme.textMuted).width('100%');
+        '按完整文本排除原始规则；订阅更新后暂未出现的排除项也可在此恢复。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
       if (this.lane === 0 || this.lane === 2 || this.editing >= 0 || this.replacedOriginal) this.form();
-      TextInput({ text: this.query, placeholder: '搜索规则、匹配内容或策略' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(34).fontSize(12).backgroundColor(this.theme.field)
+      TextInput({ text: this.query, placeholder: '搜索规则、匹配内容或策略' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.field)
         .onChange((value: string) => { this.query = value; this.maximum = 100; });
       Scroll() {
         Column({ space: 6 }) {
           ForEach(this.rows().slice(0, this.maximum), (row: EditorRuleRow) => {
             Row({ space: 10 }) {
-              Text(`${row.index + 1}`).fontSize(11).fontColor(this.theme.textMuted).width(30);
-              Text(row.text).fontSize(12).fontColor(row.removed ? this.theme.textMuted : this.theme.text).layoutWeight(1)
+              Text(`${row.index + 1}`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width(30);
+              Text(row.text).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(row.removed ? this.theme.textMuted : this.theme.text).layoutWeight(1)
                 .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis });
-              if (row.removed) Text('已排除').fontSize(11).fontColor(this.theme.warning);
-              Button('•••', { type: ButtonType.Normal }).width(30).height(30).fontSize(12).backgroundColor(Color.Transparent)
+              if (row.removed) Text('已排除').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.warning);
+              Button('•••', { type: ButtonType.Normal }).width(30).height(30).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).backgroundColor(Color.Transparent)
                 .fontColor(this.theme.textSecondary)
                 .enabled(!this.saving).accessibilityText(`规则 ${row.index + 1} 操作`).bindMenu(this.rowMenu(row));
-            }.width('100%').padding(10).borderRadius(5).backgroundColor(this.theme.field)
+            }.width('100%').padding(10).borderRadius(this.theme.radius(5)).backgroundColor(this.theme.field)
               .bindContextMenu(this.rowMenu(row), ResponseType.RightClick);
           }, (row: EditorRuleRow) => `${this.lane}/${row.index}/${row.text}/${row.removed}`);
-          if (this.rows().length === 0) Text('暂无匹配规则').fontSize(12).fontColor(this.theme.textMuted).padding(20);
+          if (this.rows().length === 0) Text('暂无匹配规则').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).padding(20);
           if (this.rows().length > this.maximum) Button(`显示更多（${this.maximum} / ${this.rows().length}）`, { type: ButtonType.Normal })
-            .height(32).fontSize(12).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).onClick(() => this.maximum += 100);
+            .height(32).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).onClick(() => this.maximum += 100);
         }.width('100%');
       }.width('100%').layoutWeight(1).align(Alignment.Top);
-      if (this.error) Text(this.error).fontSize(12).fontColor(this.theme.danger).width('100%').maxLines(3);
+      if (this.error) Text(this.error).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.danger).width('100%').maxLines(3);
       Row({ space: 10 }) {
         this.button('清空自定义规则', () => { this.commit({ version: 1, prepend: [], append: [], remove: [] }); this.cancelEdit(); });
         Blank();
-        Button(this.saving ? '保存中…' : '保存规则', { type: ButtonType.Normal }).height(32).fontSize(12).borderRadius(5)
+        Button(this.saving ? '保存中…' : '保存规则', { type: ButtonType.Normal }).height(32).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .enabled(!this.saving).fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary).onClick(() => this.save());
       }.width('100%');
-    }.width('92%').height('88%').constraintSize({ maxWidth: 1080 }).padding(22).borderRadius(10).backgroundColor(this.theme.surface)
+    }.width('92%').height('88%').constraintSize({ maxWidth: 1080 }).padding(22).borderRadius(this.theme.radius(10)).backgroundColor(this.theme.surface)
       .onAreaChange((_old: Area, area: Area) => this.dialogWidth = Number(area.width));
   }
 }

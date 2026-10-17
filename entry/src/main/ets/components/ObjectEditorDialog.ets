@@ -181,59 +181,59 @@ export struct ObjectEditorDialog {
   build() {
     Column({ space: 12 }) {
       Row() {
-        Text('节点与代理组').fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.theme.text).layoutWeight(1);
-        Button('取消', { type: ButtonType.Normal }).height(32).fontSize(12).borderRadius(5).fontColor(this.theme.textSecondary).backgroundColor(this.theme.field)
+        Text('节点与代理组').fontSize(this.theme.font(20)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold).fontColor(this.theme.text).layoutWeight(1);
+        Button('取消', { type: ButtonType.Normal }).height(32).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).fontColor(this.theme.textSecondary).backgroundColor(this.theme.field)
           .enabled(!this.saving).onClick(() => this.controller?.close());
       }.width('100%');
-      Text(`${this.profileName} · 修改在订阅更新后保留；原始配置保持不变。代理集合中的节点由集合源管理。`).fontSize(11).fontColor(this.theme.textSecondary).width('100%');
+      Text(`${this.profileName} · 修改在订阅更新后保留；原始配置保持不变。代理集合中的节点由集合源管理。`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
       Row({ space: 10 }) {
-        Button(`节点 ${this.count(0)}`, { type: ButtonType.Normal }).height(34).fontSize(13).borderRadius(5).fontColor(this.kind === 0 ? this.theme.onPrimary : this.theme.primary)
+        Button(`节点 ${this.count(0)}`, { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).fontColor(this.kind === 0 ? this.theme.onPrimary : this.theme.primary)
           .backgroundColor(this.kind === 0 ? this.theme.primary : this.theme.primarySoft).enabled(!this.saving).onClick(() => { this.kind = 0; this.lane = 1; this.query = ''; this.maximum = 100; });
-        Button(`代理组 ${this.count(1)}`, { type: ButtonType.Normal }).height(34).fontSize(13).borderRadius(5).fontColor(this.kind === 1 ? this.theme.onPrimary : this.theme.primary)
+        Button(`代理组 ${this.count(1)}`, { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).fontColor(this.kind === 1 ? this.theme.onPrimary : this.theme.primary)
           .backgroundColor(this.kind === 1 ? this.theme.primary : this.theme.primarySoft).enabled(!this.saving).onClick(() => { this.kind = 1; this.lane = 1; this.query = ''; this.maximum = 100; });
         Blank();
-        if (this.kind === 0) Button('导入链接', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5)
+        if (this.kind === 0) Button('导入链接', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).enabled(!this.saving).onClick(() => this.importLinks());
-        Button(this.kind === 0 ? '新建节点' : '新建代理组', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft)
+        Button(this.kind === 0 ? '新建节点' : '新建代理组', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft)
           .enabled(!this.saving).onClick(() => this.open());
       }.width('100%');
       Row({ space: 8 }) {
         ForEach([0, 1, 2, 3], (lane: number) => {
           Button(lane === 0 ? `前置 ${this.model().prepend.length}` : lane === 1 ? `原始 ${this.section().original.length}` : lane === 2 ? `后置 ${this.model().append.length}` : `排除项 ${this.model().remove.length}`,
-            { type: ButtonType.Normal }).height(30).fontSize(12).borderRadius(5).fontColor(this.lane === lane ? this.theme.onPrimary : this.theme.primary)
+            { type: ButtonType.Normal }).height(30).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).fontColor(this.lane === lane ? this.theme.onPrimary : this.theme.primary)
             .backgroundColor(this.lane === lane ? this.theme.primary : this.theme.primarySoft).enabled(!this.saving).onClick(() => { this.lane = lane; this.query = ''; this.maximum = 100; });
         }, (lane: number) => `${lane}`);
       }.width('100%');
-      TextInput({ text: this.query, placeholder: '搜索名称、协议或服务器' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(34).fontSize(12).backgroundColor(this.theme.field)
+      TextInput({ text: this.query, placeholder: '搜索名称、协议或服务器' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.field)
         .enabled(!this.saving).onChange((value: string) => { this.query = value; this.maximum = 100; });
       Scroll() {
         Column({ space: 7 }) {
           ForEach(this.rows().slice(0, this.maximum), (row: ObjectEditorRow) => {
             Row({ space: 10 }) {
               Column({ space: 5 }) {
-                Text(row.item.name).fontSize(13).fontColor(row.removed ? this.theme.textMuted : this.theme.text).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
-                Text(`${row.item.type.toUpperCase()}${row.item.server ? ` · ${row.item.server}:${row.item.port}` : ''}`).fontSize(11).fontColor(this.theme.textMuted).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
+                Text(row.item.name).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(row.removed ? this.theme.textMuted : this.theme.text).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
+                Text(`${row.item.type.toUpperCase()}${row.item.server ? ` · ${row.item.server}:${row.item.port}` : ''}`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
               }.layoutWeight(1).alignItems(HorizontalAlign.Start);
-              if (row.removed) Text('已排除').fontSize(11).fontColor(this.theme.warning);
-              if (this.lane !== 3) Button('编辑', { type: ButtonType.Normal }).height(30).fontSize(12).borderRadius(5).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft)
+              if (row.removed) Text('已排除').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.warning);
+              if (this.lane !== 3) Button('编辑', { type: ButtonType.Normal }).height(30).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft)
                 .enabled(!this.saving).onClick(() => this.open(row));
-              Button('•••', { type: ButtonType.Normal }).width(30).height(30).fontSize(13).fontColor(this.theme.textSecondary).backgroundColor(Color.Transparent)
+              Button('•••', { type: ButtonType.Normal }).width(30).height(30).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).backgroundColor(Color.Transparent)
                 .enabled(!this.saving).accessibilityText(`${row.item.name} 的条目操作`).bindMenu(this.rowMenu(row));
-            }.width('100%').padding(12).borderRadius(6).backgroundColor(this.theme.field).bindContextMenu(this.rowMenu(row), ResponseType.RightClick);
+            }.width('100%').padding(12).borderRadius(this.theme.radius(6)).backgroundColor(this.theme.field).bindContextMenu(this.rowMenu(row), ResponseType.RightClick);
           }, (row: ObjectEditorRow) => `${this.revision}/${this.kind}/${this.lane}/${row.index}/${row.item.name}`);
-          if (!this.rows().length) Text('暂无匹配条目').fontSize(12).fontColor(this.theme.textMuted).padding(24);
-          if (this.rows().length > this.maximum) Button(`显示更多（${this.maximum} / ${this.rows().length}）`, { type: ButtonType.Normal }).height(30).fontSize(12)
+          if (!this.rows().length) Text('暂无匹配条目').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).padding(24);
+          if (this.rows().length > this.maximum) Button(`显示更多（${this.maximum} / ${this.rows().length}）`, { type: ButtonType.Normal }).height(30).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily)
             .fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).onClick(() => this.maximum += 100);
         }.width('100%');
       }.width('100%').layoutWeight(1).align(Alignment.Top);
-      if (this.error) Text(this.error).fontSize(12).fontColor(this.theme.danger).width('100%').maxLines(3);
+      if (this.error) Text(this.error).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.danger).width('100%').maxLines(3);
       Row({ space: 10 }) {
-        Button('清空全部修改', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft)
+        Button('清空全部修改', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft)
           .enabled(!this.saving).onClick(() => { try { this.update(emptyObjectEdits()); } catch (error) { this.error = (error as Error).message; } });
-        Blank(); Button(this.saving ? '保存中…' : '保存并应用', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5)
+        Blank(); Button(this.saving ? '保存中…' : '保存并应用', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary).enabled(!this.saving).onClick(() => this.save());
       }.width('100%');
-    }.width('92%').height('88%').constraintSize({ maxWidth: 1080 }).padding(22).borderRadius(10).backgroundColor(this.theme.surface)
+    }.width('92%').height('88%').constraintSize({ maxWidth: 1080 }).padding(22).borderRadius(this.theme.radius(10)).backgroundColor(this.theme.surface)
       .onAreaChange((_old: Area, area: Area) => this.dialogWidth = Number(area.width));
   }
 }

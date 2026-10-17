@@ -99,88 +99,88 @@ export struct ProxyNodeDialog {
     finally { this.saving = false; }
   }
   @Builder
-  private label(text: string) { Text(text).fontSize(11).fontColor(this.theme.textSecondary).width('100%').margin({ bottom: 6 }); }
+  private label(text: string) { Text(text).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%').margin({ bottom: 6 }); }
 
   build() {
     Column({ space: 12 }) {
       Row() {
-        Text(this.title).fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.theme.text).layoutWeight(1);
-        Button(this.advanced ? '表单编辑' : '高级配置', { type: ButtonType.Normal }).height(32).fontSize(12).borderRadius(5)
+        Text(this.title).fontSize(this.theme.font(20)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold).fontColor(this.theme.text).layoutWeight(1);
+        Button(this.advanced ? '表单编辑' : '高级配置', { type: ButtonType.Normal }).height(32).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).enabled(!this.saving).onClick(() => this.mode());
       }.width('100%');
-      Text('完成编辑后返回列表；点击“保存并应用”才会写入配置。').fontSize(11).fontColor(this.theme.textMuted).width('100%');
+      Text('完成编辑后返回列表；点击“保存并应用”才会写入配置。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
       if (this.advanced) {
-        TextArea({ text: this.raw, placeholder: '单个节点的 YAML / JSON 映射' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).fontSize(12).fontFamily('monospace')
-          .backgroundColor(this.theme.field).borderRadius(6).width('100%').layoutWeight(1).enabled(!this.saving).onChange((value: string) => this.raw = value);
+        TextArea({ text: this.raw, placeholder: '单个节点的 YAML / JSON 映射' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontFamily('monospace')
+          .backgroundColor(this.theme.field).borderRadius(this.theme.radius(6)).width('100%').layoutWeight(1).enabled(!this.saving).onChange((value: string) => this.raw = value);
       } else {
         Scroll() {
           Column({ space: 14 }) {
             GridRow({ columns: this.dialogWidth < 640 ? 1 : 2, gutter: 12 }) {
-              GridCol() { Column() { this.label('节点名称'); TextInput({ text: this.form.name, placeholder: '输入名称' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13)
+              GridCol() { Column() { this.label('节点名称'); TextInput({ text: this.form.name, placeholder: '输入名称' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily)
                 .backgroundColor(this.theme.field).enabled(!this.lockName && !this.saving).onChange((value: string) => this.form.name = value); }.width('100%'); }
               GridCol() { Column() { this.label('协议'); Select(NODE_TYPES.map((value: string): SelectOption => ({ value }))).value(this.form.type).selected(NODE_TYPES.indexOf(this.form.type))
-                .height(38).width('100%').font({ size: 13 }).enabled(!this.saving).onSelect((index: number) => this.protocol(index)); }.width('100%'); }
+                .height(38).width('100%').font({ size: this.theme.font(13), family: this.theme.fontFamily }).enabled(!this.saving).onSelect((index: number) => this.protocol(index)); }.width('100%'); }
             }.width('100%');
-            if (this.lockName) Text('名称用于配置引用；需要改名可创建副本，再更新代理组或规则。').fontSize(11).fontColor(this.theme.textMuted).width('100%');
-            if (this.changedProtocol) Text('已清除原协议的其他选项；取消编辑可保留原配置。').fontSize(11).fontColor(this.theme.warning).width('100%');
+            if (this.lockName) Text('名称用于配置引用；需要改名可创建副本，再更新代理组或规则。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
+            if (this.changedProtocol) Text('已清除原协议的其他选项；取消编辑可保留原配置。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.warning).width('100%');
             if (this.form.type !== 'direct' && this.form.type !== 'reject') {
               GridRow({ columns: this.dialogWidth < 640 ? 1 : 2, gutter: 12 }) {
-                GridCol() { Column() { this.label('服务器'); TextInput({ text: this.form.server, placeholder: '域名或 IP，不含协议和路径' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13)
+                GridCol() { Column() { this.label('服务器'); TextInput({ text: this.form.server, placeholder: '域名或 IP，不含协议和路径' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily)
                   .backgroundColor(this.theme.field).onChange((value: string) => this.form.server = value); }.width('100%'); }
-                GridCol() { Column() { this.label('端口'); TextInput({ text: this.form.port, placeholder: '1 至 65535' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).type(InputType.Number)
+                GridCol() { Column() { this.label('端口'); TextInput({ text: this.form.port, placeholder: '1 至 65535' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).type(InputType.Number)
                   .backgroundColor(this.theme.field).onChange((value: string) => this.form.port = value); }.width('100%'); }
               }.width('100%');
               if (this.form.type === 'ss' || this.form.type === 'trojan') {
-                Column() { this.label('密码'); TextInput({ text: this.form.password, placeholder: '节点密码' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).type(InputType.Password).height(38).fontSize(13)
+                Column() { this.label('密码'); TextInput({ text: this.form.password, placeholder: '节点密码' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).type(InputType.Password).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily)
                   .backgroundColor(this.theme.field).onChange((value: string) => this.form.password = value); }.width('100%');
               }
               if (this.form.type === 'ss' || this.form.type === 'vmess') {
                 Column() { this.label('加密方式'); Select((this.form.type === 'ss' ? SS_CIPHERS : VMESS_CIPHERS).map((value: string): SelectOption => ({ value })))
-                  .value(this.form.cipher).selected((this.form.type === 'ss' ? SS_CIPHERS : VMESS_CIPHERS).indexOf(this.form.cipher)).height(38).width('100%').font({ size: 13 })
+                  .value(this.form.cipher).selected((this.form.type === 'ss' ? SS_CIPHERS : VMESS_CIPHERS).indexOf(this.form.cipher)).height(38).width('100%').font({ size: this.theme.font(13), family: this.theme.fontFamily })
                   .onSelect((index: number) => this.form.cipher = (this.form.type === 'ss' ? SS_CIPHERS : VMESS_CIPHERS)[index]); }.width('100%');
               }
               if (this.form.type === 'vmess') {
-                Column() { this.label('UUID'); TextInput({ text: this.form.uuid, placeholder: '节点 UUID' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).backgroundColor(this.theme.field)
+                Column() { this.label('UUID'); TextInput({ text: this.form.uuid, placeholder: '节点 UUID' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.field)
                   .onChange((value: string) => this.form.uuid = value); }.width('100%');
-                Column() { this.label('alterId（0 为 AEAD）'); TextInput({ text: this.form.alterId }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).type(InputType.Number).backgroundColor(this.theme.field)
+                Column() { this.label('alterId（0 为 AEAD）'); TextInput({ text: this.form.alterId }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).type(InputType.Number).backgroundColor(this.theme.field)
                   .onChange((value: string) => this.form.alterId = value); }.width('100%');
               }
               if (this.form.type === 'vmess' || this.form.type === 'trojan') {
                 Column() { this.label('传输方式'); Select([{ value: 'tcp' }, { value: 'ws' }]).value(this.form.network).selected(this.form.network === 'ws' ? 1 : 0)
-                  .height(38).width('100%').font({ size: 13 }).onSelect((index: number) => this.form.network = index === 1 ? 'ws' : 'tcp'); }.width('100%');
+                  .height(38).width('100%').font({ size: this.theme.font(13), family: this.theme.fontFamily }).onSelect((index: number) => this.form.network = index === 1 ? 'ws' : 'tcp'); }.width('100%');
                 if (this.form.type === 'vmess') {
-                  Row() { Text('TLS').fontSize(13).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.tls }).selectedColor(this.theme.primary)
+                  Row() { Text('TLS').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.tls }).selectedColor(this.theme.primary)
                     .onChange((value: boolean) => this.form.tls = value); }.width('100%');
                 }
                 if (this.form.tls || this.form.type === 'trojan') {
-                  Column() { this.label('TLS 服务器名称（SNI，可选）'); TextInput({ text: this.form.serverName }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).backgroundColor(this.theme.field)
+                  Column() { this.label('TLS 服务器名称（SNI，可选）'); TextInput({ text: this.form.serverName }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.field)
                     .onChange((value: string) => this.form.serverName = value); }.width('100%');
-                  Row() { Text('跳过证书校验').fontSize(13).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.skipCertVerify }).selectedColor(this.theme.primary)
+                  Row() { Text('跳过证书校验').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.skipCertVerify }).selectedColor(this.theme.primary)
                     .onChange((value: boolean) => this.form.skipCertVerify = value); }.width('100%');
                 }
                 if (this.form.network === 'ws') {
-                  Column() { this.label('WebSocket 路径'); TextInput({ text: this.form.wsPath }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).backgroundColor(this.theme.field)
+                  Column() { this.label('WebSocket 路径'); TextInput({ text: this.form.wsPath }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.field)
                     .onChange((value: string) => this.form.wsPath = value); }.width('100%');
-                  Column() { this.label('WebSocket Host（可选）'); TextInput({ text: this.form.wsHost }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).backgroundColor(this.theme.field)
+                  Column() { this.label('WebSocket Host（可选）'); TextInput({ text: this.form.wsHost }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.field)
                     .onChange((value: string) => this.form.wsHost = value); }.width('100%');
                 }
               }
             }
             if (this.form.type !== 'reject') Row() {
-              Text('UDP').fontSize(13).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.udp }).selectedColor(this.theme.primary)
+              Text('UDP').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.udp }).selectedColor(this.theme.primary)
                 .onChange((value: boolean) => this.form.udp = value);
             }.width('100%');
           }.width('100%');
         }.width('100%').layoutWeight(1).align(Alignment.Top);
       }
-      if (this.error) Text(this.error).fontSize(12).fontColor(this.theme.danger).width('100%').maxLines(3);
+      if (this.error) Text(this.error).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.danger).width('100%').maxLines(3);
       Row({ space: 10 }) {
-        Blank(); Button('取消', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5).fontColor(this.theme.textSecondary).backgroundColor(this.theme.field)
+        Blank(); Button('取消', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).fontColor(this.theme.textSecondary).backgroundColor(this.theme.field)
           .enabled(!this.saving).onClick(() => this.controller?.close());
-        Button('完成节点编辑', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5).fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary)
+        Button('完成节点编辑', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary)
           .enabled(!this.saving).onClick(() => this.save());
       }.width('100%');
-    }.width('92%').height('88%').constraintSize({ maxWidth: 840 }).padding(22).borderRadius(10).backgroundColor(this.theme.surface)
+    }.width('92%').height('88%').constraintSize({ maxWidth: 840 }).padding(22).borderRadius(this.theme.radius(10)).backgroundColor(this.theme.surface)
       .onAreaChange((_old: Area, area: Area) => this.dialogWidth = Number(area.width));
   }
 }

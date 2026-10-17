@@ -40,6 +40,7 @@ const load=name=>{
   if(name==='./GroupIconTypes')return loadProduction('GroupIconTypes.ets');
   if(name==='./GroupIconBackup')return loadProduction('GroupIconBackup.ets');
   if(name==='../theme/AppearanceTypes')return loadProduction('../theme/AppearanceTypes.ets');
+  if(name==='./NativeStyles')return loadProduction('../theme/NativeStyles.ets');
   if(name==='./TextCodec')return loadProduction('TextCodec.ets');
   if(name==='./RuleEditsTypes')return loadProduction('RuleEditsTypes.ets');
   if(name==='./ObjectEditsTypes')return loadProduction('ObjectEditsTypes.ets');

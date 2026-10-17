@@ -100,6 +100,9 @@ test('JavaScript mode stays fixed for empty scripts, object literals and script 
  for(const source of ['', '{ rules: [] }', '[1,2]', 'function main(config) { return config; }'])assert.equal(detectLanguage(source,'javascript'),'javascript');
  assert.equal(detectLanguage('{"rules":[]}'),'json');assert.equal(detectLanguage('dns:\n  enable: true'),'yaml');
 });
+test('Explicit JSON editors retain JSON diagnostics while clearing or temporarily typing invalid drafts',()=>{
+ for(const source of ['', '# accidental YAML','fontScale: 1.15','{"fontScale":'])assert.equal(detectLanguage(source,'json'),'json');
+});
 test('Real JavaScript grammar highlights keywords and finds invalid syntax without evaluating it',()=>{
  const state=EditorState.create({doc:'function main(config) {\n  throw new Error("PUBLIC");\n  return config;\n}',extensions:[javascript()]});
  const spans=[];highlightTree(syntaxTree(state),classHighlighter,(from,to,classes)=>spans.push({text:state.doc.sliceString(from,to),classes}));
@@ -128,4 +131,13 @@ test('Template replacement cannot overwrite readonly, composing or uninitialized
   const view={get state(){return state;},composing,dispatch(spec){state=state.update(spec).state;},focus(){}};
   assert.equal(replaceDocument(view,'replacement'),false);assert.equal(state.doc.toString(),'draft');
  }
+});
+test('A derived edit cannot replace a newer document, and matching CRLF drafts remain undoable',()=>{
+ const original='{"fontFamily":"","label":"PUBLIC 😀"}\r\n';let state=EditorState.create({doc:original,extensions:[history()]});const initial=state.doc;
+ const view={get state(){return state;},composing:false,dispatch(spec){state=spec.state||state.update(spec).state;},focus(){}};
+ state=state.update({changes:{from:state.doc.length,insert:' '}}).state;
+ const newer=state.doc.toString();assert.equal(replaceDocument(view,'replacement',original),false);assert.equal(state.doc.toString(),newer);
+ assert.equal(replaceDocument(view,'replacement',42),false);assert.equal(state.doc.toString(),newer);
+ state=EditorState.create({doc:original,extensions:[history()]});
+ assert(replaceDocument(view,'{"fontFamily":"monospace"}',original));assert(undo(view));assert.equal(serializeDocument(state.doc,initial,original),original);
 });

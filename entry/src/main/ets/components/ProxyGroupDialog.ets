@@ -101,7 +101,7 @@ export struct ProxyGroupDialog {
     finally { this.saving = false; }
   }
   @Builder
-  private label(text: string) { Text(text).fontSize(11).fontColor(this.theme.textSecondary).width('100%').margin({ bottom: 6 }); }
+  private label(text: string) { Text(text).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%').margin({ bottom: 6 }); }
   @Builder
   private memberMenu(name: string, index: number) {
     Menu() {
@@ -116,104 +116,104 @@ export struct ProxyGroupDialog {
   build() {
     Column({ space: 12 }) {
       Row() {
-        Text(this.title).fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.theme.text).layoutWeight(1);
-        Button(this.advanced ? '表单编辑' : '高级配置', { type: ButtonType.Normal }).height(32).fontSize(12).borderRadius(5)
+        Text(this.title).fontSize(this.theme.font(20)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold).fontColor(this.theme.text).layoutWeight(1);
+        Button(this.advanced ? '表单编辑' : '高级配置', { type: ButtonType.Normal }).height(32).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).enabled(!this.saving).onClick(() => this.mode());
       }.width('100%');
-      Text('完成编辑后返回列表；成员、规则引用和循环依赖在“保存并应用”时统一校验。').fontSize(11).fontColor(this.theme.textMuted).width('100%');
+      Text('完成编辑后返回列表；成员、规则引用和循环依赖在“保存并应用”时统一校验。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
       if (this.advanced) {
-        TextArea({ text: this.raw, placeholder: '单个代理组的 YAML / JSON 映射' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).fontSize(12).fontFamily('monospace').backgroundColor(this.theme.field)
-          .borderRadius(6).width('100%').layoutWeight(1).onChange((value: string) => this.raw = value);
+        TextArea({ text: this.raw, placeholder: '单个代理组的 YAML / JSON 映射' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontFamily('monospace').backgroundColor(this.theme.field)
+          .borderRadius(this.theme.radius(6)).width('100%').layoutWeight(1).onChange((value: string) => this.raw = value);
       } else {
         Scroll() {
           Column({ space: 14 }) {
             GridRow({ columns: this.dialogWidth < 640 ? 1 : 2, gutter: 12 }) {
-              GridCol() { Column() { this.label('代理组名称'); TextInput({ text: this.form.name, placeholder: '输入名称' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13)
+              GridCol() { Column() { this.label('代理组名称'); TextInput({ text: this.form.name, placeholder: '输入名称' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily)
                 .backgroundColor(this.theme.field).enabled(!this.lockName).onChange((value: string) => this.form.name = value); }.width('100%'); }
               GridCol() { Column() { this.label('类型'); Select(GROUP_TYPES.map((value: string): SelectOption => ({ value }))).value(this.form.type).selected(GROUP_TYPES.indexOf(this.form.type))
-                .height(38).width('100%').font({ size: 13 }).onSelect((index: number) => this.form.type = GROUP_TYPES[index]); }.width('100%'); }
+                .height(38).width('100%').font({ size: this.theme.font(13), family: this.theme.fontFamily }).onSelect((index: number) => this.form.type = GROUP_TYPES[index]); }.width('100%'); }
             }.width('100%');
-            if (this.lockName) Text('名称用于规则引用；需要改名可创建副本，再更新引用。').fontSize(11).fontColor(this.theme.textMuted).width('100%');
+            if (this.lockName) Text('名称用于规则引用；需要改名可创建副本，再更新引用。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
             Column() { this.label('代理组图标链接（可选）'); TextInput({ text: this.form.icon, placeholder: 'https://…/icon.png 或 icon.svg' })
-              .fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).backgroundColor(this.theme.field)
+              .fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.field)
               .onChange((value: string) => this.form.icon = value); }.width('100%');
-            Row() { Text('在代理页隐藏此组').fontSize(13).fontColor(this.theme.text).layoutWeight(1);
+            Row() { Text('在代理页隐藏此组').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1);
               Toggle({ type: ToggleType.Switch, isOn: this.form.hidden }).selectedColor(this.theme.primary).onChange((value: boolean) => this.form.hidden = value); }.width('100%');
             Column({ space: 8 }) {
-              Text(`成员 ${this.form.members.length} · 按列表顺序使用`).fontSize(13).fontColor(this.theme.text).width('100%');
+              Text(`成员 ${this.form.members.length} · 按列表顺序使用`).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).width('100%');
               if (this.memberChoices().length > 0) Row({ space: 10 }) {
                 Select(this.memberChoices().map((value: string): SelectOption => ({ value }))).value(this.memberChoices()[this.memberIndex] || '').selected(this.memberIndex)
-                  .height(36).font({ size: 12 }).layoutWeight(1).onSelect((index: number) => this.memberIndex = index);
-                Button('添加成员', { type: ButtonType.Normal }).height(32).fontSize(12).borderRadius(5).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).onClick(() => this.addMember());
+                  .height(36).font({ size: this.theme.font(12), family: this.theme.fontFamily }).layoutWeight(1).onSelect((index: number) => this.memberIndex = index);
+                Button('添加成员', { type: ButtonType.Normal }).height(32).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).onClick(() => this.addMember());
               }.width('100%');
               ForEach(this.form.members, (name: string, index: number) => {
                 Row({ space: 8 }) {
-                  Text(`${index + 1}`).fontSize(11).fontColor(this.theme.textMuted).width(26);
-                  Text(name).fontSize(12).fontColor(this.theme.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
-                  Button('↑', { type: ButtonType.Normal }).width(30).height(28).fontSize(13).fontColor(this.theme.textSecondary).backgroundColor(Color.Transparent).enabled(index > 0).onClick(() => this.move(index, index - 1));
-                  Button('↓', { type: ButtonType.Normal }).width(30).height(28).fontSize(13).fontColor(this.theme.textSecondary).backgroundColor(Color.Transparent).enabled(index + 1 < this.form.members.length).onClick(() => this.move(index, index + 1));
-                  Button('移除', { type: ButtonType.Normal }).height(28).fontSize(11).fontColor(this.theme.danger).backgroundColor(Color.Transparent).onClick(() => this.remove(index));
-                }.width('100%').padding(8).backgroundColor(this.theme.field).borderRadius(5).bindContextMenu(this.memberMenu(name, index), ResponseType.RightClick);
+                  Text(`${index + 1}`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width(26);
+                  Text(name).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
+                  Button('↑', { type: ButtonType.Normal }).width(30).height(28).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).backgroundColor(Color.Transparent).enabled(index > 0).onClick(() => this.move(index, index - 1));
+                  Button('↓', { type: ButtonType.Normal }).width(30).height(28).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).backgroundColor(Color.Transparent).enabled(index + 1 < this.form.members.length).onClick(() => this.move(index, index + 1));
+                  Button('移除', { type: ButtonType.Normal }).height(28).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.danger).backgroundColor(Color.Transparent).onClick(() => this.remove(index));
+                }.width('100%').padding(8).backgroundColor(this.theme.field).borderRadius(this.theme.radius(5)).bindContextMenu(this.memberMenu(name, index), ResponseType.RightClick);
               }, (name: string, index: number) => `${index}/${name}`);
             }.width('100%');
             Column({ space: 8 }) {
-              Text(`代理集合 ${this.form.providers.length}`).fontSize(13).fontColor(this.theme.text).width('100%');
+              Text(`代理集合 ${this.form.providers.length}`).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).width('100%');
               if (this.remainingProviders().length > 0) Row({ space: 10 }) {
                 Select(this.remainingProviders().map((value: string): SelectOption => ({ value }))).value(this.remainingProviders()[this.providerIndex] || '').selected(this.providerIndex)
-                  .height(36).font({ size: 12 }).layoutWeight(1).onSelect((index: number) => this.providerIndex = index);
-                Button('添加集合', { type: ButtonType.Normal }).height(32).fontSize(12).borderRadius(5).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).onClick(() => this.addProvider());
+                  .height(36).font({ size: this.theme.font(12), family: this.theme.fontFamily }).layoutWeight(1).onSelect((index: number) => this.providerIndex = index);
+                Button('添加集合', { type: ButtonType.Normal }).height(32).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).onClick(() => this.addProvider());
               }.width('100%');
               ForEach(this.form.providers, (name: string) => {
-                Row() { Text(name).fontSize(12).fontColor(this.theme.text).layoutWeight(1); Button('移除集合', { type: ButtonType.Normal }).height(28).fontSize(11)
+                Row() { Text(name).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1); Button('移除集合', { type: ButtonType.Normal }).height(28).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily)
                   .fontColor(this.theme.danger).backgroundColor(Color.Transparent).onClick(() => { this.form.providers = this.form.providers.filter((current: string) => current !== name); this.providerIndex = 0; });
-                }.width('100%').padding(8).backgroundColor(this.theme.field).borderRadius(5);
+                }.width('100%').padding(8).backgroundColor(this.theme.field).borderRadius(this.theme.radius(5));
               }, (name: string) => name);
-              if (!this.providerChoices.length) Text('当前配置未定义代理集合').fontSize(11).fontColor(this.theme.textMuted).width('100%');
+              if (!this.providerChoices.length) Text('当前配置未定义代理集合').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
             }.width('100%');
-            Row() { Text('包含全部配置节点').fontSize(13).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.includeAllProxies }).selectedColor(this.theme.primary)
+            Row() { Text('包含全部配置节点').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.includeAllProxies }).selectedColor(this.theme.primary)
               .onChange((value: boolean) => this.form.includeAllProxies = value); }.width('100%');
-            Row() { Text('包含全部代理集合').fontSize(13).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.includeAllProviders }).selectedColor(this.theme.primary)
+            Row() { Text('包含全部代理集合').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.includeAllProviders }).selectedColor(this.theme.primary)
               .onChange((value: boolean) => this.form.includeAllProviders = value); }.width('100%');
             GridRow({ columns: this.dialogWidth < 640 ? 1 : 2, gutter: 12 }) {
-              GridCol() { Column() { this.label('名称筛选表达式（可选）'); TextInput({ text: this.form.filter }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).backgroundColor(this.theme.field)
+              GridCol() { Column() { this.label('名称筛选表达式（可选）'); TextInput({ text: this.form.filter }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.field)
                 .onChange((value: string) => this.form.filter = value); }.width('100%'); }
-              GridCol() { Column() { this.label('名称排除表达式（可选）'); TextInput({ text: this.form.excludeFilter }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).backgroundColor(this.theme.field)
+              GridCol() { Column() { this.label('名称排除表达式（可选）'); TextInput({ text: this.form.excludeFilter }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.field)
                 .onChange((value: string) => this.form.excludeFilter = value); }.width('100%'); }
             }.width('100%');
             if (this.form.type !== 'select') {
-              Column() { this.label('健康检查地址'); TextInput({ text: this.form.url }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).backgroundColor(this.theme.field)
+              Column() { this.label('健康检查地址'); TextInput({ text: this.form.url }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.field)
                 .onChange((value: string) => this.form.url = value); }.width('100%');
               GridRow({ columns: this.dialogWidth < 640 ? 1 : 3, gutter: 12 }) {
-                GridCol() { Column() { this.label('检查间隔（秒，0 关闭）'); TextInput({ text: this.form.interval }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).type(InputType.Number).backgroundColor(this.theme.field)
+                GridCol() { Column() { this.label('检查间隔（秒，0 关闭）'); TextInput({ text: this.form.interval }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).type(InputType.Number).backgroundColor(this.theme.field)
                   .onChange((value: string) => this.form.interval = value); }.width('100%'); }
-                GridCol() { Column() { this.label('超时（毫秒）'); TextInput({ text: this.form.timeout }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).type(InputType.Number).backgroundColor(this.theme.field)
+                GridCol() { Column() { this.label('超时（毫秒）'); TextInput({ text: this.form.timeout }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).type(InputType.Number).backgroundColor(this.theme.field)
                   .onChange((value: string) => this.form.timeout = value); }.width('100%'); }
-                GridCol() { Column() { this.label('延迟容差（毫秒）'); TextInput({ text: this.form.tolerance }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).type(InputType.Number).backgroundColor(this.theme.field)
+                GridCol() { Column() { this.label('延迟容差（毫秒）'); TextInput({ text: this.form.tolerance }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).type(InputType.Number).backgroundColor(this.theme.field)
                   .onChange((value: string) => this.form.tolerance = value); }.width('100%'); }
               }.width('100%');
-              Column() { this.label('预期状态码'); TextInput({ text: this.form.expectedStatus, placeholder: '* 或 204/200-299' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).backgroundColor(this.theme.field)
+              Column() { this.label('预期状态码'); TextInput({ text: this.form.expectedStatus, placeholder: '* 或 204/200-299' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.field)
                 .onChange((value: string) => this.form.expectedStatus = value); }.width('100%');
-              Row() { Text('仅在使用时检查（lazy）').fontSize(13).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.lazy }).selectedColor(this.theme.primary)
+              Row() { Text('仅在使用时检查（lazy）').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.lazy }).selectedColor(this.theme.primary)
                 .onChange((value: boolean) => this.form.lazy = value); }.width('100%');
             }
             if (this.form.type === 'load-balance') {
               Column() { this.label('分配策略'); Select(GROUP_STRATEGIES.map((value: string): SelectOption => ({ value }))).value(this.form.strategy).selected(GROUP_STRATEGIES.indexOf(this.form.strategy))
-                .height(38).width('100%').font({ size: 13 }).onSelect((index: number) => this.form.strategy = GROUP_STRATEGIES[index]); }.width('100%');
+                .height(38).width('100%').font({ size: this.theme.font(13), family: this.theme.fontFamily }).onSelect((index: number) => this.form.strategy = GROUP_STRATEGIES[index]); }.width('100%');
             } else {
-              Column() { this.label('默认选择（可选，无已保存选择时生效）'); TextInput({ text: this.form.defaultSelected }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).backgroundColor(this.theme.field)
+              Column() { this.label('默认选择（可选，无已保存选择时生效）'); TextInput({ text: this.form.defaultSelected }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.field)
                 .onChange((value: string) => this.form.defaultSelected = value); }.width('100%');
             }
-            Row() { Text('禁用此组的 UDP').fontSize(13).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.disableUdp }).selectedColor(this.theme.primary)
+            Row() { Text('禁用此组的 UDP').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.disableUdp }).selectedColor(this.theme.primary)
               .onChange((value: boolean) => this.form.disableUdp = value); }.width('100%');
           }.width('100%');
         }.width('100%').layoutWeight(1).align(Alignment.Top);
       }
-      if (this.error) Text(this.error).fontSize(12).fontColor(this.theme.danger).width('100%').maxLines(3);
+      if (this.error) Text(this.error).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.danger).width('100%').maxLines(3);
       Row({ space: 10 }) {
-        Blank(); Button('取消', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5).fontColor(this.theme.textSecondary).backgroundColor(this.theme.field).onClick(() => this.controller?.close());
-        Button('完成代理组编辑', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5).fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary).enabled(!this.saving).onClick(() => this.save());
+        Blank(); Button('取消', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).fontColor(this.theme.textSecondary).backgroundColor(this.theme.field).onClick(() => this.controller?.close());
+        Button('完成代理组编辑', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary).enabled(!this.saving).onClick(() => this.save());
       }.width('100%');
-    }.width('92%').height('90%').constraintSize({ maxWidth: 920 }).padding(22).borderRadius(10).backgroundColor(this.theme.surface)
+    }.width('92%').height('90%').constraintSize({ maxWidth: 920 }).padding(22).borderRadius(this.theme.radius(10)).backgroundColor(this.theme.surface)
       .onAreaChange((_old: Area, area: Area) => this.dialogWidth = Number(area.width));
   }
 }

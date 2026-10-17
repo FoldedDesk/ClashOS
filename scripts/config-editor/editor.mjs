@@ -30,7 +30,7 @@ function grammar(name){
 }
 function palette(p){
   return [EditorView.theme({
-    '&':{color:p.text,backgroundColor:p.field},'.cm-content':{caretColor:p.primary},'.cm-cursor,.cm-dropCursor':{borderLeftColor:p.primary},
+    '&':{color:p.text,backgroundColor:p.field,fontSize:`${13*(Number.isFinite(p.fontScale)?Math.min(1.3,Math.max(.85,p.fontScale)):1)}px`},'.cm-content':{caretColor:p.primary},'.cm-cursor,.cm-dropCursor':{borderLeftColor:p.primary},
     '.cm-gutters':{backgroundColor:p.surface,color:p.textMuted,borderRightColor:p.border},'.cm-activeLineGutter,.cm-activeLine':{backgroundColor:p.primarySoft},
     '.cm-selectionBackground,.cm-content ::selection':{background:p.primaryBorder+'88'},'&.cm-focused .cm-selectionBackground':{background:p.primaryBorder+'88'},
     '.cm-tooltip':{backgroundColor:p.surface,color:p.text,borderColor:p.border},'.cm-tooltip-autocomplete > ul > li[aria-selected]':{backgroundColor:p.primary,color:p.onPrimary},
@@ -54,7 +54,7 @@ function status(){
 function mount(options){
   if(view)return false;
   initialText=options.text;
-  mode=options.language==='javascript'?'javascript':'auto';scriptScope=options.scriptScope||'';
+  mode=['javascript','json'].includes(options.language)?options.language:'auto';scriptScope=options.scriptScope||'';
   // Preserve the document's original line separator when serializing. CM's
   // internal line tree uses LF, including for CRLF input and native edits.
   view=new EditorView({parent:document.getElementById('editor'),state:EditorState.create({doc:initialText,extensions:[
@@ -95,7 +95,7 @@ function markError(message){
   const from=Math.min(line.to,line.from+Math.max(0,position.column-1));
   view.dispatch(setDiagnostics(view.state,[{from,to:Math.min(line.to,from+1),severity:'error',message}]));command('goto',line.number);
 }
-function replace(text){
-  return replaceDocument(view,text);
+function replace(text,expected){
+  return replaceDocument(view,text,expected);
 }
 window.ClashOSEditor=Object.freeze({mount,snapshot,command,replace,markError,setTheme(theme){if(view)view.dispatch({effects:themeSlot.reconfigure(palette(theme))});}});

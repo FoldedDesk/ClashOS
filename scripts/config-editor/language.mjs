@@ -1,5 +1,5 @@
 export function detectLanguage(text,mode='auto') {
-  if(mode==='javascript')return 'javascript';
+  if(mode==='javascript'||mode==='json')return mode;
   return /^[\s\uFEFF]*[\[{]/.test(text)?'json':'yaml';
 }
 

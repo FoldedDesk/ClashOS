@@ -5,10 +5,10 @@ import { utf8Bytes } from './TextCodec';
 export function loadAppearance(filesDir: string): AppearanceSettings {
   const path: string = `${filesDir}/appearance.json`;
   if (!fileIo.accessSync(path)) return { mode: 'system', accent: DEFAULT_ACCENT };
-  if (fileIo.statSync(path).size > 4096) throw new Error('外观设置文件过大');
+  if (fileIo.statSync(path).size > 16384) throw new Error('外观设置文件过大');
   const value: AppearanceSettings = JSON.parse(fileIo.readTextSync(path)) as AppearanceSettings;
   if (!value || typeof value.mode !== 'string' || typeof value.accent !== 'string') throw new Error('外观设置格式无效');
-  return appearanceSettings(value.mode, value.accent);
+  return appearanceSettings(value.mode, value.accent, value.styles);
 }
 
 export class AppearanceStore {
@@ -20,7 +20,7 @@ export class AppearanceStore {
     return loadAppearance(this.filesDir);
   }
   save(settings: AppearanceSettings): void {
-    const value: AppearanceSettings = appearanceSettings(settings.mode, settings.accent);
+    const value: AppearanceSettings = appearanceSettings(settings.mode, settings.accent, settings.styles);
     const temporary: string = `${this.path}.tmp`; let committed: boolean = false;
     try {
       const file = fileIo.openSync(temporary, fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.TRUNC);

@@ -1,6 +1,7 @@
 import { ProfileStore, ClashProfile } from './ProfileStore';
 import { AppearanceController } from './AppearanceController';
 import { AppearanceSettings } from '../theme/AppearanceTypes';
+import { sameAppearance as appearancesEqual } from '../theme/AppearanceTypes';
 import { BackupGlobals, BackupRestoreSelection, BackupRestoreResult } from './BackupTypes';
 import { GroupIconStore } from './GroupIconStore';
 
@@ -18,7 +19,7 @@ export class BackupRestoreCoordinator {
     this.profiles = profiles; this.appearance = appearance; this.active = active; this.icons = icons;
   }
   private sameGlobals(a: BackupGlobals, b: BackupGlobals): boolean { return a.merge === b.merge && a.script === b.script; }
-  private sameAppearance(a: AppearanceSettings, b: AppearanceSettings): boolean { return a.mode === b.mode && a.accent === b.accent; }
+  private sameAppearance(a: AppearanceSettings, b: AppearanceSettings): boolean { return appearancesEqual(a, b); }
 
   async restore(text: string, selection: BackupRestoreSelection, runtime?: BackupRuntime): Promise<BackupRestoreResult> {
     const preview = this.profiles.inspectBackup(text, selection.globals);
@@ -55,7 +56,7 @@ export class BackupRestoreCoordinator {
         // Native API calls above may yield; do not overwrite a newer preference.
         if (previousAppearance && !this.sameAppearance(previousAppearance, this.appearance.savedSettings())) throw new Error('外观设置已变化，请重新预览备份');
         appearanceAttempted = true;
-        this.appearance.save(preview.archive.appearance.mode, preview.archive.appearance.accent);
+        this.appearance.save(preview.archive.appearance.mode, preview.archive.appearance.accent, preview.archive.appearance.styles);
       }
       // Last synchronous commit: a failed icon import leaves the old index/images
       // intact, so earlier profile/global/appearance steps can still be rolled back.
@@ -65,7 +66,7 @@ export class BackupRestoreCoordinator {
       const problems: string[] = [];
       if (appearanceAttempted && previousAppearance && this.appearance) {
         try {
-          if (!this.sameAppearance(previousAppearance, this.appearance.savedSettings())) this.appearance.save(previousAppearance.mode, previousAppearance.accent);
+          if (!this.sameAppearance(previousAppearance, this.appearance.savedSettings())) this.appearance.save(previousAppearance.mode, previousAppearance.accent, previousAppearance.styles ?? null);
         } catch (_) { problems.push('外观未能撤回'); }
       }
       if (globalsChanged) {

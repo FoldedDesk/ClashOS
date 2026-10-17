@@ -1,4 +1,5 @@
 import { appearanceSettings } from './AppearanceTypes';
+import { NativeStyles, NativeStyleColors, nativeStyles } from './NativeStyles';
 export { AppearanceSettings, DEFAULT_ACCENT, appearanceSettings } from './AppearanceTypes';
 function channels(color: string): number[] {
   return [parseInt(color.slice(1, 3), 16), parseInt(color.slice(3, 5), 16), parseInt(color.slice(5, 7), 16)];
@@ -49,9 +50,19 @@ export class VergePalette {
   pageHeaderHeight: number = 60;
   cardRadius: number = 8;
   contentGap: number = 12;
+  fontFamily: string = 'HarmonyOS Sans';
+  fontScale: number = 1;
+  font(size: number): number { return size * this.fontScale; }
+  radius(size: number): number { return Math.min(32, size * this.cardRadius / 8); }
 }
 
-export function createPalette(dark: boolean, accent: string): VergePalette {
+function readable(color: string, backgrounds: string[]): string {
+  const minimum = (value: string): number => Math.min(...backgrounds.map((background: string) => contrast(value, background)));
+  const target: string = minimum('#FFFFFF') > minimum('#000000') ? '#FFFFFF' : '#000000';
+  for (let step: number = 0; step < 80; ++step) { if (minimum(color) >= 4.5) return color; color = mixColor(target, color, 0.1); }
+  throw new Error('背景颜色的明暗差异过大，请为浅色和深色分别使用亮度接近的背景色');
+}
+export function createPalette(dark: boolean, accent: string, custom?: NativeStyles): VergePalette {
   const theme: VergePalette = new VergePalette(); theme.dark = dark;
   if (dark) {
     theme.canvas = '#17171B'; theme.chrome = '#1D1D23'; theme.surface = '#24242B';
@@ -60,14 +71,34 @@ export function createPalette(dark: boolean, accent: string): VergePalette {
     theme.border = '#41414D'; theme.divider = '#34343F'; theme.navigationHover = '#30303A';
     theme.success = '#62D3A0'; theme.warning = '#EDB47E'; theme.danger = '#FF8DA3'; theme.purple = '#B89AEE';
   }
+  const styles: NativeStyles = nativeStyles(custom), colors: NativeStyleColors = dark ? styles.dark : styles.light;
+  theme.fontFamily = styles.fontFamily || 'HarmonyOS Sans'; theme.fontScale = styles.fontScale;
+  theme.cardRadius = styles.cardRadius; theme.contentGap = styles.contentGap;
+  theme.canvas = colors.canvas ?? theme.canvas; theme.chrome = colors.chrome ?? theme.chrome;
+  theme.surface = colors.surface ?? theme.surface; theme.field = colors.field ?? theme.field;
+  theme.text = colors.text ?? theme.text; theme.textSecondary = colors.textSecondary ?? theme.textSecondary;
+  theme.textMuted = colors.textMuted ?? theme.textMuted; theme.border = colors.border ?? theme.border; theme.divider = colors.divider ?? theme.divider;
+  const customized: boolean = [colors.canvas, colors.chrome, colors.surface, colors.field, colors.text,
+    colors.textSecondary, colors.textMuted, colors.border, colors.divider].some((value: string | undefined) => value !== undefined);
+  if (customized) {
+    const backgrounds: string[] = [theme.canvas, theme.chrome, theme.surface, theme.field];
+    theme.text = readable(theme.text, backgrounds); theme.textSecondary = readable(theme.textSecondary, backgrounds); theme.textMuted = readable(theme.textMuted, backgrounds);
+    theme.success = readable(theme.success, backgrounds); theme.warning = readable(theme.warning, backgrounds);
+    theme.danger = readable(theme.danger, backgrounds); theme.purple = readable(theme.purple, backgrounds);
+    theme.surfaceHover = mixColor(theme.text, theme.surface, 0.035); theme.navigationHover = mixColor(theme.text, theme.chrome, 0.06);
+  }
   // Keep text accents readable, including user-selected very pale/dark colors.
   let primary: string = appearanceSettings('system', accent).accent;
-  const target: string = dark ? '#FFFFFF' : '#000000';
-  for (let step: number = 0; step < 40; ++step) {
+  const backgrounds: string[] = [theme.surface, theme.chrome, theme.field, theme.canvas];
+  if (customized) primary = readable(primary, backgrounds);
+  const target: string = customized ? (contrast('#FFFFFF', theme.surface) > contrast('#000000', theme.surface) ? '#FFFFFF' : '#000000') : dark ? '#FFFFFF' : '#000000';
+  for (let step: number = 0; step < 80; ++step) {
     const soft: string = mixColor(primary, theme.surface, dark ? 0.17 : 0.08);
-    if (contrast(primary, theme.surface) >= 4.5 && contrast(primary, soft) >= 4.5) break;
+    if (contrast(primary, theme.surface) >= 4.5 && contrast(primary, soft) >= 4.5 && (!customized || backgrounds.every((background: string) => contrast(primary, background) >= 4.5))) break;
     primary = mixColor(target, primary, 0.08);
   }
+  if (customized && (!backgrounds.every((background: string) => contrast(primary, background) >= 4.5) ||
+    contrast(primary, mixColor(primary, theme.surface, dark ? 0.17 : 0.08)) < 4.5)) throw new Error('背景色无法保持文字清晰，请调整颜色后重试');
   theme.primary = primary;
   theme.onPrimary = contrast('#FFFFFF', primary) >= contrast('#171719', primary) ? '#FFFFFF' : '#171719';
   theme.primarySoft = mixColor(primary, theme.surface, dark ? 0.17 : 0.08);

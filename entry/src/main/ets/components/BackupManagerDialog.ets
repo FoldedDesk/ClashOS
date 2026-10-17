@@ -146,6 +146,7 @@ export struct BackupManagerDialog {
     this.globalSummary = preview.archive.globals ? `YAML：${preview.archive.globals.merge ? `${utf8Bytes(preview.archive.globals.merge).length} 字节` : '空，将清除现有扩展'}；脚本：${preview.archive.globals.script ? `${utf8Bytes(preview.archive.globals.script).length} 字节` : '空，将清除现有脚本'}` : '';
     const appearance: AppearanceSettings | undefined = preview.archive.appearance;
     this.appearanceSummary = appearance ? `${appearance.mode === 'system' ? '跟随系统' : appearance.mode === 'dark' ? '深色' : '浅色'} · ${appearance.accent}` : '';
+    if (appearance?.styles) this.appearanceSummary += ` · 字号 ${Math.round(appearance.styles.fontScale * 100)}% · 自定义样式`;
     if (preview.archive.groupIcons) this.appearanceSummary += ` · ${preview.archive.groupIcons.entries.length} 个代理组图标（替换本机覆盖）`;
     this.expectedGlobals = preview.currentGlobals; this.expectedNames = preview.namesSnapshot;
     try { this.expectedAppearance = this.readAppearance(); } catch (_) { this.expectedAppearance = undefined; }
@@ -231,7 +232,7 @@ export struct BackupManagerDialog {
 
   @Builder
   private action(label: string, callback: () => void, primary: boolean = false) {
-    Button(label, { type: ButtonType.Normal }).fontSize(12).height(34).borderRadius(5)
+    Button(label, { type: ButtonType.Normal }).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).height(34).borderRadius(this.theme.radius(5))
       .fontColor(primary ? this.theme.onPrimary : this.theme.primary).backgroundColor(primary ? this.theme.primary : this.theme.primarySoft)
       .enabled(this.busy.length === 0).onClick(callback);
   }
@@ -256,15 +257,15 @@ export struct BackupManagerDialog {
     Row({ space: 12 }) {
       Image($r('app.media.verge_file')).width(24).height(24);
       Column({ space: 5 }) {
-        Text(this.time(entry.updatedAt)).fontSize(14).fontWeight(FontWeight.Medium).fontColor(this.theme.text);
-        Text(`${this.formatSize(entry.bytes)} · ${entry.name}`).fontSize(11).fontColor(this.theme.textMuted)
+        Text(this.time(entry.updatedAt)).fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.text);
+        Text(`${this.formatSize(entry.bytes)} · ${entry.name}`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted)
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
       }.layoutWeight(1).alignItems(HorizontalAlign.Start);
       this.action('预览恢复', () => this.preview(entry));
       Button({ type: ButtonType.Normal }) { Image($r('app.media.verge_more')).width(19).height(19); }
         .width(32).height(34).backgroundColor(Color.Transparent).enabled(this.busy.length === 0)
         .accessibilityText(`${entry.remote ? 'WebDAV' : '本地'}备份操作`).bindMenu(this.entryMenu(entry));
-    }.width('100%').padding(14).backgroundColor(this.theme.surface).borderRadius(7)
+    }.width('100%').padding(14).backgroundColor(this.theme.surface).borderRadius(this.theme.radius(7))
       .bindContextMenu(this.entryMenu(entry), ResponseType.RightClick);
   }
 
@@ -272,11 +273,11 @@ export struct BackupManagerDialog {
   private createContent() {
     Column({ space: 12 }) {
       Text('选择本次备份的配置与设置。配置原文及其中的凭据会保留；应用单独保存的 WebDAV 账户和内置控制器密钥不会额外打包。')
-        .fontSize(12).fontColor(this.theme.textSecondary).width('100%');
+        .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
       Row({ space: 10 }) {
         this.action('选择全部配置', () => this.createSelected = this.createRows.map((profile: ClashProfile) => profile.id));
         this.action('取消全选', () => this.createSelected = []);
-        Text(`已选 ${this.createSelected.length} / ${this.createRows.length}`).fontSize(12).fontColor(this.theme.textMuted);
+        Text(`已选 ${this.createSelected.length} / ${this.createRows.length}`).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
       }.width('100%');
       Scroll() {
         Column({ space: 8 }) {
@@ -285,25 +286,25 @@ export struct BackupManagerDialog {
               Checkbox({ name: `backup-${profile.id}` }).select(this.createSelected.indexOf(profile.id) >= 0).selectedColor(this.theme.primary)
                 .accessibilityText(`备份配置：${profile.name}`).enabled(this.busy.length === 0)
                 .onChange((checked: boolean) => this.createSelected = checked ? this.createSelected.indexOf(profile.id) < 0 ? [...this.createSelected, profile.id] : this.createSelected : this.createSelected.filter((id: string) => id !== profile.id));
-              Text(profile.name).fontSize(14).fontColor(this.theme.text).layoutWeight(1).maxLines(2);
-            }.width('100%').padding(14).borderRadius(7).backgroundColor(this.theme.surface);
+              Text(profile.name).fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1).maxLines(2);
+            }.width('100%').padding(14).borderRadius(this.theme.radius(7)).backgroundColor(this.theme.surface);
           }, (profile: ClashProfile) => profile.id);
-          if (!this.createRows.length) Text('当前没有配置，仍可备份全局扩展与外观。').fontSize(12).fontColor(this.theme.textMuted).width('100%').padding(14);
+          if (!this.createRows.length) Text('当前没有配置，仍可备份全局扩展与外观。').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%').padding(14);
         }.width('100%');
       }.width('100%').layoutWeight(1).align(Alignment.Top);
       Row({ space: 10 }) {
         Checkbox({ name: 'backup-globals' }).select(this.includeGlobals).selectedColor(this.theme.primary).enabled(this.busy.length === 0)
           .accessibilityText('备份全局扩展与脚本').onChange((checked: boolean) => this.includeGlobals = checked);
-        Text('包含全局 YAML 扩展与 JavaScript 脚本').fontSize(13).fontColor(this.theme.text).layoutWeight(1);
+        Text('包含全局 YAML 扩展与 JavaScript 脚本').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1);
       }.width('100%');
       Row({ space: 10 }) {
         Checkbox({ name: 'backup-appearance' }).select(this.includeAppearance).selectedColor(this.theme.primary).enabled(this.busy.length === 0)
           .accessibilityText('备份外观').onChange((checked: boolean) => this.includeAppearance = checked);
-        Text('包含外观：颜色模式、主题色与代理组图标（含本机图片）').fontSize(13).fontColor(this.theme.text).layoutWeight(1);
+        Text('包含外观：颜色模式、主题色、样式与代理组图标（含本机图片）').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1);
       }.width('100%');
       Row({ space: 10 }) {
         Blank(); this.action('返回备份列表', () => this.creating = false);
-        Button(this.pendingUpload ? '创建并上传所选内容' : '创建所选备份', { type: ButtonType.Normal }).height(36).fontSize(13).borderRadius(5)
+        Button(this.pendingUpload ? '创建并上传所选内容' : '创建所选备份', { type: ButtonType.Normal }).height(36).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary)
           .enabled(this.busy.length === 0 && (this.createSelected.length > 0 || this.includeGlobals || this.includeAppearance)).onClick(() => this.confirmCreate());
       }.width('100%');
@@ -313,10 +314,10 @@ export struct BackupManagerDialog {
   @Builder
   private previewContent() {
     Column({ space: 12 }) {
-      Text(`备份时间：${this.time(this.previewTime)}`).fontSize(12).fontColor(this.theme.textSecondary).width('100%');
-      if (this.migrationNotes) Text(this.migrationNotes).fontSize(11).fontColor(this.theme.textSecondary).width('100%');
+      Text(`备份时间：${this.time(this.previewTime)}`).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
+      if (this.migrationNotes) Text(this.migrationNotes).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
       Text(this.restoreGlobals ? '将替换全局扩展并重新加载当前内置配置。应用端口覆盖、认证和账户设置保留；扩展中的端口字段可能改变实际监听端口。' : '配置恢复为独立副本，不切换活动配置。全局设置默认保留，可在下方单独选择。')
-        .fontSize(12).fontColor(this.theme.textSecondary).width('100%');
+        .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
       if (this.hasGlobals) {
         Row({ space: 10 }) {
           Checkbox({ name: 'restore-globals' }).select(this.restoreGlobals).selectedColor(this.theme.primary).enabled(this.busy.length === 0)
@@ -327,8 +328,8 @@ export struct BackupManagerDialog {
               catch (error) { this.error = (error as Error).message; }
             });
           Column({ space: 4 }) {
-            Text('恢复备份中的全局扩展与脚本').fontSize(13).fontColor(this.theme.text);
-            Text(this.globalSummary).fontSize(11).fontColor(this.theme.textMuted);
+            Text('恢复备份中的全局扩展与脚本').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
+            Text(this.globalSummary).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
           }.layoutWeight(1).alignItems(HorizontalAlign.Start);
         }.width('100%');
       }
@@ -336,13 +337,13 @@ export struct BackupManagerDialog {
         Row({ space: 10 }) {
           Checkbox({ name: 'restore-appearance' }).select(this.restoreAppearance).selectedColor(this.theme.primary).enabled(this.busy.length === 0)
             .accessibilityText('恢复外观').onChange((checked: boolean) => this.restoreAppearance = checked);
-          Text(`恢复外观：${this.appearanceSummary}`).fontSize(13).fontColor(this.theme.text).layoutWeight(1);
+          Text(`恢复外观：${this.appearanceSummary}`).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1);
         }.width('100%');
       }
       Row({ space: 10 }) {
         this.action('选择全部可用配置', () => this.selected = this.previewRows.filter((row: BackupPreviewRow) => row.valid).map((row: BackupPreviewRow) => row.index));
         this.action('取消全选', () => this.selected = []);
-        Text(`已选 ${this.selected.length} / ${this.previewRows.length}`).fontSize(12).fontColor(this.theme.textMuted);
+        Text(`已选 ${this.selected.length} / ${this.previewRows.length}`).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
       }.width('100%');
       Scroll() {
         Column({ space: 8 }) {
@@ -352,20 +353,20 @@ export struct BackupManagerDialog {
                 .selectedColor(this.theme.primary).enabled(row.valid && this.busy.length === 0)
                 .onChange((checked: boolean) => this.selected = checked ? this.selected.indexOf(row.index) < 0 ? [...this.selected, row.index] : this.selected : this.selected.filter((value: number) => value !== row.index));
               Column({ space: 5 }) {
-                Text(row.name).fontSize(14).fontColor(this.theme.text).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
-                if (row.restoreName !== row.name) Text(`恢复为：${row.restoreName}`).fontSize(11).fontColor(this.theme.textMuted).maxLines(2);
+                Text(row.name).fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
+                if (row.restoreName !== row.name) Text(`恢复为：${row.restoreName}`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).maxLines(2);
                 Text(row.valid ? `配置可加载 · ${row.resources} 份集合缓存` : '当前内核无法加载此配置，已跳过；原文仍保留在备份中')
-                  .fontSize(11).fontColor(row.valid ? this.theme.textMuted : this.theme.warning);
-                if (!row.valid && row.error) Text(row.error).fontSize(11).fontColor(this.theme.warning).maxLines(2);
+                  .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(row.valid ? this.theme.textMuted : this.theme.warning);
+                if (!row.valid && row.error) Text(row.error).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.warning).maxLines(2);
               }.layoutWeight(1).alignItems(HorizontalAlign.Start);
-            }.width('100%').padding(14).backgroundColor(this.theme.surface).borderRadius(7);
+            }.width('100%').padding(14).backgroundColor(this.theme.surface).borderRadius(this.theme.radius(7));
           }, (row: BackupPreviewRow) => `${row.index}`);
         }.width('100%');
       }.width('100%').layoutWeight(1).align(Alignment.Top);
       Row({ space: 10 }) {
         Blank();
         this.action('返回备份列表', () => { this.previewing = false; this.pendingText = ''; this.previewRows = []; this.selected = []; });
-        Button('恢复选中内容', { type: ButtonType.Normal }).height(36).fontSize(13).borderRadius(5)
+        Button('恢复选中内容', { type: ButtonType.Normal }).height(36).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary).enabled(this.previewReady && (this.selected.length > 0 || this.restoreGlobals || this.restoreAppearance) && this.busy.length === 0)
           .onClick(() => this.restore());
       }.width('100%');
@@ -375,9 +376,9 @@ export struct BackupManagerDialog {
   build() {
     Column({ space: 14 }) {
       Row() {
-        Text(this.creating ? '新建备份' : this.previewing ? '恢复备份' : '配置备份与恢复').fontSize(21).fontWeight(FontWeight.Bold).fontColor(this.theme.text).layoutWeight(1);
-        Button('关闭', { type: ButtonType.Normal }).height(32).fontSize(12).backgroundColor(this.theme.field)
-          .fontColor(this.theme.textSecondary).borderRadius(5).onClick(() => { this.client?.close(); this.controller?.close(); });
+        Text(this.creating ? '新建备份' : this.previewing ? '恢复备份' : '配置备份与恢复').fontSize(this.theme.font(21)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold).fontColor(this.theme.text).layoutWeight(1);
+        Button('关闭', { type: ButtonType.Normal }).height(32).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.field)
+          .fontColor(this.theme.textSecondary).borderRadius(this.theme.radius(5)).onClick(() => { this.client?.close(); this.controller?.close(); });
       }.width('100%');
       if (this.creating) {
         this.createContent();
@@ -385,12 +386,12 @@ export struct BackupManagerDialog {
         this.previewContent();
       } else {
         Text('备份可包含配置原文及其凭据、扩展/脚本、可视化修改、集合缓存，以及可选的全局扩展和外观。不会额外收集应用端口覆盖、WebDAV 账户、内置控制器密钥和地理数据库。')
-          .fontSize(12).fontColor(this.theme.textSecondary).width('100%');
+          .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
         Row({ space: 8 }) {
-          Button('本地备份', { type: ButtonType.Normal }).height(36).fontSize(13).borderRadius(5)
+          Button('本地备份', { type: ButtonType.Normal }).height(36).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
             .backgroundColor(this.remoteMode ? this.theme.surface : this.theme.primarySoft).fontColor(this.remoteMode ? this.theme.textSecondary : this.theme.primary)
             .enabled(this.busy.length === 0).onClick(() => this.remoteMode = false);
-          Button('WebDAV', { type: ButtonType.Normal }).height(36).fontSize(13).borderRadius(5)
+          Button('WebDAV', { type: ButtonType.Normal }).height(36).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
             .backgroundColor(this.remoteMode ? this.theme.primarySoft : this.theme.surface).fontColor(this.remoteMode ? this.theme.primary : this.theme.textSecondary)
             .enabled(this.busy.length === 0).onClick(() => this.remoteMode = true);
           Blank();
@@ -401,17 +402,17 @@ export struct BackupManagerDialog {
         if (this.remoteMode) {
           Column({ space: 10 }) {
             TextInput({ text: this.server, placeholder: 'WebDAV 目录，如 https://dav.example.com/dav/' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted)
-              .height(38).fontSize(13).backgroundColor(this.theme.surface).borderRadius(5).enabled(this.busy.length === 0)
+              .height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.surface).borderRadius(this.theme.radius(5)).enabled(this.busy.length === 0)
               .onChange((value: string) => { if (this.server !== value) { this.server = value; this.remoteEntries = []; } });
             Row({ space: 10 }) {
-              TextInput({ text: this.username, placeholder: '用户名' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(13).layoutWeight(1)
-                .backgroundColor(this.theme.surface).borderRadius(5).enabled(this.busy.length === 0).onChange((value: string) => { if (this.username !== value) { this.username = value; this.remoteEntries = []; } });
-              TextInput({ text: this.password, placeholder: '密码' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).type(InputType.Password).height(38).fontSize(13).layoutWeight(1)
-                .backgroundColor(this.theme.surface).borderRadius(5).enabled(this.busy.length === 0).onChange((value: string) => { if (this.password !== value) { this.password = value; this.remoteEntries = []; } });
+              TextInput({ text: this.username, placeholder: '用户名' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).layoutWeight(1)
+                .backgroundColor(this.theme.surface).borderRadius(this.theme.radius(5)).enabled(this.busy.length === 0).onChange((value: string) => { if (this.username !== value) { this.username = value; this.remoteEntries = []; } });
+              TextInput({ text: this.password, placeholder: '密码' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).type(InputType.Password).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).layoutWeight(1)
+                .backgroundColor(this.theme.surface).borderRadius(this.theme.radius(5)).enabled(this.busy.length === 0).onChange((value: string) => { if (this.password !== value) { this.password = value; this.remoteEntries = []; } });
             }.width('100%');
             Text(this.server.trim().startsWith('http:') ? 'HTTP 会明文传输凭据和备份，建议使用 HTTPS。备份存放在指定目录下的 ClashOS 文件夹。' :
               '备份存放在指定目录下的 ClashOS 文件夹。账号只保存到本机，不包含在配置备份中。')
-              .fontSize(11).fontColor(this.theme.textMuted).width('100%');
+              .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
             Row({ space: 8 }) {
               this.action('保存并刷新', () => this.connect()); this.action('新建并上传', () => this.create(true), true);
               this.action('清除本机账户', () => this.forget());
@@ -424,7 +425,7 @@ export struct BackupManagerDialog {
           Column({ space: 9 }) {
             if ((this.remoteMode ? this.remoteEntries : this.localEntries).length === 0) {
               Text(this.remoteMode ? '保存并刷新后显示 WebDAV 备份' : '暂无本地备份，点击“新建备份”保存当前配置')
-                .fontSize(13).fontColor(this.theme.textMuted).width('100%').textAlign(TextAlign.Center).padding(40);
+                .fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%').textAlign(TextAlign.Center).padding(40);
             }
             ForEach(this.remoteMode ? this.remoteEntries : this.localEntries, (entry: BackupEntry) => this.backupRow(entry),
               (entry: BackupEntry) => `${entry.remote}/${entry.name}/${entry.etag}`);
@@ -432,11 +433,11 @@ export struct BackupManagerDialog {
         }.width('100%').layoutWeight(1).align(Alignment.Top);
       }
       if (this.busy.length > 0) {
-        Row({ space: 10 }) { LoadingProgress().width(18).height(18).color(this.theme.primary); Text(this.busy).fontSize(12).fontColor(this.theme.textSecondary); }.width('100%');
+        Row({ space: 10 }) { LoadingProgress().width(18).height(18).color(this.theme.primary); Text(this.busy).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary); }.width('100%');
       }
-      if (this.error.length > 0) Text(this.error).fontSize(12).fontColor(this.theme.danger).width('100%');
-      if (this.notice.length > 0) Text(this.notice).fontSize(12).fontColor(this.theme.success).width('100%');
-    }.width('92%').height('86%').constraintSize({ maxWidth: 1080 }).padding(24).borderRadius(10)
+      if (this.error.length > 0) Text(this.error).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.danger).width('100%');
+      if (this.notice.length > 0) Text(this.notice).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.success).width('100%');
+    }.width('92%').height('86%').constraintSize({ maxWidth: 1080 }).padding(24).borderRadius(this.theme.radius(10))
       .backgroundColor(this.theme.field).onAreaChange((_old: Area, area: Area) => this.dialogWidth = Number(area.width));
   }
 }

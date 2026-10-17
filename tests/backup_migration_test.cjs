@@ -156,6 +156,22 @@ const same=(a,b)=>a.merge===b.merge&&a.script===b.script;
  for(const mutate of [a=>{delete a.appearance;},a=>a.groupIcons.assets=[],a=>a.groupIcons.entries[0].source='local:../escape.png']){
   const bad=JSON.parse(iconText);mutate(bad);assert.throws(()=>profiles.inspectBackup(JSON.stringify(bad)));checks++;
  }
+ const {nativeStyles}=load('theme/NativeStyles.ets'),customStyle=nativeStyles();customStyle.fontScale=1.15;customStyle.fontFamily='Noto Serif';customStyle.cardRadius=12;
+ customStyle.light={canvas:'#EDF2F8',surface:'#FFFFFF'};
+ appearance.save('light','#3478F6',customStyle);
+ const styleText=profiles.createBackup({profileIds:[],includeGlobals:false,includeAppearance:true});
+ check(JSON.parse(styleText).appearance.styles.fontScale===1.15&&JSON.parse(styleText).appearance.styles.fontFamily==='Noto Serif','Production appearance backup preserves native typography, layout and per-mode colors');
+ appearance.save('light','#3478F6',null);await coordinator.restore(styleText,expectedIcons());
+ check(appearance.savedSettings().styles.fontScale===1.15,'Appearance restoration applies the archived native style');
+ const paletteOnly=JSON.parse(styleText);delete paletteOnly.appearance.styles;await coordinator.restore(JSON.stringify(paletteOnly),expectedIcons());
+ check(appearance.savedSettings().styles.fontScale===1.15,'Older appearance archives retain custom styles absent from their schema');
+ const staleStyle=expectedIcons(),newerStyle=nativeStyles();newerStyle.fontScale=1.3;
+ appearance.save('light','#3478F6',newerStyle);await assert.rejects(()=>coordinator.restore(styleText,staleStyle),/外观设置已变化/);checks++;
+ check(appearance.savedSettings().styles.fontScale===1.3,'Style-only changes invalidate a restore preview even when mode/accent match');
+ appearance.save('light','#3478F6',null);const iconsBeforeStyleFailure=icons.revision();failIconWrite=true;
+ await assert.rejects(()=>coordinator.restore(styleText,expectedIcons()));checks++;failIconWrite=false;
+ check(appearance.savedSettings().styles===undefined&&icons.revision()===iconsBeforeStyleFailure,'A later image failure rolls back newly introduced custom styles to the previous omitted/default state');
+ const invalidStyle=JSON.parse(styleText);invalidStyle.appearance.styles.fontScale='1.15';assert.throws(()=>profiles.inspectBackup(JSON.stringify(invalidStyle)));checks++;
  check(descriptors.size===0,'All migration descriptors are released');
  console.log(`Backup migration scenarios passed: ${checks} (production services; native/OS APIs shimmed, real temporary filesystem)`);
 }finally{appearance?.dispose();fs.rmSync(directory,{recursive:true,force:true});}})().catch(e=>{console.error(e);process.exitCode=1;});

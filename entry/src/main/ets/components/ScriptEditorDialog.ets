@@ -53,14 +53,14 @@ export struct ScriptEditorDialog {
     Column({ space: 12 }) {
       Row({ space: 10 }) {
         Text(this.viewing ? '脚本合并预览' : this.global ? '全局扩展脚本' : '订阅扩展脚本')
-          .fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.theme.text).layoutWeight(1);
-        if (this.viewing) Button('复制合并配置', { type: ButtonType.Normal }).height(32).fontSize(12).borderRadius(5)
+          .fontSize(this.theme.font(20)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold).fontColor(this.theme.text).layoutWeight(1);
+        if (this.viewing) Button('复制合并配置', { type: ButtonType.Normal }).height(32).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).onClick(() => this.onCopy(this.rendered, '合并配置'));
       }.width('100%');
       Text(`${this.global ? '应用于所有配置' : '仅应用于当前订阅'}；当前 profileName 为「${this.profileName}」。入口 main(config, profileName) 需返回配置对象。`)
-        .fontSize(12).fontColor(this.theme.textSecondary).width('100%');
+        .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
       Text('本地 JavaScript：每阶段限时 500 ms、内存 64 MB，不提供文件、网络或计时器。脚本在同范围 YAML 扩展之后运行，保存失败时保留原配置。')
-        .fontSize(11).fontColor(this.theme.textMuted).width('100%');
+        .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
       Column() {
         ConfigCodeEditor({ editor: this.editor, initialContent: this.initialContent, language: 'javascript', scriptScope: this.global ? 'global' : 'profile',
           label: 'JavaScript 扩展脚本编辑区', disabled: this.saving,
@@ -69,37 +69,37 @@ export struct ScriptEditorDialog {
       }.width('100%').layoutWeight(this.viewing ? 0 : 1).visibility(this.viewing ? Visibility.None : Visibility.Visible);
       if (this.viewing) {
         Scroll() {
-          Text(this.rendered).accessibilityText('脚本合并配置预览').fontSize(12).fontFamily('monospace')
+          Text(this.rendered).accessibilityText('脚本合并配置预览').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontFamily('monospace')
             .fontColor(this.theme.textSecondary).textAlign(TextAlign.Start).copyOption(CopyOptions.LocalDevice).width('100%').padding(12);
-        }.width('100%').layoutWeight(1).backgroundColor(this.theme.field).borderRadius(6).clip(true);
+        }.width('100%').layoutWeight(1).backgroundColor(this.theme.field).borderRadius(this.theme.radius(6)).clip(true);
       }
       if (this.logs.length || this.error) {
         Row() {
-          Text('脚本输出').fontSize(12).fontColor(this.theme.textSecondary).layoutWeight(1);
-          Button('复制输出', { type: ButtonType.Normal }).height(26).fontSize(11).fontColor(this.theme.primary).backgroundColor(Color.Transparent).onClick(() => this.copyLogs());
+          Text('脚本输出').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).layoutWeight(1);
+          Button('复制输出', { type: ButtonType.Normal }).height(26).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary).backgroundColor(Color.Transparent).onClick(() => this.copyLogs());
         }.width('100%');
         Scroll() {
           Column({ space: 4 }) {
-            if (this.error) Text(this.error).fontSize(11).fontFamily('monospace').fontColor(this.theme.danger).width('100%');
+            if (this.error) Text(this.error).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontFamily('monospace').fontColor(this.theme.danger).width('100%');
             ForEach(this.logs, (item: ScriptLog) => {
-              Text(`[${item.scope}/${item.level}] ${item.text}`).fontSize(11).fontFamily('monospace')
+              Text(`[${item.scope}/${item.level}] ${item.text}`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontFamily('monospace')
                 .fontColor(item.level === 'error' ? this.theme.danger : item.level === 'warning' ? this.theme.warning : this.theme.textSecondary).width('100%');
             }, (_item: ScriptLog, index: number) => `${index}`);
           }.width('100%');
-        }.width('100%').constraintSize({ maxHeight: 130 }).padding(8).borderRadius(5).backgroundColor(this.theme.field);
+        }.width('100%').constraintSize({ maxHeight: 130 }).padding(8).borderRadius(this.theme.radius(5)).backgroundColor(this.theme.field);
       }
       Row({ space: 10 }) {
-        Button(this.viewing ? '返回脚本' : '清除脚本', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5)
+        Button(this.viewing ? '返回脚本' : '清除脚本', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .fontColor(this.theme.primary).backgroundColor(Color.Transparent).enabled(!this.saving && this.editorReady)
           .onClick(() => { if (this.viewing) this.viewing = false; else this.clear(); });
         Blank();
-        if (!this.viewing) Button('试运行并预览', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5)
+        if (!this.viewing) Button('试运行并预览', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).enabled(!this.saving && this.editorReady).onClick(() => this.preview());
-        Button('取消', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5).fontColor(this.theme.textSecondary)
+        Button('取消', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).fontColor(this.theme.textSecondary)
           .backgroundColor(this.theme.field).enabled(!this.saving).onClick(() => this.controller?.close());
-        Button(this.saving ? '保存中…' : '保存并应用', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5)
+        Button(this.saving ? '保存中…' : '保存并应用', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary).enabled(!this.saving && this.editorReady).onClick(() => this.save());
       }.width('100%');
-    }.width('94%').constraintSize({ maxWidth: 1080 }).height('88%').padding(24).borderRadius(10).backgroundColor(this.theme.surface);
+    }.width('94%').constraintSize({ maxWidth: 1080 }).height('88%').padding(24).borderRadius(this.theme.radius(10)).backgroundColor(this.theme.surface);
   }
 }

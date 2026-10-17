@@ -2,7 +2,7 @@ export interface ConfigEditorPort {
   read: () => Promise<string>;
   command: (name: string, value: number) => Promise<void>;
   markError: (message: string) => Promise<void>;
-  replace?: (text: string) => Promise<void>;
+  replace?: (text: string, expected?: string) => Promise<void>;
 }
 interface EditorSnapshot { text: string; revision: number; composing: boolean; }
 
@@ -39,10 +39,10 @@ export class ConfigEditorController {
     await this.port?.command(name, value);
   }
   async markError(message: string): Promise<void> { await this.port?.markError(message); }
-  async replace(text: string): Promise<void> {
+  async replace(text: string, expected?: string): Promise<void> {
     const port: ConfigEditorPort | undefined = this.port, version: number = this.version;
     if (!port?.replace) throw new Error('编辑器尚未就绪');
-    await port.replace(text);
+    await port.replace(text, expected);
     if (version !== this.version || port !== this.port) throw new Error('编辑器已关闭，请重新打开配置');
     this.lastReadRevision = -1;
   }

@@ -48,29 +48,29 @@ export struct SnifferSettingsDialog {
 
   build() {
     Column({ space: 14 }) {
-      Text('域名嗅探配置').fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.theme.text).width('100%');
+      Text('域名嗅探配置').fontSize(this.theme.font(20)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold).fontColor(this.theme.text).width('100%');
       Text('修改立即作用于当前内核；重载或重启后恢复配置中的设置。需要长期保留时，将 sniffer 字段写入全局或订阅扩展。')
-        .fontSize(12).fontColor(this.theme.textSecondary).width('100%');
+        .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
       Text('HTTP / TLS / QUIC 可分别设置端口和 override-destination。关闭目标改写时，仍按识别的域名匹配规则，连接原来的地址。')
-        .fontSize(11).fontColor(this.theme.textMuted).width('100%');
+        .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
       ConfigCodeEditor({ editor: this.editor, initialContent: this.initialContent, label: 'JSON 嗅探配置编辑区', disabled: this.busy,
         onReady: (ready: boolean): void => { this.ready = ready; },
         onChange: (revision: number): void => { if (this.editor.changedSinceRead(revision)) { this.error = ''; this.message = ''; } } });
-      if (this.error) Text(this.error).fontSize(12).fontColor(this.theme.danger).maxLines(3).width('100%');
-      if (this.message) Text(this.message).fontSize(12).fontColor(this.theme.success).width('100%');
+      if (this.error) Text(this.error).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.danger).maxLines(3).width('100%');
+      if (this.message) Text(this.message).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.success).width('100%');
       Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.End }) {
-        Button('常用配置', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5).margin({ right: 8, bottom: 8 })
+        Button('常用配置', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).margin({ right: 8, bottom: 8 })
           .fontColor(this.theme.primary).backgroundColor(Color.Transparent).enabled(this.ready && !this.busy)
           .onClick(() => { this.editor.replace(COMMON_SNIFFER).catch(() => this.error = '未能填入常用配置'); });
-        Button('校验', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5).margin({ right: 8, bottom: 8 })
+        Button('校验', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).margin({ right: 8, bottom: 8 })
           .fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).enabled(this.ready && !this.busy).onClick(() => this.action(0));
-        Button('复制扩展配置', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5).margin({ right: 8, bottom: 8 })
+        Button('复制扩展配置', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).margin({ right: 8, bottom: 8 })
           .fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).enabled(this.ready && !this.busy).onClick(() => this.action(1));
-        Button('取消', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5).margin({ right: 8, bottom: 8 })
+        Button('取消', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).margin({ right: 8, bottom: 8 })
           .fontColor(this.theme.textSecondary).backgroundColor(this.theme.field).enabled(!this.busy).onClick(() => this.controller?.close());
-        Button(this.busy ? '应用中…' : '应用嗅探设置', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5).margin({ bottom: 8 })
+        Button(this.busy ? '应用中…' : '应用嗅探设置', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).margin({ bottom: 8 })
           .fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary).enabled(this.ready && !this.busy).onClick(() => this.action(2));
       }.width('100%');
-    }.width('94%').constraintSize({ maxWidth: 960 }).height('86%').padding(24).borderRadius(10).backgroundColor(this.theme.surface);
+    }.width('94%').constraintSize({ maxWidth: 960 }).height('86%').padding(24).borderRadius(this.theme.radius(10)).backgroundColor(this.theme.surface);
   }
 }

@@ -55,18 +55,18 @@ export struct GroupIconDialog {
   }
   build() {
     Column({ space: 16 }) {
-      Text('自定义代理组图标').fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.theme.text).width('100%');
-      Text(this.groupName).fontSize(14).fontColor(this.theme.textSecondary).maxLines(2).width('100%');
+      Text('自定义代理组图标').fontSize(this.theme.font(20)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold).fontColor(this.theme.text).width('100%');
+      Text(this.groupName).fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).maxLines(2).width('100%');
       Text('按代理组名称保存到本机，同名代理组共用设置。跟随配置时优先显示 icon 链接，其次使用名称 Emoji 或类型图标。')
-        .fontSize(12).fontColor(this.theme.textMuted).width('100%');
-      if (this.storageError) Text(this.storageError).fontSize(12).fontColor(this.theme.danger).width('100%');
+        .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
+      if (this.storageError) Text(this.storageError).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.danger).width('100%');
       Row({ space: 20 }) {
         ProxyGroupIcon({ source: this.preview(), revision: this.previewRevision, iconSize: 56, fallback: this.fallback, emoji: this.emoji,
           onFailure: (failed: boolean): void => { this.previewFailed = failed; } });
         Column({ space: 6 }) {
-          Text('图标来源').fontSize(12).fontColor(this.theme.textSecondary).width('100%');
+          Text('图标来源').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
           Select(ICON_MODES.map((value: string): SelectOption => ({ value }))).value(ICON_MODES[this.mode]).selected(this.mode)
-            .height(38).width('100%').font({ size: 13 }).enabled(!this.busy)
+            .height(38).width('100%').font({ size: this.theme.font(13), family: this.theme.fontFamily }).enabled(!this.busy)
             .onSelect((index: number) => { this.mode = index; this.error = ''; ++this.previewRevision; });
         }.layoutWeight(1);
       }.width('100%');
@@ -77,9 +77,9 @@ export struct GroupIconDialog {
               Button({ type: ButtonType.Normal }) {
                 Column({ space: 7 }) {
                   ProxyGroupIcon({ source: `builtin:${id}`, iconSize: 26 });
-                  Text(GROUP_ICON_LABELS[index]).fontSize(11).fontColor(this.theme.textSecondary);
+                  Text(GROUP_ICON_LABELS[index]).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary);
                 }.padding(10).width('100%');
-              }.width('100%').borderRadius(6).backgroundColor(this.preset === id ? this.theme.primarySoft : this.theme.field)
+              }.width('100%').borderRadius(this.theme.radius(6)).backgroundColor(this.preset === id ? this.theme.primarySoft : this.theme.field)
                 .border({ width: 1, color: this.preset === id ? this.theme.primaryBorder : Color.Transparent })
                 .accessibilityText(`使用${GROUP_ICON_LABELS[index]}图标`).enabled(!this.busy).onClick(() => this.preset = id);
             }
@@ -87,10 +87,10 @@ export struct GroupIconDialog {
         }.width('100%');
       } else if (this.mode === 2) {
         Row({ space: 8 }) {
-          TextInput({ text: this.url, placeholder: 'https://…/icon.png 或 icon.svg' }).fontSize(13).height(38)
+          TextInput({ text: this.url, placeholder: 'https://…/icon.png 或 icon.svg' }).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).height(38)
             .fontColor(this.theme.text).placeholderColor(this.theme.textMuted).backgroundColor(this.theme.field).layoutWeight(1)
             .enabled(!this.busy).onChange((value: string) => { this.url = value; this.error = ''; });
-          Button('预览链接', { type: ButtonType.Normal }).height(36).fontSize(12).borderRadius(5).fontColor(this.theme.primary)
+          Button('预览链接', { type: ButtonType.Normal }).height(36).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).fontColor(this.theme.primary)
             .backgroundColor(this.theme.primarySoft).enabled(!this.busy).onClick(() => {
               if (!iconImageUrl(this.url.trim())) this.error = '请填写有效的 HTTP / HTTPS 图片链接';
               else { this.previewUrl = this.url.trim(); this.error = ''; ++this.previewRevision; }
@@ -99,21 +99,21 @@ export struct GroupIconDialog {
       } else if (this.mode === 3) {
         Row() {
           Text(this.local ? '已选择图片，保存后将保留本机副本' : '支持 PNG、JPEG、WebP、GIF、BMP，最大 2 MB')
-            .fontSize(12).fontColor(this.theme.textMuted).layoutWeight(1);
-          Button(this.busy ? '导入中…' : '选择图片', { type: ButtonType.Normal }).height(36).fontSize(12).borderRadius(5)
+            .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).layoutWeight(1);
+          Button(this.busy ? '导入中…' : '选择图片', { type: ButtonType.Normal }).height(36).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
             .fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).enabled(!this.busy).onClick(() => this.pick());
         }.width('100%');
       }
-      if (this.previewFailed) Text('图片暂时无法加载，将显示默认图标；可重新预览或稍后重试。').fontSize(12).fontColor(this.theme.warning).width('100%');
-      if (this.error) Text(this.error).fontSize(12).fontColor(this.theme.danger).maxLines(3).width('100%');
+      if (this.previewFailed) Text('图片暂时无法加载，将显示默认图标；可重新预览或稍后重试。').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.warning).width('100%');
+      if (this.error) Text(this.error).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.danger).maxLines(3).width('100%');
       Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.End }) {
-        Button('恢复配置图标', { type: ButtonType.Normal }).height(36).fontSize(12).borderRadius(5).margin({ right: 8, bottom: 8 })
+        Button('恢复配置图标', { type: ButtonType.Normal }).height(36).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).margin({ right: 8, bottom: 8 })
           .fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).enabled(!this.busy).onClick(() => this.save(true));
-        Button('取消', { type: ButtonType.Normal }).height(36).fontSize(12).borderRadius(5).margin({ right: 8, bottom: 8 })
+        Button('取消', { type: ButtonType.Normal }).height(36).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).margin({ right: 8, bottom: 8 })
           .fontColor(this.theme.textSecondary).backgroundColor(this.theme.field).enabled(!this.busy).onClick(() => this.controller?.close());
-        Button('保存图标', { type: ButtonType.Normal }).height(36).fontSize(12).borderRadius(5).margin({ bottom: 8 })
+        Button('保存图标', { type: ButtonType.Normal }).height(36).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).margin({ bottom: 8 })
           .fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary).enabled(!this.busy).onClick(() => this.save());
       }.width('100%');
-    }.padding(24).width('92%').constraintSize({ maxWidth: 680 }).borderRadius(10).backgroundColor(this.theme.surface);
+    }.padding(24).width('92%').constraintSize({ maxWidth: 680 }).borderRadius(this.theme.radius(10)).backgroundColor(this.theme.surface);
   }
 }

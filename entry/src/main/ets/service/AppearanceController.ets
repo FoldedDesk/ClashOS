@@ -2,6 +2,7 @@ import { common, Configuration, ConfigurationConstant } from '@kit.AbilityKit';
 import { ThemeControl } from '@kit.ArkUI';
 import { AppearanceSettings, VergePalette, DEFAULT_ACCENT, appearanceSettings, createPalette } from '../theme/VergeTheme';
 import { AppearanceStore } from './AppearanceStore';
+import { NativeStyles } from '../theme/NativeStyles';
 
 export class AppearanceController {
   settings: AppearanceSettings = { mode: 'system', accent: DEFAULT_ACCENT };
@@ -15,7 +16,8 @@ export class AppearanceController {
     this.application = context.getApplicationContext();
     this.store = new AppearanceStore(context.filesDir, protect);
     this.systemDark = context.config.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
-    try { this.settings = this.store.load(); } catch (_) { this.loadError = '外观设置无法读取，已使用默认外观'; }
+    try { this.settings = this.store.load(); createPalette(false, this.settings.accent, this.settings.styles); createPalette(true, this.settings.accent, this.settings.styles); }
+    catch (_) { this.settings = { mode: 'system', accent: DEFAULT_ACCENT }; this.loadError = '外观设置无法读取，已使用默认外观'; }
     const theme: VergePalette = this.palette(this.settings);
     this.nativeTheme(this.settings, theme); this.publish(theme);
     this.callbackId = this.application.on('environment', {
@@ -24,12 +26,12 @@ export class AppearanceController {
         const dark: boolean = config.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
         if (this.systemDark === dark) return;
         this.systemDark = dark;
-        const updated: VergePalette = createPalette(dark, this.settings.accent);
+        const updated: VergePalette = createPalette(dark, this.settings.accent, this.settings.styles);
         this.tokens(updated); this.publish(updated);
       }, onMemoryLevel: (): void => {}
     });
   }
-  private palette(value: AppearanceSettings): VergePalette { return createPalette(value.mode === 'dark' || (value.mode === 'system' && this.systemDark), value.accent); }
+  private palette(value: AppearanceSettings): VergePalette { return createPalette(value.mode === 'dark' || (value.mode === 'system' && this.systemDark), value.accent, value.styles); }
   private nativeTheme(value: AppearanceSettings, theme: VergePalette): void {
     this.application.setColorMode(value.mode === 'system' ? ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET :
       value.mode === 'dark' ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK : ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT);
@@ -47,15 +49,16 @@ export class AppearanceController {
   }
   private publish(theme: VergePalette): void { AppStorage.setOrCreate('clashosTheme', theme); }
   savedSettings(): AppearanceSettings { return this.store.load(); }
-  save(mode: string, accent: string): void {
+  save(mode: string, accent: string, styles: NativeStyles | null | undefined = this.settings.styles): void {
     if (!this.active) throw new Error('外观会话已结束，请重新打开应用');
-    const next: AppearanceSettings = appearanceSettings(mode, accent), previous: AppearanceSettings = this.settings;
+    const next: AppearanceSettings = appearanceSettings(mode, accent, styles === null ? undefined : styles), previous: AppearanceSettings = this.settings;
+    createPalette(false, next.accent, next.styles); createPalette(true, next.accent, next.styles);
     const previousTheme: VergePalette = AppStorage.get<VergePalette>('clashosTheme') ?? this.palette(previous);
     this.settings = next;
     try {
       this.nativeTheme(next, this.palette(next));
       const resolved: VergePalette = this.palette(next);
-      this.tokens(resolved); this.store.save(next); this.publish(resolved);
+      this.tokens(resolved); this.publish(resolved); this.store.save(next);
     } catch (error) {
       this.settings = previous;
       try { this.nativeTheme(previous, previousTheme); } catch (_) {}

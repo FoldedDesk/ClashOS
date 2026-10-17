@@ -46,52 +46,52 @@ export struct ProxyPortsDialog {
 
   build() {
     Column({ space: 16 }) {
-      Text('自定义代理端口').fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.theme.text).width('100%');
+      Text('自定义代理端口').fontSize(this.theme.font(20)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold).fontColor(this.theme.text).width('100%');
       Text('应用于所有配置，订阅更新后仍保留。监听地址可在局域网共享设置中修改。')
-        .fontSize(12).fontColor(this.theme.textSecondary).width('100%');
+        .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
       Row() {
-        Text('混合端口模式').fontSize(14).fontColor(this.theme.text).layoutWeight(1);
+        Text('混合端口模式').fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1);
         Toggle({ type: ToggleType.Switch, isOn: this.mixedMode }).selectedColor(this.theme.primary)
           .width(38).height(24).enabled(!this.saving).onChange((value: boolean) => this.mixedMode = value);
       }.width('100%');
       if (this.mixedMode) {
         Row({ space: 18 }) {
-          Text('混合端口').fontSize(13).fontColor(this.theme.textSecondary).width(100);
+          Text('混合端口').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width(100);
           TextInput({ text: this.mixedText, placeholder: '1 至 65535' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).type(InputType.Number)
-            .accessibilityText('混合端口').height(40).fontSize(14).layoutWeight(1).borderRadius(5)
+            .accessibilityText('混合端口').height(40).fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).layoutWeight(1).borderRadius(this.theme.radius(5))
             .backgroundColor(this.theme.field).enabled(!this.saving).onChange((value: string) => this.mixedText = value);
         }.width('100%');
-        Text('HTTP 与 SOCKS5 共用此端口。').fontSize(11).fontColor(this.theme.textMuted).width('100%');
+        Text('HTTP 与 SOCKS5 共用此端口。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
       } else {
         Row({ space: 18 }) {
-          Text('HTTP 端口').fontSize(13).fontColor(this.theme.textSecondary).width(100);
+          Text('HTTP 端口').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width(100);
           TextInput({ text: this.httpText, placeholder: '0 为关闭' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).type(InputType.Number)
-            .accessibilityText('HTTP 端口').height(40).fontSize(14).layoutWeight(1).borderRadius(5)
+            .accessibilityText('HTTP 端口').height(40).fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).layoutWeight(1).borderRadius(this.theme.radius(5))
             .backgroundColor(this.theme.field).enabled(!this.saving).onChange((value: string) => this.httpText = value);
         }.width('100%');
         Row({ space: 18 }) {
-          Text('SOCKS5 端口').fontSize(13).fontColor(this.theme.textSecondary).width(100);
+          Text('SOCKS5 端口').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width(100);
           TextInput({ text: this.socksText, placeholder: '0 为关闭' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).type(InputType.Number)
-            .accessibilityText('SOCKS5 端口').height(40).fontSize(14).layoutWeight(1).borderRadius(5)
+            .accessibilityText('SOCKS5 端口').height(40).fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).layoutWeight(1).borderRadius(this.theme.radius(5))
             .backgroundColor(this.theme.field).enabled(!this.saving).onChange((value: string) => this.socksText = value);
         }.width('100%');
-        Text('两项均设为 0 时关闭代理入口。').fontSize(11).fontColor(this.theme.textMuted).width('100%');
+        Text('两项均设为 0 时关闭代理入口。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
       }
       Text('修改后请同步更新系统网络代理中的端口。控制器地址不受影响。')
-        .fontSize(12).fontColor(this.theme.textSecondary).width('100%');
-      if (this.error.length > 0) Text(this.error).fontSize(12).fontColor(this.theme.danger).width('100%');
+        .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
+      if (this.error.length > 0) Text(this.error).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.danger).width('100%');
       Row({ space: 10 }) {
-        Button('恢复配置端口', { type: ButtonType.Normal }).height(36).fontSize(12)
+        Button('恢复配置端口', { type: ButtonType.Normal }).height(36).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily)
           .fontColor(this.theme.primary).backgroundColor(Color.Transparent).enabled(!this.saving)
           .onClick(() => this.save(true));
         Blank();
-        Button('取消', { type: ButtonType.Normal }).height(36).fontSize(13).borderRadius(5)
+        Button('取消', { type: ButtonType.Normal }).height(36).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .fontColor(this.theme.textSecondary).backgroundColor(this.theme.field).enabled(!this.saving)
           .onClick(() => this.controller?.close());
-        Button(this.saving ? '保存中…' : '保存并应用', { type: ButtonType.Normal }).height(36).fontSize(13)
-          .fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary).borderRadius(5).enabled(!this.saving)
+        Button(this.saving ? '保存中…' : '保存并应用', { type: ButtonType.Normal }).height(36).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily)
+          .fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary).borderRadius(this.theme.radius(5)).enabled(!this.saving)
           .onClick(() => this.save());
       }.width('100%');
-    }.width('88%').constraintSize({ maxWidth: 580 }).padding(24).borderRadius(10).backgroundColor(this.theme.surface);
+    }.width('88%').constraintSize({ maxWidth: 580 }).padding(24).borderRadius(this.theme.radius(10)).backgroundColor(this.theme.surface);
   }
 }

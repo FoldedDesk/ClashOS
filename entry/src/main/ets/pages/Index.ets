@@ -1,6 +1,9 @@
 import { VergePalette } from '../theme/VergeTheme';
 import { DEFAULT_ACCENT } from '../theme/VergeTheme';
 import { AppearanceController } from '../service/AppearanceController';
+import { sameAppearance } from '../theme/AppearanceTypes';
+import { NativeStyles } from '../theme/NativeStyles';
+import { NativeStyleDialog } from '../components/NativeStyleDialog';
 import { GroupIconStore } from '../service/GroupIconStore';
 import { GroupIconEntry, iconImageUrl } from '../service/GroupIconTypes';
 import { pickGroupIcon } from '../service/GroupIconPicker';
@@ -1998,14 +2001,14 @@ struct Index {
       if (this.windowWidth < 1000) {
         Column({ space: 3 }) {
           this.icon(this.navIcons[index], 20, 'text');
-          Text(this.navItems[index]).fontSize(11).fontWeight(FontWeight.Bold)
+          Text(this.navItems[index]).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold)
             .fontColor(this.theme.text).maxLines(1);
         }.width(this.windowWidth < 560 ? 42 : 48);
       } else {
         Row({ space: 9 }) {
           this.icon(this.navIcons[index], 23, 'text');
           Text(this.navItems[index])
-            .fontSize(this.windowWidth >= 1180 ? 16 : 14)
+            .fontSize(this.theme.font(this.windowWidth >= 1180 ? 16 : 14)).fontFamily(this.theme.fontFamily)
             .fontWeight(FontWeight.Bold)
             .fontColor(this.theme.text)
             .maxLines(1);
@@ -2036,8 +2039,8 @@ struct Index {
           .stroke(this.theme.primary).strokeWidth(1.5).fill(Color.Transparent);
       }.width(62).height(30).clip(true);
       Column({ space: 3 }) {
-        Text(`↑ ${this.rateText(this.uploadRate)}`).fontSize(10).fontColor(this.theme.warning);
-        Text(`↓ ${this.rateText(this.downloadRate)}`).fontSize(10).fontColor(this.theme.primary);
+        Text(`↑ ${this.rateText(this.uploadRate)}`).fontSize(this.theme.font(10)).fontFamily(this.theme.fontFamily).fontColor(this.theme.warning);
+        Text(`↓ ${this.rateText(this.downloadRate)}`).fontSize(this.theme.font(10)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary);
       }.alignItems(HorizontalAlign.Start).constraintSize({ minWidth: 66 });
     }.padding({ left: 18 }).height(36)
       .border({ width: { left: 1 }, color: this.theme.border });
@@ -2050,7 +2053,7 @@ struct Index {
         Row({ space: 11 }) {
           Image($r('app.media.verge_mark')).fillColor(this.theme.text).colorFilter(this.iconColor(this.theme.text)).width(30).height(30).draggable(false);
           if (this.windowWidth >= 1000) {
-            Text('ClashOS').fontSize(21).fontWeight(FontWeight.Bold).fontColor(this.theme.text);
+            Text('ClashOS').fontSize(this.theme.font(21)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold).fontColor(this.theme.text);
           }
         }
       }
@@ -2084,7 +2087,7 @@ struct Index {
     Button({ type: ButtonType.Normal }) {
       this.icon(source, 19, active ? 'primary' : 'textSecondary');
     }
-    .width(34).height(34).borderRadius(5)
+    .width(34).height(34).borderRadius(this.theme.radius(5))
     .backgroundColor(active ? this.theme.primaryHover :
       this.hoveredAction === label ? this.theme.navigationHover : Color.Transparent)
     .hoverEffect(HoverEffect.None)
@@ -2112,12 +2115,12 @@ struct Index {
     Button({ type: ButtonType.Normal }) {
       Row({ space: 7 }) {
         this.icon(source, 16, 'primary');
-        Text(label).fontSize(13).fontColor(this.theme.primary);
+        Text(label).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary);
       }
     }
     .height(34)
     .padding({ left: 12, right: 12 })
-    .borderRadius(5)
+    .borderRadius(this.theme.radius(5))
     .border({ width: 1, color: this.theme.primaryBorder })
     .backgroundColor(this.theme.surface)
     .onClick(action);
@@ -2128,12 +2131,12 @@ struct Index {
     Button({ type: ButtonType.Normal }) {
       Row({ space: 7 }) {
         this.icon(source, 16, 'onPrimary');
-        Text(label).fontSize(13).fontColor(this.theme.onPrimary);
+        Text(label).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.onPrimary);
       }
     }
     .height(34)
     .padding({ left: 14, right: 14 })
-    .borderRadius(5)
+    .borderRadius(this.theme.radius(5))
     .backgroundColor(this.theme.primary)
     .onClick(action);
   }
@@ -2141,12 +2144,12 @@ struct Index {
   @Builder
   private modeButton(label: string, mode: string) {
     Button(label, { type: ButtonType.Normal })
-      .fontSize(13)
+      .fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily)
       .fontColor(this.coreMode === mode ? this.theme.onPrimary : this.theme.primary)
       .backgroundColor(this.coreMode === mode ? this.theme.primary : this.theme.surface)
       .height(32)
-      .width(58)
-      .borderRadius(0)
+      .width(58 * Math.max(1, this.theme.fontScale))
+      .borderRadius(this.theme.radius(0))
       .onClick(() => this.changeMode(mode));
   }
 
@@ -2160,7 +2163,7 @@ struct Index {
       this.modeButton('直连', 'Direct');
     }
     .border({ width: 1, color: this.theme.primaryBorder })
-    .borderRadius(5)
+    .borderRadius(this.theme.radius(5))
     .clip(true);
   }
 
@@ -2189,8 +2192,8 @@ struct Index {
     Row({ space: 8 }) {
       if (this.selectedTab === 1) {
         Button(this.showProviderCollections ? '代理组' : '代理集合', { type: ButtonType.Normal })
-          .fontSize(13).fontColor(this.theme.primary).height(34)
-          .padding({ left: 12, right: 12 }).borderRadius(5)
+          .fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary).height(34)
+          .padding({ left: 12, right: 12 }).borderRadius(this.theme.radius(5))
           .border({ width: 1, color: this.theme.primaryBorder }).backgroundColor(this.showProviderCollections ? this.theme.primarySoft : Color.Transparent)
           .onClick(() => {
             this.showProviderCollections = !this.showProviderCollections;
@@ -2205,13 +2208,13 @@ struct Index {
         this.iconButton($r('app.media.verge_refresh'), '刷新代理组', () => this.refreshCore());
         Button({ type: ButtonType.Normal }) {
           this.icon($r('app.media.verge_more'), 20, 'textSecondary');
-        }.width(30).height(34).borderRadius(5).backgroundColor(Color.Transparent)
+        }.width(30).height(34).borderRadius(this.theme.radius(5)).backgroundColor(Color.Transparent)
           .accessibilityText(this.showProviderCollections ? '代理集合操作' : '代理组操作')
           .bindMenu(this.proxyPageMenu());
       } else if (this.selectedTab === 2) {
         this.outlineButton('编辑规则', $r('app.media.verge_rules'), () => this.openRuleEditor());
         Button(this.showRuleProviders ? '路由规则' : '规则集合', { type: ButtonType.Normal })
-          .fontSize(13).fontColor(this.theme.primary).height(34).padding({ left: 12, right: 12 }).borderRadius(5)
+          .fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary).height(34).padding({ left: 12, right: 12 }).borderRadius(this.theme.radius(5))
           .border({ width: 1, color: this.theme.primaryBorder }).backgroundColor(this.showRuleProviders ? this.theme.primarySoft : Color.Transparent)
           .onClick(() => { this.showRuleProviders = !this.showRuleProviders; this.contentScroller.scrollTo({ xOffset: 0, yOffset: 0 }); });
         this.modeControl();
@@ -2219,7 +2222,7 @@ struct Index {
         if (this.showRuleProviders) {
           Button({ type: ButtonType.Normal }) {
             this.icon($r('app.media.verge_more'), 20, 'textSecondary');
-          }.width(30).height(34).borderRadius(5).backgroundColor(Color.Transparent)
+          }.width(30).height(34).borderRadius(this.theme.radius(5)).backgroundColor(Color.Transparent)
             .accessibilityText('规则集合操作').bindMenu(this.ruleProvidersMenu());
         }
       } else if (this.selectedTab === 4) {
@@ -2247,7 +2250,7 @@ struct Index {
   private pageTitle() {
     Text(this.selectedTab === 1 ? this.showProviderCollections ? '代理集合' : '代理组' :
       this.selectedTab === 2 && this.showRuleProviders ? '规则集合' : this.navItems[this.selectedTab])
-      .fontSize(22)
+      .fontSize(this.theme.font(22)).fontFamily(this.theme.fontFamily)
       .fontWeight(FontWeight.Bold)
       .fontColor(this.theme.text)
       .maxLines(1);
@@ -2282,17 +2285,17 @@ struct Index {
     if (this.notice.length > 0) {
       Row({ space: 10 }) {
         this.icon($r('app.media.verge_info'), 17, 'primary');
-        Text(this.notice).fontSize(12).fontColor(this.theme.primary).layoutWeight(1);
+        Text(this.notice).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary).layoutWeight(1);
         Button({ type: ButtonType.Normal }) {
           this.icon($r('app.media.verge_close'), 15, 'textSecondary');
         }
-        .width(26).height(26).borderRadius(5).backgroundColor(Color.Transparent)
+        .width(26).height(26).borderRadius(this.theme.radius(5)).backgroundColor(Color.Transparent)
         .accessibilityText('关闭提示')
         .onClick(() => this.notice = '');
       }
       .width('100%')
       .padding({ left: 14, right: 8, top: 9, bottom: 9 })
-      .borderRadius(6)
+      .borderRadius(this.theme.radius(6))
       .backgroundColor(this.theme.primarySoft)
       .margin({ bottom: 16 });
     }
@@ -2302,7 +2305,7 @@ struct Index {
   private cardTitle(title: string, source: Resource) {
     Row({ space: 9 }) {
       this.icon(source, 18, 'textSecondary');
-      Text(title).fontSize(14).fontWeight(FontWeight.Medium).fontColor(this.theme.text);
+      Text(title).fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.text);
     }
     .width('100%');
   }
@@ -2311,8 +2314,8 @@ struct Index {
   private emptyState(title: string, detail: string, source: Resource) {
     Column({ space: 10 }) {
       this.icon(source, 34, 'textMuted');
-      Text(title).fontSize(14).fontColor(this.theme.textSecondary);
-      Text(detail).fontSize(12).fontColor(this.theme.textMuted).textAlign(TextAlign.Center);
+      Text(title).fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary);
+      Text(detail).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).textAlign(TextAlign.Center);
     }
     .width('100%')
     .padding({ top: 48, bottom: 48, left: 24, right: 24 });
@@ -2324,18 +2327,18 @@ struct Index {
       if (this.geoStatus !== undefined && this.geoStatus.resources.some((resource: ClashGeoResource) => resource.required && !resource.ready)) {
         Row({ space: 12 }) {
           this.icon($r('app.media.verge_info'), 18, 'warning');
-          Text('分流数据库尚未就绪，可在设置中查看下载状态').fontSize(12).fontColor(this.theme.textSecondary).layoutWeight(1);
-          Button('查看数据库', { type: ButtonType.Normal }).height(30).fontSize(12).fontColor(this.theme.primary)
+          Text('分流数据库尚未就绪，可在设置中查看下载状态').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).layoutWeight(1);
+          Button('查看数据库', { type: ButtonType.Normal }).height(30).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary)
             .backgroundColor(Color.Transparent).onClick(() => this.navigate(6));
-        }.width('100%').padding(14).borderRadius(8).backgroundColor(this.theme.warningSoft);
+        }.width('100%').padding(14).borderRadius(this.theme.radius(8)).backgroundColor(this.theme.warningSoft);
       }
       if (this.coreConnected && this.ruleProviders.some((provider: ClashRuleProvider) => !provider.ready)) {
         Row({ space: 12 }) {
           this.icon($r('app.media.verge_info'), 18, 'warning');
-          Text('规则集合尚未就绪，受影响的请求暂时拒绝转发').fontSize(12).fontColor(this.theme.textSecondary).layoutWeight(1);
-          Button('查看规则集合', { type: ButtonType.Normal }).height(30).fontSize(12).fontColor(this.theme.primary)
+          Text('规则集合尚未就绪，受影响的请求暂时拒绝转发').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).layoutWeight(1);
+          Button('查看规则集合', { type: ButtonType.Normal }).height(30).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary)
             .backgroundColor(Color.Transparent).onClick(() => { this.navigate(2); this.showRuleProviders = true; });
-        }.width('100%').padding(14).borderRadius(8).backgroundColor(this.theme.warningSoft);
+        }.width('100%').padding(14).borderRadius(this.theme.radius(8)).backgroundColor(this.theme.warningSoft);
       }
       GridRow({ columns: { sm: 1, md: 3, lg: 3 }, gutter: 16 }) {
         GridCol({ span: { sm: 1, md: 2, lg: 2 } }) {
@@ -2370,10 +2373,10 @@ struct Index {
             Row({ space: 12 }) {
               Column({ space: 6 }) {
                 Text(this.selectedProxy || '尚未选择节点')
-                  .fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.theme.text)
+                  .fontSize(this.theme.font(18)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.text)
                   .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
                 Text(this.selectedGroupName || '导入配置后选择代理组')
-                  .fontSize(12).fontColor(this.theme.textMuted)
+                  .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted)
                   .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
               }
               .alignItems(HorizontalAlign.Start).layoutWeight(1);
@@ -2381,10 +2384,10 @@ struct Index {
             }
             Row({ space: 8 }) {
               this.typeChip(`${this.modeName()}模式`);
-              Text(`${this.proxyGroups.length} 个代理组`).fontSize(11).fontColor(this.theme.textMuted);
+              Text(`${this.proxyGroups.length} 个代理组`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
             }.width('100%');
           }
-          .width('100%').height(166).padding(20).borderRadius(8)
+          .width('100%').height(166).padding(20).borderRadius(this.theme.radius(8))
           .border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface)
           .onClick(() => this.navigate(1));
         }
@@ -2394,20 +2397,20 @@ struct Index {
             Row({ space: 12 }) {
               Column({ space: 6 }) {
                 Text(this.activeProfileName())
-                  .fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.theme.text)
+                  .fontSize(this.theme.font(18)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.text)
                   .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
                 Text(this.profiles.length > 0 ? `已保存 ${this.profiles.length} 份本地配置` : '支持 YAML / YML / JSON 配置')
-                  .fontSize(12).fontColor(this.theme.textMuted);
+                  .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
               }
               .alignItems(HorizontalAlign.Start).layoutWeight(1);
               this.icon($r('app.media.verge_arrow'), 20, 'primary');
             }
             Row({ space: 8 }) {
               this.typeChip('本地配置');
-              Text(this.coreConnected ? `${this.ruleCount} 条规则` : '等待内核连接').fontSize(11).fontColor(this.theme.textMuted);
+              Text(this.coreConnected ? `${this.ruleCount} 条规则` : '等待内核连接').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
             }.width('100%');
           }
-          .width('100%').height(166).padding(20).borderRadius(8)
+          .width('100%').height(166).padding(20).borderRadius(this.theme.radius(8))
           .border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface)
           .onClick(() => this.navigate(4));
         }
@@ -2423,25 +2426,25 @@ struct Index {
       Row() {
         Row({ space: 8 }) {
           this.icon($r('app.media.verge_chart'), 18, 'textSecondary');
-          Text('实时流量').fontSize(14).fontWeight(FontWeight.Medium).fontColor(this.theme.text);
+          Text('实时流量').fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.text);
         }
         Blank();
-        Text('实时更新').fontSize(11).fontColor(this.theme.textMuted);
+        Text('实时更新').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
       }.width('100%');
       Row({ space: 30 }) {
         Column({ space: 5 }) {
           Row({ space: 6 }) {
             this.icon($r('app.media.verge_download'), 16, 'primary');
-            Text('下载').fontSize(12).fontColor(this.theme.textMuted);
+            Text('下载').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
           }
-          Text(this.rateText(this.downloadRate)).fontSize(25).fontWeight(FontWeight.Medium).fontColor(this.theme.primary);
+          Text(this.rateText(this.downloadRate)).fontSize(this.theme.font(25)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.primary);
         }.alignItems(HorizontalAlign.Start);
         Column({ space: 5 }) {
           Row({ space: 6 }) {
             this.icon($r('app.media.verge_upload'), 16, 'warning');
-            Text('上传').fontSize(12).fontColor(this.theme.textMuted);
+            Text('上传').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
           }
-          Text(this.rateText(this.uploadRate)).fontSize(25).fontWeight(FontWeight.Medium).fontColor(this.theme.warning);
+          Text(this.rateText(this.uploadRate)).fontSize(this.theme.font(25)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.warning);
         }.alignItems(HorizontalAlign.Start);
       }.width('100%');
       Stack({ alignContent: Alignment.BottomStart }) {
@@ -2454,13 +2457,13 @@ struct Index {
         Polyline().points(this.trafficPoints(this.downloadSamples)).stroke(this.theme.primary).strokeWidth(2).fill(Color.Transparent);
         if (Math.max(0, ...this.downloadSamples, ...this.uploadSamples) === 0) {
           Text(this.coreConnected ? '暂无流量变化' : '连接内核后显示流量')
-            .fontSize(11).fontColor(this.theme.textMuted).width('100%').textAlign(TextAlign.Center).margin({ bottom: 42 });
+            .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%').textAlign(TextAlign.Center).margin({ bottom: 42 });
         }
       }
       .width('100%').height(112)
       .onAreaChange((_old: Area, area: Area) => this.chartWidth = Number(area.width));
     }
-    .width('100%').height(274).padding(20).borderRadius(8)
+    .width('100%').height(274).padding(20).borderRadius(this.theme.radius(8))
     .border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface);
   }
 
@@ -2470,20 +2473,20 @@ struct Index {
       this.cardTitle('网络设置', $r('app.media.verge_settings'));
       Row() {
         Column({ space: 5 }) {
-          Text('系统代理').fontSize(14).fontColor(this.theme.text);
-          Text(this.systemProxyDescription()).fontSize(11).fontColor(this.systemProxyMatchesCore() ? this.theme.success : this.theme.textMuted)
+          Text('系统代理').fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
+          Text(this.systemProxyDescription()).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.systemProxyMatchesCore() ? this.theme.success : this.theme.textMuted)
             .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis });
         }.alignItems(HorizontalAlign.Start).layoutWeight(1);
         Button(this.systemProxyAction(), { type: ButtonType.Normal })
-          .height(28).fontSize(11).fontColor(this.theme.primary).borderRadius(5)
+          .height(28).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary).borderRadius(this.theme.radius(5))
           .padding({ left: 10, right: 10 }).backgroundColor(this.theme.primarySoft)
           .enabled(!this.systemProxyOpening).onClick(() => this.requestSystemProxyChange());
       }.width('100%').height(74);
       Divider().color(this.theme.divider);
       Row() {
         Column({ space: 5 }) {
-          Text('虚拟网卡模式').fontSize(14).fontColor(this.theme.text);
-          Text(this.tunBusy ? '正在切换…' : this.tunEnabled ? 'TCP / UDP 转发已开启' : '接管应用网络请求').fontSize(11).fontColor(this.theme.textMuted);
+          Text('虚拟网卡模式').fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
+          Text(this.tunBusy ? '正在切换…' : this.tunEnabled ? 'TCP / UDP 转发已开启' : '接管应用网络请求').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
         }.alignItems(HorizontalAlign.Start).layoutWeight(1);
         Toggle({ type: ToggleType.Switch, isOn: this.tunEnabled })
           .enabled(!this.tunBusy && (this.tunEnabled || (this.internalCore && this.coreConnected && this.socksPort > 0)))
@@ -2491,14 +2494,14 @@ struct Index {
       }.width('100%').height(74);
       Divider().color(this.theme.divider);
       Row() {
-        Text('代理模式').fontSize(13).fontColor(this.theme.textSecondary).layoutWeight(1);
-        Text(this.modeName()).fontSize(13).fontColor(this.theme.primary);
+        Text('代理模式').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).layoutWeight(1);
+        Text(this.modeName()).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary);
         this.icon($r('app.media.verge_chevron'), 16, 'textMuted');
       }
       .width('100%').height(49)
       .onClick(() => this.navigate(2));
     }
-    .width('100%').height(274).padding(20).borderRadius(8)
+    .width('100%').height(274).padding(20).borderRadius(this.theme.radius(8))
     .border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface);
   }
 
@@ -2506,15 +2509,16 @@ struct Index {
   private summaryCard(options: SummaryCardOptions) {
     Column({ space: 13 }) {
       Row() {
-        Text(options.title).fontSize(12).fontColor(this.theme.textSecondary).layoutWeight(1);
+        Text(options.title).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).layoutWeight(1);
         this.icon(options.source, 18, options.color);
       }.width('100%');
       Row({ space: 10 }) {
-        Text(options.value).fontSize(25).fontWeight(FontWeight.Medium).fontColor(this.theme.text);
-        Text(options.detail).fontSize(11).fontColor(this.theme.textMuted).margin({ top: 8 });
+        Text(options.value).fontSize(this.theme.font(25)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.text).flexShrink(0);
+        Text(options.detail).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).margin({ top: 8 })
+          .layoutWeight(1).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis });
       }.width('100%');
     }
-    .width('100%').height(112).padding(20).borderRadius(8)
+    .width('100%').height(112 * Math.max(1, this.theme.fontScale)).padding(20).borderRadius(this.theme.radius(8))
     .border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface);
   }
 
@@ -2524,22 +2528,22 @@ struct Index {
       this.icon($r('app.media.verge_server'), 23, 'textMuted');
       Column({ space: 5 }) {
         Text(this.coreConnected ? this.coreVersion : '内核未连接')
-          .fontSize(13).fontWeight(FontWeight.Medium).fontColor(this.theme.textSecondary);
-        Text(this.backgroundCore ? '后台 VPN 内核' : this.internalCore ? '内置内核' : 'External Controller').fontSize(11).fontColor(this.theme.textMuted);
+          .fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.textSecondary);
+        Text(this.backgroundCore ? '后台 VPN 内核' : this.internalCore ? '内置内核' : 'External Controller').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
       }.alignItems(HorizontalAlign.Start).layoutWeight(1);
-      Text(this.coreConnected ? '运行中' : '离线').fontSize(12).fontColor(this.coreConnected ? this.theme.success : this.theme.textMuted);
+      Text(this.coreConnected ? '运行中' : '离线').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.coreConnected ? this.theme.success : this.theme.textMuted);
       this.icon($r('app.media.verge_arrow'), 17, 'textMuted');
     }
-    .width('100%').padding(18).borderRadius(8)
+    .width('100%').padding(18).borderRadius(this.theme.radius(8))
     .border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface)
     .onClick(() => this.navigate(6));
   }
 
   @Builder
   private typeChip(label: string) {
-    Text(label).fontSize(11).fontColor(this.theme.primary)
+    Text(label).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary)
       .padding({ left: 5, right: 5, top: 1, bottom: 1 })
-      .border({ width: 1, color: this.theme.primaryBorder }).borderRadius(3);
+      .border({ width: 1, color: this.theme.primaryBorder }).borderRadius(this.theme.radius(3));
   }
 
   @Builder
@@ -2547,12 +2551,12 @@ struct Index {
     Row({ space: 8 }) {
       this.icon($r('app.media.verge_search'), 18, 'textMuted');
       TextInput({ text: value, placeholder }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted)
-        .fontSize(13).height(36).padding(0).layoutWeight(1)
+        .fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).height(36).padding(0).layoutWeight(1)
         .backgroundColor(Color.Transparent).placeholderColor(this.theme.textMuted)
         .onChange(onChange);
     }
     .height(40).padding({ left: 12, right: 10 }).width('100%')
-    .border({ width: 1, color: this.theme.border }).borderRadius(6).backgroundColor(this.theme.surface);
+    .border({ width: 1, color: this.theme.border }).borderRadius(this.theme.radius(6)).backgroundColor(this.theme.surface);
   }
 
   @Builder
@@ -2595,12 +2599,12 @@ struct Index {
       Row({ space: 12 }) {
         this.icon($r('app.media.verge_server'), 29, 'primary');
         Column({ space: 7 }) {
-          Text(provider.name).fontSize(17).fontWeight(FontWeight.Bold).fontColor(this.theme.text)
+          Text(provider.name).fontSize(this.theme.font(17)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold).fontColor(this.theme.text)
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
           Row({ space: 8 }) {
             this.typeChip(provider.vehicleType.toLowerCase() === 'file' ? '本地文件' : provider.vehicleType.toLowerCase() === 'inline' ? '内联' : provider.vehicleType);
-            Text(`${provider.proxies.length} 个节点`).fontSize(12).fontColor(this.theme.textMuted);
-            if (provider.checking) { Text('检查中').fontSize(11).fontColor(this.theme.primary); }
+            Text(`${provider.proxies.length} 个节点`).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
+            if (provider.checking) { Text('检查中').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary); }
           }
         }.alignItems(HorizontalAlign.Start).layoutWeight(1);
         if (provider.updating || this.requestingProviders.indexOf(provider.name) >= 0) {
@@ -2608,18 +2612,18 @@ struct Index {
         } else {
           Button({ type: ButtonType.Normal }) {
             this.icon($r('app.media.verge_refresh'), 18, 'primary');
-          }.width(32).height(32).borderRadius(5).backgroundColor(this.theme.primarySoft)
+          }.width(32).height(32).borderRadius(this.theme.radius(5)).backgroundColor(this.theme.primarySoft)
             .enabled(this.canUpdateProvider(provider)).accessibilityText(`更新 ${provider.name}`)
             .onClick(() => this.providerAction(provider, true));
         }
         Button({ type: ButtonType.Normal }) {
           this.icon($r('app.media.verge_more'), 20, 'textSecondary');
-        }.width(30).height(32).borderRadius(5).backgroundColor(Color.Transparent)
+        }.width(30).height(32).borderRadius(this.theme.radius(5)).backgroundColor(Color.Transparent)
           .accessibilityText(`${provider.name} 的操作`).bindMenu(this.providerContextMenu(provider));
       }.width('100%').padding({ left: 20, right: 16, top: 18, bottom: 16 });
       if (provider.error.length > 0) {
         Text(`${provider.error}${provider.proxies.length > 0 ? ' · 已保留现有节点' : ''}`)
-          .fontSize(12).fontColor(this.theme.danger).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+          .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.danger).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%').padding({ left: 20, right: 20, bottom: 12 });
       }
       if (this.internalCore && provider.vehicleType.toLowerCase() === 'file' && provider.proxies.length === 0) {
@@ -2629,9 +2633,9 @@ struct Index {
       }
       Row() {
         Text(provider.vehicleType.toLowerCase() === 'inline' ? '节点来自当前配置' : this.providerTime(provider.updatedAt))
-          .fontSize(11).fontColor(this.theme.textMuted).layoutWeight(1);
+          .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).layoutWeight(1);
         Button(this.expandedProviders.indexOf(provider.name) >= 0 ? '收起节点' : '查看节点', { type: ButtonType.Normal })
-          .height(30).fontSize(12).fontColor(this.theme.primary).backgroundColor(Color.Transparent)
+          .height(30).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary).backgroundColor(Color.Transparent)
           .onClick(() => this.toggleProvider(provider.name));
       }.width('100%').padding({ left: 20, right: 12, bottom: 10 });
       if (this.expandedProviders.indexOf(provider.name) >= 0) {
@@ -2640,21 +2644,21 @@ struct Index {
           Column({ space: 0 }) {
             ForEach(provider.proxies, (name: string) => {
               Row({ space: 10 }) {
-                Text(name).fontSize(13).fontColor(this.theme.textSecondary).layoutWeight(1)
+                Text(name).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).layoutWeight(1)
                   .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
-                Text(this.nodeProtocolText(name)).fontSize(10).fontColor(this.theme.textMuted);
-                Text(this.nodeDelayText(name)).fontSize(11).fontColor(this.theme.primary).width(70).textAlign(TextAlign.End);
+                Text(this.nodeProtocolText(name)).fontSize(this.theme.font(10)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
+                Text(this.nodeDelayText(name)).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary).width(70).textAlign(TextAlign.End);
               }.width('100%').height(44).padding({ left: 20, right: 20 })
                 .border({ width: { bottom: 1 }, color: this.theme.divider })
                 .bindContextMenu(this.providerNodeMenu(name), ResponseType.RightClick);
             }, (name: string) => name);
             if (provider.proxies.length === 0) {
-              Text(provider.updating ? '正在获取节点…' : '暂无节点').fontSize(12).fontColor(this.theme.textMuted).padding(24);
+              Text(provider.updating ? '正在获取节点…' : '暂无节点').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).padding(24);
             }
           }.width('100%');
         }.width('100%').constraintSize({ maxHeight: 308 }).scrollBar(BarState.Auto);
       }
-    }.width('100%').borderRadius(8).clip(true).backgroundColor(this.theme.surface)
+    }.width('100%').borderRadius(this.theme.radius(8)).clip(true).backgroundColor(this.theme.surface)
       .bindContextMenu(this.providerContextMenu(provider), ResponseType.RightClick);
   }
 
@@ -2672,7 +2676,7 @@ struct Index {
         Column() {
           this.emptyState(this.providerQuery.length > 0 ? '没有匹配的代理集合' : '暂无代理集合',
             this.providerQuery.length > 0 ? '尝试其他集合或节点名称' : '配置中的 proxy-providers 会显示在这里', $r('app.media.verge_server'));
-        }.width('100%').borderRadius(8).backgroundColor(this.theme.surface);
+        }.width('100%').borderRadius(this.theme.radius(8)).backgroundColor(this.theme.surface);
       }
     }.width('100%');
   }
@@ -2689,7 +2693,7 @@ struct Index {
       if (this.batchTesting) {
         Row({ space: 8 }) {
           LoadingProgress().width(16).height(16).color(this.theme.primary);
-          Text('正在测试节点延迟…').fontSize(12).fontColor(this.theme.textSecondary);
+          Text('正在测试节点延迟…').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary);
         }.width('100%').padding({ left: 8, top: 4, bottom: 4 });
       }
       if (this.visibleGroups().length > 0) {
@@ -2700,7 +2704,7 @@ struct Index {
         Column() {
           this.emptyState(this.proxyQuery.length > 0 ? '没有匹配的节点' : '暂无代理组',
             this.proxyQuery.length > 0 ? '尝试其他节点名称或地区' : '导入配置并连接内核后，在这里切换节点', $r('app.media.verge_proxies'));
-        }.width('100%').borderRadius(8).backgroundColor(this.theme.surface);
+        }.width('100%').borderRadius(this.theme.radius(8)).backgroundColor(this.theme.surface);
       }
     }.width('100%');
     }
@@ -2716,18 +2720,18 @@ struct Index {
               group.type === 'URLTest' ? this.theme.primary : group.type === 'LoadBalance' ? this.theme.purple : this.theme.success });
         }.width(38).height(42);
         Column({ space: 8 }) {
-          Text(this.groupTitle(group.name)).fontSize(18).fontWeight(FontWeight.Bold).fontColor(this.theme.text)
+          Text(this.groupTitle(group.name)).fontSize(this.theme.font(18)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold).fontColor(this.theme.text)
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
           Row({ space: 9 }) {
             this.typeChip(group.type);
             if (this.isBalancedGroup(group)) {
-              Text(group.checking ? '检查中' : this.balancePolicyText(group)).fontSize(10).fontColor(this.theme.primary);
+              Text(group.checking ? '检查中' : this.balancePolicyText(group)).fontSize(this.theme.font(10)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary);
             } else if (group.type === 'URLTest' || group.type === 'Fallback') {
               Text(group.checking ? '检查中' : (group.manual ?? '').length > 0 ? '手动固定' : '自动')
-                .fontSize(10).fontColor(this.theme.primary);
+                .fontSize(this.theme.font(10)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary);
             }
             Text(this.isBalancedGroup(group) ? (group.lastSelected ? `最近 ${group.lastSelected}` : '按请求分配节点') :
-              group.now || (group.type === 'URLTest' || group.type === 'Fallback' ? '暂无可用节点' : '尚未选择')).fontSize(13).fontColor(this.theme.textMuted)
+              group.now || (group.type === 'URLTest' || group.type === 'Fallback' ? '暂无可用节点' : '尚未选择')).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted)
               .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1);
           }.width('100%');
         }.alignItems(HorizontalAlign.Start).layoutWeight(1);
@@ -2750,11 +2754,11 @@ struct Index {
           }, (name: string) => `${group.name}-${name}`);
         }.width('100%').padding({ left: 18, right: 18, top: 14, bottom: 18 });
         if (group.proxies.length === 0) {
-          Text('此代理组暂无候选节点').fontSize(12).fontColor(this.theme.textMuted).padding(20);
+          Text('此代理组暂无候选节点').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).padding(20);
         }
       }
     }
-    .width('100%').borderRadius(8).clip(true).backgroundColor(this.theme.surface)
+    .width('100%').borderRadius(this.theme.radius(8)).clip(true).backgroundColor(this.theme.surface)
     .onAreaChange((_old: Area, area: Area) => {
       this.groupPositions[group.name] = Number(area.globalPosition.y) - this.contentTop +
         this.contentScroller.currentOffset().yOffset;
@@ -2770,12 +2774,12 @@ struct Index {
             if (this.groupIconSource(group)) {
               ProxyGroupIcon({ source: this.groupIconSource(group), revision: this.groupIconRevision, iconSize: 16, fallback: this.groupIcon(group.type) });
             } else {
-              Text(this.groupInitial(group.name)).fontSize(11)
+              Text(this.groupInitial(group.name)).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily)
                 .fontWeight(this.focusedProxyGroup === group.name ? FontWeight.Bold : FontWeight.Regular)
                 .fontColor(this.focusedProxyGroup === group.name ? this.theme.primary : this.theme.textMuted);
             }
           }
-          .width(24).height(24).borderRadius(5)
+          .width(24).height(24).borderRadius(this.theme.radius(5))
           .backgroundColor(this.focusedProxyGroup === group.name || this.hoveredProxyGroup === group.name ?
             this.theme.primaryHover : Color.Transparent)
           .accessibilityText(`跳转到 ${group.name}${this.focusedProxyGroup === group.name ? '，当前位置' : ''}`)
@@ -2794,14 +2798,14 @@ struct Index {
       Row({ space: 8 }) {
         Rect().width(3).height(27).radius(2).fill(name === group.now ? this.theme.primary : this.theme.border);
         Column({ space: 7 }) {
-          Text(name).fontSize(13).fontColor(name === group.now ? this.theme.primary : this.theme.text)
+          Text(name).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(name === group.now ? this.theme.primary : this.theme.text)
             .fontWeight(name === group.now ? FontWeight.Medium : FontWeight.Regular)
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%');
           Text(this.nodeProtocolText(name))
-            .fontSize(10).fontColor(name === group.now ? this.theme.primary : this.theme.textMuted);
+            .fontSize(this.theme.font(10)).fontFamily(this.theme.fontFamily).fontColor(name === group.now ? this.theme.primary : this.theme.textMuted);
         }.alignItems(HorizontalAlign.Start).layoutWeight(1);
         Column({ space: 6 }) {
-          Text(this.nodeDelayText(name)).fontSize(11)
+          Text(this.nodeDelayText(name)).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily)
             .fontColor(this.testingNodes.indexOf(name) >= 0 ? this.theme.textMuted : this.nodeDelay(name) === 0 ? this.theme.danger : this.nodeDelay(name) > 0 ? this.theme.success : this.theme.textMuted);
           if (name === group.now) {
             this.icon($r('app.media.verge_check'), 15, 'primary');
@@ -2809,7 +2813,7 @@ struct Index {
         }.alignItems(HorizontalAlign.End);
       }.width('100%');
     }
-    .height(68).width('100%').padding({ left: 10, right: 12 }).borderRadius(6)
+    .height(68).width('100%').padding({ left: 10, right: 12 }).borderRadius(this.theme.radius(6))
     .backgroundColor(name === group.now ? this.theme.primarySoft :
       this.hoveredProxyNode === `${group.name}/${name}` ? this.theme.primaryHover : this.theme.field)
     .border({ width: 1, color: name === group.now ? this.theme.primaryBorder : this.theme.divider })
@@ -2863,45 +2867,45 @@ struct Index {
       Row({ space: 12 }) {
         this.icon($r('app.media.verge_rules'), 26, 'primary');
         Column({ space: 6 }) {
-          Text(provider.name).fontSize(16).fontWeight(FontWeight.Bold).fontColor(this.theme.text)
+          Text(provider.name).fontSize(this.theme.font(16)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold).fontColor(this.theme.text)
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
           Row({ space: 7 }) {
             this.typeChip(`${provider.behavior.toUpperCase()} · ${provider.format.toUpperCase()}`);
-            Text(`${provider.ruleCount} 条规则`).fontSize(12).fontColor(this.theme.textMuted);
+            Text(`${provider.ruleCount} 条规则`).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
           }
         }.alignItems(HorizontalAlign.Start).layoutWeight(1);
         if (provider.updating || this.requestingRuleProviders.indexOf(this.ruleProviderKey(provider)) >= 0) {
           LoadingProgress().width(20).height(20).color(this.theme.primary);
         } else {
-          Text(provider.ready ? '已就绪' : '未就绪').fontSize(12).fontColor(provider.ready ? this.theme.success : this.theme.warning);
+          Text(provider.ready ? '已就绪' : '未就绪').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(provider.ready ? this.theme.success : this.theme.warning);
         }
         Button({ type: ButtonType.Normal }) {
           this.icon($r('app.media.verge_more'), 20, 'textSecondary');
-        }.width(30).height(32).borderRadius(5).backgroundColor(Color.Transparent)
+        }.width(30).height(32).borderRadius(this.theme.radius(5)).backgroundColor(Color.Transparent)
           .accessibilityText(`${provider.name} 的规则集合操作`).bindMenu(this.ruleProviderMenu(provider));
       }.width('100%');
       if (provider.error.length > 0) {
         Text(`${provider.error}${provider.ready ? ' · 正在使用已保留的规则' : ''}`)
-          .fontSize(12).fontColor(provider.ready ? this.theme.warning : this.theme.danger).width('100%')
+          .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(provider.ready ? this.theme.warning : this.theme.danger).width('100%')
           .maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis });
       }
       Row({ space: 8 }) {
         Text(provider.vehicleType.toLowerCase() === 'inline' ? '规则来自当前配置' :
           `${provider.vehicleType} · ${this.providerTime(provider.updatedAt)}`)
-          .fontSize(11).fontColor(this.theme.textMuted).layoutWeight(1);
+          .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).layoutWeight(1);
         if (this.internalCore && provider.vehicleType.toLowerCase() === 'file' && !provider.ready) {
           this.outlineButton('导入规则文件', $r('app.media.verge_import'), () => this.ruleProviderAction(provider, 'import'));
         } else {
-          Button('查看规则', { type: ButtonType.Normal }).fontSize(12).height(30).fontColor(this.theme.primary)
+          Button('查看规则', { type: ButtonType.Normal }).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).height(30).fontColor(this.theme.primary)
             .backgroundColor(Color.Transparent).enabled(provider.ready).onClick(() => this.ruleProviderAction(provider, 'view'));
         }
         Button({ type: ButtonType.Normal }) {
           this.icon($r('app.media.verge_refresh'), 18, 'primary');
-        }.width(30).height(30).borderRadius(5).backgroundColor(Color.Transparent)
+        }.width(30).height(30).borderRadius(this.theme.radius(5)).backgroundColor(Color.Transparent)
           .enabled(this.canUpdateRuleProvider(provider)).accessibilityText(`更新规则集合 ${provider.name}`)
           .onClick(() => this.ruleProviderAction(provider, 'update'));
       }.width('100%');
-    }.width('100%').padding(18).borderRadius(8).backgroundColor(this.theme.surface)
+    }.width('100%').padding(18).borderRadius(this.theme.radius(8)).backgroundColor(this.theme.surface)
       .bindContextMenu(this.ruleProviderMenu(provider), ResponseType.RightClick);
   }
 
@@ -2917,7 +2921,7 @@ struct Index {
         Column() {
           this.emptyState(this.ruleProviderQuery.length > 0 ? '没有匹配的规则集合' : '暂无规则集合',
             '配置中的 rule-providers 会显示在这里，支持 YAML / TEXT / MRS', $r('app.media.verge_rules'));
-        }.width('100%').borderRadius(8).backgroundColor(this.theme.surface);
+        }.width('100%').borderRadius(this.theme.radius(8)).backgroundColor(this.theme.surface);
       }
     }.width('100%').bindContextMenu(this.ruleProvidersMenu(), ResponseType.RightClick);
   }
@@ -2942,18 +2946,18 @@ struct Index {
       this.searchField(this.ruleQuery, '搜索规则、匹配内容或策略', (value: string) => this.ruleQuery = value);
       Column({ space: 0 }) {
         Row() {
-          Text('规则类型').fontSize(12).fontColor(this.theme.textMuted).width('23%');
-          Text('匹配内容').fontSize(12).fontColor(this.theme.textMuted).layoutWeight(1);
-          Text('代理策略').fontSize(12).fontColor(this.theme.textMuted).width('28%');
+          Text('规则类型').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('23%');
+          Text('匹配内容').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).layoutWeight(1);
+          Text('代理策略').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('28%');
         }.width('100%').height(46).padding({ left: 20, right: 20 }).backgroundColor(this.theme.surfaceHover);
         Divider().color(this.theme.divider);
         if (this.visibleRules().length > 0) {
           ForEach(this.visibleRules(), (rule: ClashRule) => {
             Row({ space: 10 }) {
-              Text(rule.type.toUpperCase()).fontSize(11).fontColor(this.theme.textSecondary).width('23%');
-              Text(rule.payload || '*').fontSize(12).fontColor(this.theme.text).layoutWeight(1)
+              Text(rule.type.toUpperCase()).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('23%');
+              Text(rule.payload || '*').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1)
                 .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
-              Text(rule.proxy).fontSize(12).fontColor(this.theme.textSecondary).width('28%')
+              Text(rule.proxy).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('28%')
                 .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
             }.width('100%').height(43).padding({ left: 20, right: 20 })
               .border({ width: { bottom: 1 }, color: this.theme.divider })
@@ -2963,7 +2967,7 @@ struct Index {
           this.emptyState(this.ruleQuery.length > 0 ? '没有匹配的规则' : '暂无规则',
             '导入配置后显示实际分流规则', $r('app.media.verge_rules'));
         }
-      }.width('100%').borderRadius(8).clip(true).border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface);
+      }.width('100%').borderRadius(this.theme.radius(8)).clip(true).border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface);
     }.width('100%');
   }
 
@@ -2998,10 +3002,10 @@ struct Index {
   @Builder
   private connectionActions() {
     Row({ space: 16 }) {
-      Text(`${this.activeConnections} 个活动连接`).fontSize(12).fontColor(this.theme.textSecondary);
+      Text(`${this.activeConnections} 个活动连接`).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary);
       Blank();
-      Button('断开全部', { type: ButtonType.Normal }).height(32).fontSize(12).fontColor(this.theme.danger)
-        .backgroundColor(this.theme.dangerSoft).borderRadius(5).enabled(this.coreConnected && this.activeConnections > 0)
+      Button('断开全部', { type: ButtonType.Normal }).height(32).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.danger)
+        .backgroundColor(this.theme.dangerSoft).borderRadius(this.theme.radius(5)).enabled(this.coreConnected && this.activeConnections > 0)
         .onClick(() => this.closeAllConnections());
     }.width(this.windowWidth < 780 ? '100%' : 232);
   }
@@ -3010,25 +3014,25 @@ struct Index {
   private connectionsTable() {
     Column({ space: 0 }) {
       Row() {
-        Text('协议').fontSize(12).fontColor(this.theme.textMuted).width(54);
-        Text('目标地址').fontSize(12).fontColor(this.theme.textMuted).layoutWeight(1);
-        Text('代理链 / 规则').fontSize(12).fontColor(this.theme.textMuted).width('32%');
-        Text('上传').fontSize(12).fontColor(this.theme.textMuted).width(90);
-        Text('下载').fontSize(12).fontColor(this.theme.textMuted).width(90);
+        Text('协议').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width(54);
+        Text('目标地址').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).layoutWeight(1);
+        Text('代理链 / 规则').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('32%');
+        Text('上传').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width(90);
+        Text('下载').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width(90);
         Blank().width(30);
       }.width('100%').height(47).padding({ left: 20, right: 20 }).backgroundColor(this.theme.surfaceHover);
       Divider().color(this.theme.divider);
       ForEach(this.visibleConnections(), (item: ClashConnection) => {
         Row() {
-          Text(item.network.toUpperCase() || '—').fontSize(10).fontColor(item.network === 'udp' ? this.theme.purple : this.theme.textSecondary).width(54);
-          Text(`${item.host}${item.port.length > 0 ? `:${item.port}` : ''}`).fontSize(13).fontColor(this.theme.text).layoutWeight(1)
+          Text(item.network.toUpperCase() || '—').fontSize(this.theme.font(10)).fontFamily(this.theme.fontFamily).fontColor(item.network === 'udp' ? this.theme.purple : this.theme.textSecondary).width(54);
+          Text(`${item.host}${item.port.length > 0 ? `:${item.port}` : ''}`).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1)
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
-          Text(this.connectionRoute(item)).fontSize(12).fontColor(this.theme.textSecondary).width('32%')
+          Text(this.connectionRoute(item)).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('32%')
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
-          Text(this.formatBytes(item.upload)).fontSize(12).fontColor(this.theme.warning).width(90);
-          Text(this.formatBytes(item.download)).fontSize(12).fontColor(this.theme.primary).width(90);
-          Button('•••', { type: ButtonType.Normal }).width(30).height(30).fontSize(12).fontColor(this.theme.textMuted)
-            .backgroundColor(Color.Transparent).borderRadius(4).accessibilityText('连接操作')
+          Text(this.formatBytes(item.upload)).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.warning).width(90);
+          Text(this.formatBytes(item.download)).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary).width(90);
+          Button('•••', { type: ButtonType.Normal }).width(30).height(30).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted)
+            .backgroundColor(Color.Transparent).borderRadius(this.theme.radius(4)).accessibilityText('连接操作')
             .bindMenu(this.connectionContextMenu(item));
         }.width('100%').height(54).padding({ left: 20, right: 20 })
           .border({ width: { bottom: 1 }, color: this.theme.divider })
@@ -3042,9 +3046,9 @@ struct Index {
   private profilesPage() {
     Column({ space: 16 }) {
       Flex({ direction: this.windowWidth < 1000 ? FlexDirection.Column : FlexDirection.Row }) {
-        TextInput({ text: this.subscriptionUrl, placeholder: '粘贴 Clash 订阅链接' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).fontSize(13)
+        TextInput({ text: this.subscriptionUrl, placeholder: '粘贴 Clash 订阅链接' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily)
           .height(40).layoutWeight(this.windowWidth < 1000 ? 0 : 1).width('100%')
-          .backgroundColor(this.theme.surface).borderRadius(6)
+          .backgroundColor(this.theme.surface).borderRadius(this.theme.radius(6))
           .border({ width: 1, color: this.theme.border }).onChange((value: string) => this.subscriptionUrl = value)
           .margin(this.windowWidth < 1000 ? { bottom: 12 } : { right: 12 });
         Flex({ wrap: FlexWrap.Wrap }) {
@@ -3071,7 +3075,7 @@ struct Index {
           if (this.profiles.length === 0) {
             this.primaryButton('导入配置', $r('app.media.verge_import'), () => this.importProfile());
           }
-        }.width('100%').padding({ bottom: 32 }).borderRadius(8)
+        }.width('100%').padding({ bottom: 32 }).borderRadius(this.theme.radius(8))
           .border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface);
       }
     }.width('100%')
@@ -3084,36 +3088,36 @@ struct Index {
       Row({ space: 11 }) {
         Stack() {
           this.icon($r('app.media.verge_file'), 23, this.profileIsActive(profile.id) ? 'primary' : 'textSecondary');
-        }.width(42).height(44).borderRadius(7).backgroundColor(this.profileIsActive(profile.id) ? this.theme.primarySoft : this.theme.field);
+        }.width(42).height(44).borderRadius(this.theme.radius(7)).backgroundColor(this.profileIsActive(profile.id) ? this.theme.primarySoft : this.theme.field);
         Column({ space: 6 }) {
-          Text(profile.name).fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.theme.text)
+          Text(profile.name).fontSize(this.theme.font(15)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.text)
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis });
-          Text(`${profile.pinned ? '置顶 · ' : ''}${profile.sourceUrl.length > 0 ? '远程订阅' : '本地文件'} · ${profile.format}`).fontSize(11).fontColor(this.theme.textMuted);
+          Text(`${profile.pinned ? '置顶 · ' : ''}${profile.sourceUrl.length > 0 ? '远程订阅' : '本地文件'} · ${profile.format}`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
         }.alignItems(HorizontalAlign.Start).layoutWeight(1);
         if (this.profileIsActive(profile.id)) {
           this.icon($r('app.media.verge_check'), 19, 'primary');
         }
       }.width('100%');
       Row() {
-        Text(this.formatBytes(profile.size)).fontSize(11).fontColor(this.theme.textMuted).layoutWeight(1);
-        Text(`更新于 ${profile.updatedAt}`).fontSize(11).fontColor(this.theme.textMuted);
+        Text(this.formatBytes(profile.size)).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).layoutWeight(1);
+        Text(`更新于 ${profile.updatedAt}`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
       }.width('100%');
       Divider().color(this.theme.divider);
       Row({ space: 10 }) {
         Button({ type: ButtonType.Normal }) {
           this.icon($r('app.media.verge_more'), 18, 'textMuted');
         }.width(30).height(30)
-          .backgroundColor(Color.Transparent).borderRadius(4).accessibilityText('配置操作')
+          .backgroundColor(Color.Transparent).borderRadius(this.theme.radius(4)).accessibilityText('配置操作')
           .bindMenu(this.profileContextMenu(profile));
         Button(this.profileIsActive(profile.id) ? '当前使用' : '使用配置', { type: ButtonType.Normal })
-          .fontSize(12).fontColor(this.theme.primary).height(30)
-          .padding({ left: 9, right: 9 }).borderRadius(4)
+          .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary).height(30)
+          .padding({ left: 9, right: 9 }).borderRadius(this.theme.radius(4))
           .backgroundColor(this.profileIsActive(profile.id) ? this.theme.primarySoft : this.theme.field)
           .onClick(() => this.activateProfile(profile));
         Blank();
         Button({ type: ButtonType.Normal }) {
           this.icon($r('app.media.verge_trash'), 17, 'textMuted');
-        }.width(30).height(30).borderRadius(4).backgroundColor(Color.Transparent)
+        }.width(30).height(30).borderRadius(this.theme.radius(4)).backgroundColor(Color.Transparent)
           .accessibilityText(`删除配置 ${profile.name}`)
           .enabled(profile.id !== this.activeProfileId)
           .onClick(() => this.confirmRemoveProfile(profile));
@@ -3133,22 +3137,22 @@ struct Index {
       Row({ space: 5 }) {
         ForEach(['ALL', 'DEBUG', 'INFO', 'WARN', 'ERROR'], (level: string) => {
           Button(level === 'ALL' ? '全部' : level, { type: ButtonType.Normal })
-            .height(30).fontSize(11).borderRadius(5).padding({ left: 12, right: 12 })
+            .height(30).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).padding({ left: 12, right: 12 })
             .fontColor(this.logFilter === level ? this.theme.primary : this.theme.textMuted)
             .backgroundColor(this.logFilter === level ? this.theme.primarySoft : Color.Transparent)
             .onClick(() => this.logFilter = level);
         }, (level: string) => level);
         Blank();
-        Text(`${this.visibleLogs().length} 条记录`).fontSize(11).fontColor(this.theme.textMuted);
+        Text(`${this.visibleLogs().length} 条记录`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
       }.width('100%');
       Column({ space: 0 }) {
         if (this.visibleLogs().length > 0) {
           ForEach(this.visibleLogs(), (entry: UiLogEntry) => {
             Row({ space: 14 }) {
-              Text(entry.time).fontSize(11).fontFamily('monospace').fontColor(this.theme.textMuted).width(67);
-              Text(entry.level).fontSize(10).fontFamily('monospace').width(42)
+              Text(entry.time).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontFamily('monospace').fontColor(this.theme.textMuted).width(67);
+              Text(entry.level).fontSize(this.theme.font(10)).fontFamily(this.theme.fontFamily).fontFamily('monospace').width(42)
                 .fontColor(entry.level === 'ERROR' ? this.theme.danger : entry.level === 'WARN' ? this.theme.warning : this.theme.success);
-              Text(entry.message).fontSize(12).fontFamily('monospace').fontColor(this.theme.textSecondary)
+              Text(entry.message).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontFamily('monospace').fontColor(this.theme.textSecondary)
                 .layoutWeight(1).copyOption(CopyOptions.LocalDevice);
             }.width('100%').alignItems(VerticalAlign.Top)
               .padding({ left: 18, right: 18, top: 13, bottom: 13 })
@@ -3158,7 +3162,7 @@ struct Index {
         } else {
           this.emptyState('暂无日志', '连接状态和操作记录会显示在这里', $r('app.media.verge_logs'));
         }
-      }.width('100%').constraintSize({ minHeight: 260 }).borderRadius(8).clip(true)
+      }.width('100%').constraintSize({ minHeight: 260 }).borderRadius(this.theme.radius(8)).clip(true)
         .border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface);
     }.width('100%');
   }
@@ -3194,95 +3198,95 @@ struct Index {
         }.width('100%');
         Text(this.internalCore && this.dnsServer.trim().length > 0 ? '指定服务器查询用于诊断，不会改写当前配置。' :
           '使用当前配置的解析服务器和域名策略，结果同时用于内核连接与 IP 规则。')
-          .fontSize(12).fontColor(this.theme.textSecondary).width('100%');
+          .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
         Flex({ direction: this.windowWidth < 640 ? FlexDirection.Column : FlexDirection.Row }) {
           TextInput({ text: this.dnsName, placeholder: '输入域名（支持 Punycode）' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted)
-            .height(40).fontSize(13).backgroundColor(this.theme.field).borderRadius(5)
+            .height(40).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.field).borderRadius(this.theme.radius(5))
             .layoutWeight(this.windowWidth < 640 ? 0 : 1).width('100%').enabled(!this.dnsBusy)
             .onChange((value: string) => this.dnsName = value).onSubmit(() => this.runDnsQuery())
             .margin(this.windowWidth < 640 ? { bottom: 12 } : { right: 12 });
           Row({ space: 10 }) {
             Select([{ value: 'A' }, { value: 'AAAA' }, { value: 'CNAME' }, { value: 'NS' }, { value: 'MX' }, { value: 'TXT' }, { value: 'SOA' }, { value: 'HTTPS' }])
-              .value(this.dnsType).width(108).height(40).font({ size: 13 }).backgroundColor(this.theme.field)
+              .value(this.dnsType).width(108).height(40).font({ size: this.theme.font(13), family: this.theme.fontFamily }).backgroundColor(this.theme.field)
               .enabled(!this.dnsBusy).onSelect((_index: number, value: string) => this.dnsType = value);
             Button(this.dnsBusy ? '查询中…' : '查询 DNS', { type: ButtonType.Normal })
-              .height(40).padding({ left: 18, right: 18 }).fontSize(13).fontColor(this.theme.onPrimary)
-              .borderRadius(5).backgroundColor(this.theme.primary).enabled(this.coreConnected && !this.dnsBusy)
+              .height(40).padding({ left: 18, right: 18 }).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.onPrimary)
+              .borderRadius(this.theme.radius(5)).backgroundColor(this.theme.primary).enabled(this.coreConnected && !this.dnsBusy)
               .onClick(() => this.runDnsQuery());
           }.height(40);
         }.width('100%');
         if(this.internalCore) {
           TextInput({ text: this.dnsServer, placeholder: '指定解析服务器（可选，例如 tls://1.1.1.1；留空使用当前配置）' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted)
-            .height(38).fontSize(12).backgroundColor(this.theme.field).borderRadius(5).width('100%')
+            .height(38).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.field).borderRadius(this.theme.radius(5)).width('100%')
             .enabled(!this.dnsBusy).onChange((value: string) => this.dnsServer = value).onSubmit(() => this.runDnsQuery());
         }
         if (this.dnsStatus !== undefined) {
           Text(`${this.dnsStatus.enabled ? '自定义 DNS' : '系统 DNS'} · ${this.dnsStatus.nameservers} 个解析服务器 · ${this.dnsStatus.policies} 条策略 · ${this.dnsStatus.hosts} 项 hosts · ${this.dnsStatus.cacheEntries} 项缓存`)
-            .fontSize(11).fontColor(this.theme.textMuted).width('100%');
+            .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
           Text(this.dnsStatus.listening ? `DNS 监听 ${this.dnsStatus.listen ?? ''} · UDP / TCP · ${this.dnsStatus.listenerQueries ?? 0} 次查询` +
             ((this.dnsStatus.listenerRejected ?? 0) > 0 ? ` · ${this.dnsStatus.listenerRejected} 次拒绝` : '') :
             this.dnsStatus.listen ? `DNS 监听未启用 · ${this.dnsStatus.listen}` : '未配置独立 DNS 监听')
-            .fontSize(11).fontColor(this.dnsStatus.listening ? this.theme.success : this.theme.textMuted).width('100%');
+            .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.dnsStatus.listening ? this.theme.success : this.theme.textMuted).width('100%');
           if (this.dnsStatus.warnings.length > 0) {
-            Text(this.dnsStatus.warnings.join('\n')).fontSize(12).fontColor(this.theme.warning).width('100%');
+            Text(this.dnsStatus.warnings.join('\n')).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.warning).width('100%');
           }
         }
         if (this.dnsError.length > 0) {
-          Text(this.dnsError).fontSize(12).fontColor(this.theme.danger).width('100%').copyOption(CopyOptions.LocalDevice);
+          Text(this.dnsError).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.danger).width('100%').copyOption(CopyOptions.LocalDevice);
         }
         if (this.dnsAnswer !== undefined) {
           Divider().color(this.theme.divider);
           Row({ space: 10 }) {
             Text(this.dnsAnswer.Status === 0 ? 'NOERROR' : this.dnsAnswer.Status === 3 ? 'NXDOMAIN' : `RCODE ${this.dnsAnswer.Status}`)
-              .fontSize(12).fontColor(this.dnsAnswer.Status === 0 ? this.theme.success : this.theme.warning);
-            Text(this.dnsAnswer.server ?? '当前内核 DNS').fontSize(11).fontColor(this.theme.textMuted).layoutWeight(1)
+              .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.dnsAnswer.Status === 0 ? this.theme.success : this.theme.warning);
+            Text(this.dnsAnswer.server ?? '当前内核 DNS').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).layoutWeight(1)
               .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis });
             Text(this.dnsAnswer.cached ? '命中缓存' : this.dnsAnswer.delay !== undefined ? `${this.dnsAnswer.delay} ms` : '')
-              .fontSize(11).fontColor(this.theme.primary);
+              .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary);
             Button({ type: ButtonType.Normal }) {
               this.icon($r('app.media.verge_more'), 20);
-            }.width(30).height(30).backgroundColor(Color.Transparent).borderRadius(5)
+            }.width(30).height(30).backgroundColor(Color.Transparent).borderRadius(this.theme.radius(5))
               .accessibilityText('DNS 查询结果操作').bindMenu(this.dnsResultMenu());
           }.width('100%');
           ForEach(this.dnsAnswer.Answer ?? [], (record: ClashDnsRecord) => {
             Column({ space: 8 }) {
               Row({ space: 10 }) {
                 this.typeChip(this.dnsTypeName(record.type));
-                Text(record.name).fontSize(12).fontColor(this.theme.textSecondary).layoutWeight(1)
+                Text(record.name).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).layoutWeight(1)
                   .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis });
-                Text(`TTL ${record.TTL}`).fontSize(11).fontColor(this.theme.textMuted);
+                Text(`TTL ${record.TTL}`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
               }.width('100%');
-              Text(record.data).fontSize(13).fontFamily('monospace').fontColor(this.theme.text).width('100%')
+              Text(record.data).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontFamily('monospace').fontColor(this.theme.text).width('100%')
                 .copyOption(CopyOptions.LocalDevice);
-            }.width('100%').padding(14).borderRadius(6).backgroundColor(this.theme.field)
+            }.width('100%').padding(14).borderRadius(this.theme.radius(6)).backgroundColor(this.theme.field)
               .bindContextMenu(this.dnsRecordMenu(record), ResponseType.RightClick);
           }, (record: ClashDnsRecord) => JSON.stringify(record));
           if ((this.dnsAnswer.Answer ?? []).length === 0) {
             Text(this.dnsAnswer.Status === 3 ? '该域名不存在，DNS 返回 NXDOMAIN。' : '查询成功，当前类型没有返回记录。')
-              .fontSize(12).fontColor(this.theme.textMuted).width('100%');
+              .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
           }
         }
-      }.width('100%').padding(20).borderRadius(8).backgroundColor(this.theme.surface)
+      }.width('100%').padding(20).borderRadius(this.theme.radius(8)).backgroundColor(this.theme.surface)
         .border({ width: 1, color: this.theme.border }).bindContextMenu(this.dnsResultMenu(), ResponseType.RightClick);
       Column({ space: 16 }) {
         this.cardTitle('代理连通性', $r('app.media.verge_test'));
-        Text(this.selectedProxy || '尚未选择代理节点').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.theme.text)
+        Text(this.selectedProxy || '尚未选择代理节点').fontSize(this.theme.font(16)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.text)
           .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%');
-        Text(this.testUrl).fontSize(12).fontColor(this.theme.textSecondary).width('100%');
+        Text(this.testUrl).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
         Row({ space: 12 }) {
           Button(this.testingNodes.indexOf(this.selectedProxy) >= 0 ? '检测中…' : '检测当前节点', { type: ButtonType.Normal })
-            .height(34).fontSize(12).fontColor(this.theme.onPrimary).padding({ left: 14, right: 14 }).borderRadius(5)
+            .height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.onPrimary).padding({ left: 14, right: 14 }).borderRadius(this.theme.radius(5))
             .backgroundColor(this.theme.primary).enabled(this.coreConnected && this.selectedProxy.length > 0 && this.testingNodes.indexOf(this.selectedProxy) < 0)
             .onClick(() => this.testNode(this.selectedProxy));
           if (this.internalCore) this.outlineButton('内核自检', $r('app.media.verge_shield'), () => this.diagnoseCore());
           Blank();
           Text(this.selectedProxy.length > 0 ? this.nodeDelayText(this.selectedProxy) : '—')
-            .fontSize(14).fontColor(this.nodeDelay(this.selectedProxy) > 0 ? this.theme.success : this.theme.textMuted);
+            .fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontColor(this.nodeDelay(this.selectedProxy) > 0 ? this.theme.success : this.theme.textMuted);
         }.width('100%');
         if ((this.delayErrors[this.selectedProxy] ?? '').length > 0) {
-          Text(this.delayErrors[this.selectedProxy]).fontSize(12).fontColor(this.theme.danger).width('100%');
+          Text(this.delayErrors[this.selectedProxy]).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.danger).width('100%');
         }
-      }.width('100%').padding(20).borderRadius(8).backgroundColor(this.theme.surface).border({ width: 1, color: this.theme.border });
+      }.width('100%').padding(20).borderRadius(this.theme.radius(8)).backgroundColor(this.theme.surface).border({ width: 1, color: this.theme.border });
     }.width('100%');
   }
 
@@ -3306,46 +3310,46 @@ struct Index {
     Column({ space: 0 }) {
       Row({ space: 9 }) {
         this.icon($r('app.media.verge_connections'), 18, 'textSecondary');
-        Text('地理数据库').fontSize(14).fontWeight(FontWeight.Medium).fontColor(this.theme.text).layoutWeight(1);
+        Text('地理数据库').fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.text).layoutWeight(1);
         this.iconButton($r('app.media.verge_refresh'), '刷新数据库状态', () => this.refreshGeoStatus());
       }.width('100%').padding(20);
       if (this.geoStatus !== undefined) {
         Text(`GeoIP 使用 ${this.geoStatus.mode === 'dat' ? 'DAT' : 'MMDB'} · ${this.geoStatus.autoUpdate ? `每 ${this.geoStatus.interval} 小时自动更新` : '自动更新已关闭'}`)
-          .fontSize(12).fontColor(this.theme.textSecondary).width('100%').padding({ left: 20, right: 20, bottom: 16 });
+          .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%').padding({ left: 20, right: 20, bottom: 16 });
         ForEach(this.geoStatus.resources, (resource: ClashGeoResource) => {
           Column({ space: 10 }) {
             Row({ space: 10 }) {
-              Text(this.geoTitle(resource.kind)).fontSize(13).fontWeight(FontWeight.Medium).fontColor(this.theme.text).layoutWeight(1);
+              Text(this.geoTitle(resource.kind)).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.text).layoutWeight(1);
               if (resource.required) this.typeChip('当前配置使用');
               Text(resource.updating ? '更新中…' : resource.ready ? '已加载' : '未下载')
-                .fontSize(12).fontColor(resource.ready ? this.theme.success : this.theme.textMuted);
+                .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(resource.ready ? this.theme.success : this.theme.textMuted);
             }.width('100%');
             Row({ space: 10 }) {
               Column({ space: 5 }) {
                 Text(resource.ready ? `${resource.imported ? '本地导入' : '下载缓存'} · ${this.formatBytes(resource.bytes)}${resource.categories > 0 ? ` · ${resource.categories} 个分类` : ''}` :
                   resource.required ? '首次使用时下载，也可导入本地文件' : '当前配置未引用，可按需下载')
-                  .fontSize(11).fontColor(this.theme.textSecondary);
-                if (resource.updatedAt.length > 0) Text(`更新于 ${resource.updatedAt}`).fontSize(11).fontColor(this.theme.textMuted);
+                  .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary);
+                if (resource.updatedAt.length > 0) Text(`更新于 ${resource.updatedAt}`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
               }.layoutWeight(1).alignItems(HorizontalAlign.Start);
               Button(resource.updating ? '更新中…' : '更新', { type: ButtonType.Normal })
-                .height(30).fontSize(12).padding({ left: 14, right: 14 }).borderRadius(5)
+                .height(30).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).padding({ left: 14, right: 14 }).borderRadius(this.theme.radius(5))
                 .fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft)
                 .enabled(!resource.updating && this.geoBusy.indexOf(resource.kind) < 0).onClick(() => this.geoAction(resource, 'update'));
-              Button('导入', { type: ButtonType.Normal }).height(30).fontSize(12).padding({ left: 14, right: 14 })
-                .borderRadius(5).fontColor(this.theme.textSecondary).backgroundColor(this.theme.field)
+              Button('导入', { type: ButtonType.Normal }).height(30).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).padding({ left: 14, right: 14 })
+                .borderRadius(this.theme.radius(5)).fontColor(this.theme.textSecondary).backgroundColor(this.theme.field)
                 .enabled(!resource.updating && this.geoBusy.indexOf(resource.kind) < 0).onClick(() => this.geoAction(resource, 'import'));
               Button({ type: ButtonType.Normal }) { this.icon($r('app.media.verge_more'), 18); }
                 .width(28).height(30).backgroundColor(Color.Transparent).accessibilityText(`${this.geoTitle(resource.kind)} 操作`)
                 .bindMenu(this.geoResourceMenu(resource));
             }.width('100%');
-            if (resource.error.length > 0) Text(resource.error).fontSize(11).fontColor(this.theme.danger).width('100%').copyOption(CopyOptions.LocalDevice);
+            if (resource.error.length > 0) Text(resource.error).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.danger).width('100%').copyOption(CopyOptions.LocalDevice);
           }.width('100%').padding(20).border({ width: { top: 1 }, color: this.theme.divider })
             .bindContextMenu(this.geoResourceMenu(resource), ResponseType.RightClick);
         }, (resource: ClashGeoResource) => JSON.stringify(resource));
       } else {
-        Text('正在读取数据库状态…').fontSize(12).fontColor(this.theme.textMuted).width('100%').padding(20);
+        Text('正在读取数据库状态…').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%').padding(20);
       }
-    }.width('100%').borderRadius(8).clip(true).backgroundColor(this.theme.surface).border({ width: 1, color: this.theme.border });
+    }.width('100%').borderRadius(this.theme.radius(8)).clip(true).backgroundColor(this.theme.surface).border({ width: 1, color: this.theme.border });
   }
 
   @Builder
@@ -3389,7 +3393,7 @@ struct Index {
             `${this.internalCore ? `${this.proxyHost.indexOf(':') >= 0 ? `[${this.proxyHost}]` : this.proxyHost}:` : ''}${socks ? this.socksPort : this.httpPort}` : '关闭' });
       }.layoutWeight(1).onClick(() => this.openProxyPorts());
       if (this.internalCore) {
-        Button('修改', { type: ButtonType.Normal }).height(32).fontSize(12).borderRadius(5)
+        Button('修改', { type: ButtonType.Normal }).height(32).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .padding({ left: 14, right: 14 }).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft)
           .accessibilityText(`修改${socks ? 'SOCKS5' : 'HTTP'}代理端口`)
           .enabled(this.coreConnected && !this.tunEnabled && !this.tunBusy)
@@ -3404,21 +3408,46 @@ struct Index {
 
   @Builder
   private appearanceModeButton(label: string, mode: string) {
-    Button(label, { type: ButtonType.Normal }).height(34).fontSize(13).borderRadius(5)
+    Button(label, { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
       .fontColor(this.appearanceMode === mode ? this.theme.onPrimary : this.theme.textSecondary)
       .backgroundColor(this.appearanceMode === mode ? this.theme.primary : this.theme.field)
       .padding({ left: 16, right: 16 }).accessibilityText(`${label}外观${this.appearanceMode === mode ? '，当前选中' : ''}`)
       .onClick(() => this.setAppearance(mode, this.appearanceController?.settings.accent ?? DEFAULT_ACCENT));
   }
 
-  private setAppearance(mode: string, accent: string): void {
+  private setAppearance(mode: string, accent: string, styles?: NativeStyles | null): void {
     try {
       if (!this.appearanceController) throw new Error('外观设置暂不可用，请重新打开应用');
-      this.appearanceController.save(mode, accent);
+      this.appearanceController.save(mode, accent, styles);
       this.appearanceMode = this.appearanceController.settings.mode;
       this.accentInput = this.appearanceController.settings.accent;
       this.appearanceError = '';
     } catch (error) { this.appearanceError = (error as Error).message || '外观未能保存，原设置已保留'; }
+  }
+
+  private openNativeStyles(): void {
+    const appearance: AppearanceController | undefined = this.appearanceController;
+    if (!appearance) { this.appearanceError = '外观设置暂不可用，请重新打开应用'; return; }
+    try {
+      const expected = appearance.savedSettings();
+      this.dialogController?.close();
+      this.dialogController = new CustomDialogController({ builder: NativeStyleDialog({ initialStyles: appearance.settings.styles, accent: appearance.settings.accent,
+        onSave: (value: NativeStyles): void => {
+          if (!this.pageActive || !sameAppearance(expected, appearance.savedSettings())) throw new Error('外观设置已变化，请重新打开样式编辑器');
+          appearance.save(appearance.settings.mode, appearance.settings.accent, value);
+          this.appearanceMode = appearance.settings.mode; this.accentInput = appearance.settings.accent; this.appearanceError = ''; this.notice = '自定义样式已保存，重启后保留';
+        }, onCopy: (text: string): Promise<void> => this.copyText(text, '自定义样式')
+      }), autoCancel: false, customStyle: true });
+      this.dialogController.open();
+    } catch (error) { this.appearanceError = (error as Error).message || '无法打开样式编辑器'; }
+  }
+
+  @Builder
+  private appearanceMenu() {
+    Menu() {
+      MenuItem({ content: '自定义样式' }).onClick(() => this.openNativeStyles());
+      MenuItem({ content: '恢复默认样式' }).onClick(() => this.setAppearance(this.appearanceMode, this.appearanceController?.settings.accent ?? DEFAULT_ACCENT, null));
+    }.backgroundColor(this.theme.surface).backgroundBlurStyle(BlurStyle.NONE);
   }
 
   @Builder
@@ -3426,40 +3455,47 @@ struct Index {
     Column({ space: 16 }) {
       Row({ space: 9 }) {
         this.icon($r('app.media.verge_settings'), 18, 'textSecondary');
-        Text('外观').fontSize(14).fontWeight(FontWeight.Medium).fontColor(this.theme.text).layoutWeight(1);
-        Text(this.theme.dark ? '当前深色' : '当前浅色').fontSize(11).fontColor(this.theme.textMuted);
+        Text('外观').fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.text).layoutWeight(1);
+        Text(this.theme.dark ? '当前深色' : '当前浅色').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
       }.width('100%');
       Row({ space: 10 }) {
         this.appearanceModeButton('跟随系统', 'system');
         this.appearanceModeButton('浅色', 'light');
         this.appearanceModeButton('深色', 'dark');
       }.width('100%');
-      Text('主题色').fontSize(13).fontColor(this.theme.text).width('100%');
+      Text('主题色').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).width('100%');
       Flex({ wrap: FlexWrap.Wrap }) {
         ForEach(this.accentOptions, (color: string, index: number) => {
           Button({ type: ButtonType.Normal }) {
             Row({ space: 6 }) {
               Circle({ width: 14, height: 14 }).fill(color);
-              Text(this.accentNames[index]).fontSize(12).fontColor(this.theme.textSecondary);
+              Text(this.accentNames[index]).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary);
             }
-          }.height(34).borderRadius(5).padding({ left: 10, right: 10 }).margin({ right: 8, bottom: 6 })
+          }.height(34).borderRadius(this.theme.radius(5)).padding({ left: 10, right: 10 }).margin({ right: 8, bottom: 6 })
             .backgroundColor(this.theme.field).border({ width: 1, color: this.accentInput.toUpperCase() === color ? this.theme.primary : this.theme.border })
             .accessibilityText(`主题色：${this.accentNames[index]}`).onClick(() => this.setAppearance(this.appearanceMode, color));
         });
       }.width('100%');
       Row({ space: 10 }) {
-        TextInput({ text: this.accentInput, placeholder: '#RRGGBB' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).fontSize(13).height(38).maxLength(7)
-          .accessibilityText('自定义主题色').fontColor(this.theme.text).backgroundColor(this.theme.field).borderRadius(5).layoutWeight(1)
+        TextInput({ text: this.accentInput, placeholder: '#RRGGBB' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).height(38).maxLength(7)
+          .accessibilityText('自定义主题色').fontColor(this.theme.text).backgroundColor(this.theme.field).borderRadius(this.theme.radius(5)).layoutWeight(1)
           .onChange((value: string) => { this.accentInput = value; this.appearanceError = ''; });
-        Button('应用', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5)
+        Button('应用', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary).onClick(() => this.setAppearance(this.appearanceMode, this.accentInput));
-        Button('恢复默认', { type: ButtonType.Normal }).height(34).fontSize(12).borderRadius(5)
-          .fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).onClick(() => this.setAppearance('system', DEFAULT_ACCENT));
+        Button('恢复默认', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
+          .fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).onClick(() => this.setAppearance('system', DEFAULT_ACCENT, null));
+      }.width('100%');
+      Row({ space: 10 }) {
+        Button('自定义样式', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
+          .fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).onClick(() => this.openNativeStyles());
+        Text(`字号 ${Math.round(this.theme.fontScale * 100)}% · 圆角 ${this.theme.cardRadius} · 边距 ${this.theme.contentGap}`)
+          .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).layoutWeight(1);
       }.width('100%');
       Text('外观会自动保存。为保证文字清晰，会根据浅色或深色适当调整主题色的明暗。')
-        .fontSize(11).fontColor(this.theme.textMuted).width('100%');
-      if (this.appearanceError) Text(this.appearanceError).fontSize(12).fontColor(this.theme.danger).width('100%');
-    }.width('100%').padding(20).borderRadius(8).backgroundColor(this.theme.surface).border({ width: 1, color: this.theme.border });
+        .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
+      if (this.appearanceError) Text(this.appearanceError).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.danger).width('100%');
+    }.width('100%').padding(20).borderRadius(this.theme.radius(8)).backgroundColor(this.theme.surface).border({ width: 1, color: this.theme.border })
+      .bindContextMenu(this.appearanceMenu(), ResponseType.RightClick);
   }
 
   @Builder
@@ -3469,83 +3505,83 @@ struct Index {
       Column({ space: 0 }) {
         Row({ space: 9 }) {
           this.icon($r('app.media.verge_server'), 18, 'textSecondary');
-          Text('内核设置').fontSize(14).fontWeight(FontWeight.Medium).fontColor(this.theme.text).layoutWeight(1);
-          Text(!this.coreConnected ? '未连接' : this.backgroundCore ? '后台 VPN 内核' : this.internalCore ? '内置内核' : '外部内核').fontSize(11).fontColor(this.theme.textMuted);
+          Text('内核设置').fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.text).layoutWeight(1);
+          Text(!this.coreConnected ? '未连接' : this.backgroundCore ? '后台 VPN 内核' : this.internalCore ? '内置内核' : '外部内核').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
         }.width('100%').padding(20);
         Divider().color(this.theme.divider);
         Column({ space: 14 }) {
           Flex({ direction: this.windowWidth < 640 ? FlexDirection.Column : FlexDirection.Row }) {
             Column({ space: 5 }) {
-              Text('控制器地址').fontSize(13).fontColor(this.theme.text);
-              Text('External Controller').fontSize(11).fontColor(this.theme.textMuted);
+              Text('控制器地址').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
+              Text('External Controller').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
             }.alignItems(HorizontalAlign.Start).width(this.windowWidth < 640 ? '100%' : 150)
               .margin(this.windowWidth < 640 ? { bottom: 10 } : { right: 24 });
             TextInput({ text: this.endpoint, placeholder: 'http://127.0.0.1:9090' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted)
-              .fontSize(13).height(38).borderRadius(5).backgroundColor(this.theme.field)
+              .fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).height(38).borderRadius(this.theme.radius(5)).backgroundColor(this.theme.field)
               .border({ width: 1, color: this.theme.border }).width('100%').layoutWeight(this.windowWidth < 640 ? 0 : 1)
               .onChange((value: string) => this.endpoint = value);
           }.width('100%');
           Flex({ direction: this.windowWidth < 640 ? FlexDirection.Column : FlexDirection.Row }) {
             Column({ space: 5 }) {
-              Text('访问密钥').fontSize(13).fontColor(this.theme.text);
-              Text('外部内核 Secret · 可选').fontSize(11).fontColor(this.theme.textMuted);
+              Text('访问密钥').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
+              Text('外部内核 Secret · 可选').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
             }.alignItems(HorizontalAlign.Start).width(this.windowWidth < 640 ? '100%' : 150)
               .margin(this.windowWidth < 640 ? { bottom: 10 } : { right: 24 });
             TextInput({ text: this.secret, placeholder: '未设置' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).type(InputType.Password)
-              .fontSize(13).height(38).borderRadius(5).backgroundColor(this.theme.field)
+              .fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).height(38).borderRadius(this.theme.radius(5)).backgroundColor(this.theme.field)
               .border({ width: 1, color: this.theme.border }).width('100%').layoutWeight(this.windowWidth < 640 ? 0 : 1)
               .onChange((value: string) => this.secret = value);
           }.width('100%');
           Row({ space: 12 }) {
             Column({ space: 5 }) {
-              Text('内置控制器认证').fontSize(13).fontColor(this.theme.text);
-              Text(`${this.controllerAccessStatus} · 与外部内核密钥独立`).fontSize(11).fontColor(this.theme.textMuted);
+              Text('内置控制器认证').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
+              Text(`${this.controllerAccessStatus} · 与外部内核密钥独立`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
             }.alignItems(HorizontalAlign.Start).layoutWeight(1);
             this.outlineButton('管理密钥', $r('app.media.verge_settings'), () => this.openControllerAccess());
           }.width('100%');
           Row() {
             Text(this.coreConnected ? this.coreVersion : '未连接内核')
-              .fontSize(12).fontColor(this.coreConnected ? this.theme.success : this.theme.textMuted).layoutWeight(1);
+              .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.coreConnected ? this.theme.success : this.theme.textMuted).layoutWeight(1);
             if (this.internalCore) {
               Button(this.diagnosing ? '自检中…' : '内核自检', { type: ButtonType.Normal })
-                .height(34).fontSize(12).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).borderRadius(5)
+                .height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary).backgroundColor(this.theme.primarySoft).borderRadius(this.theme.radius(5))
                 .margin({ right: 10 }).enabled(!this.diagnosing).onClick(() => this.diagnoseCore());
             }
             if (this.backgroundCore) {
-              Button('关闭 TUN', { type: ButtonType.Normal }).height(34).fontSize(12).fontColor(this.theme.textSecondary)
-                .backgroundColor(this.theme.field).borderRadius(5).margin({ right: 10 }).enabled(!this.tunBusy)
+              Button('关闭 TUN', { type: ButtonType.Normal }).height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary)
+                .backgroundColor(this.theme.field).borderRadius(this.theme.radius(5)).margin({ right: 10 }).enabled(!this.tunBusy)
                 .onClick(() => this.setTunEnabled(false));
             }
             this.primaryButton('测试连接', $r('app.media.verge_refresh'), () => this.connectCore());
           }.width('100%');
         }.width('100%').padding(20);
-      }.width('100%').borderRadius(8).clip(true).border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface);
+      }.width('100%').borderRadius(this.theme.radius(8)).clip(true).border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface);
       if (this.internalCore) {
         Row({ space: 16 }) {
           Column({ space: 5 }) {
-            Text('内核运行设置').fontSize(14).fontColor(this.theme.text);
+            Text('内核运行设置').fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
             Text(this.temporaryConfig ? '临时配置 · 日志级别、IPv6、重新加载' : '代理模式、日志级别、IPv6、重新加载')
-              .fontSize(11).fontColor(this.theme.textMuted);
+              .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
           }.alignItems(HorizontalAlign.Start).layoutWeight(1);
           this.outlineButton('运行设置', $r('app.media.verge_settings'), () => this.openRuntimeConfig());
-        }.width('100%').padding(20).borderRadius(8).backgroundColor(this.theme.surface).border({ width: 1, color: this.theme.border });
+        }.width('100%').padding(20).borderRadius(this.theme.radius(8)).backgroundColor(this.theme.surface).border({ width: 1, color: this.theme.border });
         this.geoSettings();
       }
       Column({ space: 0 }) {
         Row({ space: 9 }) {
           this.icon($r('app.media.verge_connections'), 18, 'textSecondary');
-          Text('代理设置').fontSize(14).fontWeight(FontWeight.Medium).fontColor(this.theme.text).layoutWeight(1);
+          Text('代理设置').fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.text).layoutWeight(1);
           if (this.internalCore) this.outlineButton('端口设置', $r('app.media.verge_settings'), () => this.openProxyPorts());
         }.width('100%').padding(20);
         Divider().color(this.theme.divider);
         Row({ space: 12 }) {
           Column({ space: 5 }) {
-            Text('系统代理').fontSize(13).fontColor(this.theme.text);
-            Text(this.systemProxyDescription()).fontSize(11)
+            Text('系统代理').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
+            Text(this.systemProxyDescription()).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily)
               .fontColor(this.systemProxyMatchesCore() ? this.theme.success : this.theme.textMuted);
           }.alignItems(HorizontalAlign.Start).layoutWeight(1);
           Button(this.systemProxyAction(), { type: ButtonType.Normal })
-            .height(32).fontSize(12).fontColor(this.theme.primary).borderRadius(5)
+            .height(32).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary).borderRadius(this.theme.radius(5))
             .padding({ left: 12, right: 12 }).backgroundColor(this.theme.primarySoft)
             .enabled(!this.systemProxyOpening).onClick(() => this.requestSystemProxyChange());
           this.outlineButton('配置', $r('app.media.verge_settings'), () => this.showSystemProxyGuide());
@@ -3553,9 +3589,9 @@ struct Index {
           .border({ width: { bottom: 1 }, color: this.theme.divider });
         Row({ space: 16 }) {
           Column({ space: 5 }) {
-            Text('虚拟网卡模式').fontSize(13).fontColor(this.theme.text);
+            Text('虚拟网卡模式').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
             Text(this.tunBusy ? '正在切换…' : this.tunError || '通过系统 VPN 接管网络请求')
-              .fontSize(11).fontColor(this.tunError.length > 0 ? this.theme.danger : this.theme.textMuted);
+              .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.tunError.length > 0 ? this.theme.danger : this.theme.textMuted);
           }.alignItems(HorizontalAlign.Start).layoutWeight(1);
           Toggle({ type: ToggleType.Switch, isOn: this.tunEnabled }).width(36).height(22).selectedColor(this.theme.primary)
             .enabled(!this.tunBusy && (this.tunEnabled || (this.internalCore && this.coreConnected && this.socksPort > 0)))
@@ -3567,8 +3603,8 @@ struct Index {
         if (this.internalCore) {
           Row({ space: 12 }) {
             Column({ space: 5 }) {
-              Text('域名嗅探').fontSize(13).fontColor(this.theme.text);
-              Text(this.sniffing ? '已开启 · 按当前协议和端口配置识别' : '已关闭 · 使用请求中的原地址').fontSize(11).fontColor(this.theme.textMuted);
+              Text('域名嗅探').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
+              Text(this.sniffing ? '已开启 · 按当前协议和端口配置识别' : '已关闭 · 使用请求中的原地址').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
             }.alignItems(HorizontalAlign.Start).layoutWeight(1);
             this.outlineButton('嗅探配置', $r('app.media.verge_settings'), () => this.openSnifferSettings());
             Toggle({ type: ToggleType.Switch, isOn: this.sniffing }).width(36).height(22).selectedColor(this.theme.primary)
@@ -3576,22 +3612,22 @@ struct Index {
           }.width('100%').padding(20).border({ width: { top: 1 }, color: this.theme.divider }).bindContextMenu(this.snifferMenu(), ResponseType.RightClick);
           Row({ space: 12 }) {
             Column({ space: 5 }) {
-              Text('局域网共享').fontSize(13).fontColor(this.theme.text);
-              Text(this.allowLan ? '已开启 · 允许其他设备连接' : '已关闭 · 仅允许本机连接').fontSize(11).fontColor(this.theme.textMuted);
+              Text('局域网共享').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
+              Text(this.allowLan ? '已开启 · 允许其他设备连接' : '已关闭 · 仅允许本机连接').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
             }.alignItems(HorizontalAlign.Start).layoutWeight(1);
             this.outlineButton('共享设置', $r('app.media.verge_settings'), () => this.openInboundSettings());
           }.width('100%').padding(20).border({ width: { top: 1 }, color: this.theme.divider })
             .bindContextMenu(this.inboundSettingsMenu(), ResponseType.RightClick);
         }
-      }.width('100%').borderRadius(8).clip(true).border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface);
+      }.width('100%').borderRadius(this.theme.radius(8)).clip(true).border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface);
       Column({ space: 14 }) {
         this.cardTitle('节点测速', $r('app.media.verge_chart'));
         TextInput({ text: this.testUrl, placeholder: 'https://www.gstatic.com/generate_204' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted)
-          .fontSize(13).height(38).borderRadius(5).backgroundColor(this.theme.field)
+          .fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).height(38).borderRadius(this.theme.radius(5)).backgroundColor(this.theme.field)
           .onChange((value: string) => this.testUrl = value);
         Row() {
           Text(this.internalCore ? '验证 HTTP / HTTPS 测试地址，默认超时 5 秒' : '通过当前内核检测测试地址')
-            .fontSize(11).fontColor(this.theme.textMuted).layoutWeight(1);
+            .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).layoutWeight(1);
           this.outlineButton('保存', $r('app.media.verge_check'), () => {
             if (!/^https?:\/\/[^\s]+$/.test(this.testUrl.trim())) {
               this.notice = '请输入有效的 HTTP 或 HTTPS 地址';
@@ -3601,17 +3637,17 @@ struct Index {
             this.notice = '测速设置已保存';
           });
         }.width('100%');
-      }.width('100%').padding(20).borderRadius(8).border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface);
+      }.width('100%').padding(20).borderRadius(this.theme.radius(8)).border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface);
       Column({ space: 0 }) {
         Row({ space: 9 }) {
           Image($r('app.media.verge_mark')).fillColor(this.theme.text).colorFilter(this.iconColor(this.theme.text)).width(21).height(21);
-          Text('关于').fontSize(14).fontWeight(FontWeight.Medium).fontColor(this.theme.text);
+          Text('关于').fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Medium).fontColor(this.theme.text);
         }.width('100%').padding(20);
         Divider().color(this.theme.divider);
         this.settingRow({ title: 'ClashOS', detail: 'HarmonyOS', value: '1.0.0' });
         Row() { this.settingRow({ title: '开源许可', detail: 'HevSocks5Tunnel / Mbed TLS / libyaml 等', value: '查看' }); }
           .width('100%').onClick(() => this.showLicenses());
-      }.width('100%').borderRadius(8).clip(true).border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface);
+      }.width('100%').borderRadius(this.theme.radius(8)).clip(true).border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface);
     }.width('100%');
   }
 
@@ -3619,10 +3655,10 @@ struct Index {
   private settingRow(options: SettingRowOptions) {
     Row({ space: 16 }) {
       Column({ space: 5 }) {
-        Text(options.title).fontSize(13).fontColor(this.theme.text);
-        Text(options.detail).fontSize(11).fontColor(this.theme.textMuted);
+        Text(options.title).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
+        Text(options.detail).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
       }.alignItems(HorizontalAlign.Start).layoutWeight(1);
-      Text(options.value).fontSize(12).fontColor(this.theme.textSecondary);
+      Text(options.value).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary);
     }.width('100%').padding({ left: 20, right: 20, top: 16, bottom: 16 })
       .border({ width: { bottom: 1 }, color: this.theme.divider });
   }
@@ -3631,23 +3667,23 @@ struct Index {
   private statusBar() {
     Row({ space: 8 }) {
       Circle({ width: 6, height: 6 }).fill(this.coreConnected ? this.theme.success : this.theme.textMuted);
-      Text(this.coreConnected ? '内核运行中' : '内核离线').fontSize(11).fontColor(this.theme.textSecondary);
+      Text(this.coreConnected ? '内核运行中' : '内核离线').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary);
       if (this.tunEnabled) {
-        Text('TUN').fontSize(9).fontColor(this.theme.primary).padding({ left: 5, right: 5, top: 2, bottom: 2 })
-          .borderRadius(3).backgroundColor(this.theme.primarySoft);
+        Text('TUN').fontSize(this.theme.font(9)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary).padding({ left: 5, right: 5, top: 2, bottom: 2 })
+          .borderRadius(this.theme.radius(3)).backgroundColor(this.theme.primarySoft);
       }
       if (this.windowWidth >= 800) {
-        Text('·').fontSize(11).fontColor(this.theme.textMuted);
-        Text(this.activeProfileName()).fontSize(11).fontColor(this.theme.textMuted)
+        Text('·').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
+        Text(this.activeProfileName()).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted)
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).constraintSize({ maxWidth: 220 });
       }
       Blank();
       if (this.windowWidth >= 560) {
-        Text(`↑ ${this.rateText(this.uploadRate)}`).fontSize(11).fontColor(this.theme.warning);
+        Text(`↑ ${this.rateText(this.uploadRate)}`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.warning);
       }
-      Text(`↓ ${this.rateText(this.downloadRate)}`).fontSize(11).fontColor(this.theme.primary).margin({ left: 8 });
+      Text(`↓ ${this.rateText(this.downloadRate)}`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.primary).margin({ left: 8 });
       if (this.windowWidth >= 1080) {
-        Text(`同步于 ${this.lastSyncTime}`).fontSize(11).fontColor(this.theme.textMuted).margin({ left: 14 });
+        Text(`同步于 ${this.lastSyncTime}`).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).margin({ left: 14 });
       }
     }.width('100%').height(32).padding({ left: 20, right: 20 })
       .backgroundColor(this.theme.chrome).border({ width: { top: 1 }, color: this.theme.border });

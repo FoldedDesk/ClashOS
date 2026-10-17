@@ -5,7 +5,7 @@ const root=path.resolve(__dirname,'../entry/src/main/ets');
 const directory=fs.mkdtempSync(path.join(os.tmpdir(),'clashos-appearance-'));
 const descriptors=new Set(),storage=new Map(),cache=new Map();
 let checks=0,maxWrite=Infinity,failWrite=false,failRename=false,failSync=false,failProtect=false,failMode=false,failTokens=false;
-let callback,id=0,offCount=0,systemDark=false,appliedMode=-1,lastTokens,tokenCalls=0,failTokenAt=0;
+let callback,id=0,offCount=0,systemDark=false,appliedMode=-1,lastTokens,tokenCalls=0,failTokenAt=0,failPublishOnce=false;
 const check=(value,label)=>{assert(value,label);checks++;};
 const fileIo={OpenMode:{CREATE:0x40,READ_WRITE:2,TRUNC:0x200},
   accessSync:p=>fs.existsSync(p),statSync:p=>fs.statSync(p),readTextSync:p=>fs.readFileSync(p,'utf8'),
@@ -35,7 +35,7 @@ function load(name){
  };
  const code=ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,experimentalDecorators:true}}).outputText;
  vm.runInNewContext(code,{module:m,exports:m.exports,require:requireShim,Observed:target=>target,
-  AppStorage:{setOrCreate:(key,value)=>storage.set(key,value),get:key=>storage.get(key)},TextEncoder,TextDecoder,Uint8Array,ArrayBuffer,Error,Set,Map,Number,JSON,Math});
+  AppStorage:{setOrCreate:(key,value)=>{if(failPublishOnce){failPublishOnce=false;throw Error('injected publish failure');}storage.set(key,value);},get:key=>storage.get(key)},TextEncoder,TextDecoder,Uint8Array,ArrayBuffer,Error,Set,Map,Number,JSON,Math});
  return m.exports;
 }
 // Independent sRGB contrast calculation, rather than verifying the production function against itself.
@@ -87,9 +87,47 @@ function ratio(a,b){const l=hex=>{const channels=[1,3,5].map(i=>parseInt(hex.sli
  check(storage.get('clashosTheme')===previous&&fs.readFileSync(savedPath,'utf8')===before,'Native theme failures do not write preferences');
  failTokenAt=tokenCalls+2;assert.throws(()=>c.save('dark','#199A70'));failTokenAt=0;checks++;
  check(storage.get('clashosTheme')===previous&&fs.readFileSync(savedPath,'utf8')===before,'A late native token failure still occurs before committing settings');
- const oldCallback=callback;c.dispose();oldCallback.onConfigurationUpdated({colorMode:0});check(storage.get('clashosTheme')===previous&&offCount===2,'Disposed windows unregister and ignore late callbacks');
+ failPublishOnce=true;assert.throws(()=>c.save('dark','#199A70'));checks++;
+ check(storage.get('clashosTheme')===previous&&fs.readFileSync(savedPath,'utf8')===before&&c.settings.mode==='system','A shared-palette publication failure cannot leave newly committed preferences behind');
+ const {nativeStyles,parseNativeStyles,sameNativeStyles}=load('theme/NativeStyles.ets'),{sameAppearance}=load('theme/AppearanceTypes.ets');
+ const styles=nativeStyles();styles.fontFamily=' Noto Serif ';styles.fontScale=1.3;styles.cardRadius=24;styles.contentGap=24;
+ styles.light={canvas:'#edf2f8',chrome:'#f4f7fc',surface:'#FFFFFF',field:'#F2F5FA',text:'#FFFFFF',textSecondary:'#FFFFFF',textMuted:'#FFFFFF'};
+ styles.dark={canvas:'#151B27',chrome:'#192233',surface:'#202C40',field:'#26334B',text:'#000000',textSecondary:'#000000',textMuted:'#000000'};
+ for(const dark of [false,true]){
+  const p=createPalette(dark,'#FFFF00',styles),backgrounds=[p.surface,p.field,p.chrome,p.canvas];
+  check(['text','textSecondary','textMuted','success','warning','danger','purple','primary'].every(k=>backgrounds.every(bg=>ratio(p[k],bg)>=4.5)),'Custom backgrounds and deliberately unreadable foregrounds are corrected across actual page surfaces');
+  check(ratio(p.onPrimary,p.primary)>=4.5&&ratio(p.primary,p.primarySoft)>=4.5,'Custom style buttons and selected-node surfaces retain contrast');
+  check(p.font(20)===26&&p.radius(8)===24&&p.radius(20)===32&&p.contentGap===24&&p.fontFamily==='Noto Serif','Native typography, corner bounds and page margins derive from the same validated style');
+ }
+ for(const mutate of [x=>x.version=2,x=>x.fontScale='1.1',x=>x.fontScale=NaN,x=>x.fontScale=Infinity,x=>x.fontScale=.84,x=>x.fontScale=1.31,
+  x=>x.cardRadius=-1,x=>x.cardRadius=25,x=>x.cardRadius=1.5,x=>x.contentGap=7,x=>x.contentGap=25,x=>x.fontFamily='bad\nfont',x=>x.fontFamily='x'.repeat(121),
+  x=>x.light=null,x=>x.dark=[],x=>x.light={surface:'red'},x=>x.light={text:17},x=>x.light={unknown:'#FFFFFF'},x=>x.css='body{}']){
+  const bad=JSON.parse(JSON.stringify(styles));mutate(bad);assert.throws(()=>nativeStyles(bad));checks++;
+ }
+ for(const text of ['null','[]','{}','bad JSON','x'.repeat(8193)]){assert.throws(()=>parseNativeStyles(text));checks++;}
+ const reordered={dark:styles.dark,light:styles.light,contentGap:24,cardRadius:24,fontScale:1.3,fontFamily:'Noto Serif',version:1};
+ check(sameNativeStyles(styles,reordered)&&sameNativeStyles(undefined,nativeStyles()),'Style equality normalizes field order, case and absent default settings');
+ c.save('system','#8B5CF6',styles);const styledSettings=c.savedSettings(),styledBefore=fs.readFileSync(savedPath,'utf8');
+ styles.fontScale=.85;check(c.settings.styles.fontScale===1.3&&styledSettings.styles.fontScale===1.3,'Saved styles are independent of mutable caller drafts');
+ c.save('dark','#199A70');check(c.settings.styles.fontScale===1.3&&storage.get('clashosTheme').dark,'Mode/accent edits retain custom style preferences');
+ c.save('system','#8B5CF6');check(!storage.get('clashosTheme').dark&&c.settings.styles.fontScale===1.3,'System callbacks retain the saved typography and both color palettes');
+ const changed=JSON.parse(JSON.stringify(c.savedSettings()));changed.styles.fontScale=1;check(!sameAppearance(c.savedSettings(),changed),'Appearance ownership guards detect style-only changes');
+ for(const kind of ['write','sync','rename','protect','publish']){
+  const baseline=fs.readFileSync(savedPath,'utf8'),palette=storage.get('clashosTheme');
+  failWrite=kind==='write';failSync=kind==='sync';failRename=kind==='rename';failProtect=kind==='protect';failPublishOnce=kind==='publish';
+  assert.throws(()=>c.save('light','#D94C86',nativeStyles()));checks++;
+  failWrite=failSync=failRename=failProtect=failPublishOnce=false;
+  check(fs.readFileSync(savedPath,'utf8')===baseline&&storage.get('clashosTheme')===palette&&c.settings.styles.fontScale===1.3,'Failed style application preserves native/shared/file state: '+kind);
+ }
+ const impossible=nativeStyles();impossible.light={surface:'#000000',field:'#FFFFFF',canvas:'#444444',chrome:'#BBBBBB'};
+ assert.throws(()=>c.save('light','#3478F6',impossible),/背景/);checks++;
+ check(fs.readFileSync(savedPath,'utf8')===styledBefore,'Unreadable style combinations fail before committing any state');
+ c.save('system','#8B5CF6',null);check(c.settings.styles===undefined&&storage.get('clashosTheme').fontScale===1,'Explicit reset removes custom styles while preserving mode/accent');
+ const oldCallback=callback,beforeDispose=storage.get('clashosTheme');c.dispose();oldCallback.onConfigurationUpdated({colorMode:0});check(storage.get('clashosTheme')===beforeDispose&&offCount===2,'Disposed windows unregister and ignore late callbacks');
  assert.throws(()=>c.save('light','#123456'));checks++;
  const reopened=new AppearanceController(context,protect);check(reopened.settings.mode==='system'&&reopened.settings.accent==='#8B5CF6','Reopened app restores saved appearance');reopened.dispose();
+ store.save({mode:'dark',accent:'#8B5CF6',styles:impossible});const badTheme=new AppearanceController(context,protect);
+ check(badTheme.loadError&&badTheme.settings.mode==='system'&&badTheme.settings.styles===undefined,'Semantically unreadable persisted colors fall back without disabling appearance recovery');badTheme.dispose();
  store.save({mode:'dark',accent:'#8B5CF6'});const Ability=load('entryability/EntryAbility.ets').default,ability=new Ability();ability.context=context;
  ability.onCreate({},{});check(appliedMode===0,'Saved dark mode is applied before the native window and widgets are created');
  let loaded=false;ability.onWindowStageCreate({loadContent:(page,done)=>{assert.equal(page,'pages/Index');assert.equal(appliedMode,0);loaded=true;done({code:0});}});check(loaded,'Window content loads after the appearance bootstrap');

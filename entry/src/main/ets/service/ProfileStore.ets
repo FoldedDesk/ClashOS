@@ -509,7 +509,7 @@ export class ProfileStore {
       const value = archive.appearance;
       if (value === null || typeof value !== 'object' || typeof value.mode !== 'string' || typeof value.accent !== 'string' || value.mode.length > 16 || value.accent.length > 32)
         throw new Error('备份中的外观设置无效');
-      archive.appearance = appearanceSettings(value.mode, value.accent);
+      archive.appearance = appearanceSettings(value.mode, value.accent, value.styles);
     }
     if (useArchiveGlobals && archive.globals === undefined) throw new Error('此备份不包含全局扩展');
     const currentGlobals: BackupGlobals = this.backupGlobals();
