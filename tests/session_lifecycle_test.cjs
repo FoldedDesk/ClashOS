@@ -57,6 +57,10 @@ class Fixture {
       return true;
     };
     host.info = () => JSON.stringify(host.runtime);
+    host.localSocksOptions = () => JSON.stringify(this.socksError ? {error:this.socksError} : {
+      address:this.socksAddress || '127.0.0.1', port:host.runtime.socksPort,
+      username:this.socksUsername || '', password:this.socksPassword || ''
+    });
     host.configureRuntimeDirectory = () => true;
     host.controllerToken = '';
     host.setControllerSecret = value => { host.controllerToken = value; return true; };
@@ -106,10 +110,12 @@ class Fixture {
       }
     };
     const tunnel = {
-      start: async (fd, port) => {
+      start: async (fd, port, address, username, password) => {
         this.trace.push('tun:start'); this.tun.starts++;
         assert(this.drivers.has(fd)); assert(this.background.runtime.running);
         assert.equal(port, this.background.runtime.socksPort);
+        assert.equal(address,this.socksAddress || '127.0.0.1');
+        assert.equal(username,this.socksUsername || '');assert.equal(password,this.socksPassword || '');
         if (this.failTunnel) { this.failTunnel = false; return false; }
         this.tun.running = true; this.tun.port = port; return true;
       },
@@ -178,6 +184,24 @@ async function test(name, action) {
   await test('first VPN start skips the nonexistent extension stop API', async f => {
     const ui = f.ui(); await ui.session.initialize('/profiles/a.yaml', 'Rule'); await ui.session.enableTunnel();
     assert(!f.trace.includes('vpn:stop')); assert.equal(f.tun.running, true);
+  });
+  await test('inbound credentials and address reach the tunnel without entering persistent IPC state', async f => {
+    f.socksAddress='::1';f.socksUsername='public-user';f.socksPassword='public-inbound-password';
+    const ui=f.ui();await ui.session.initialize('/profiles/a.yaml','Rule');await ui.session.enableTunnel();
+    assert.equal(f.tun.running,true);assert.equal(f.tun.starts,1);
+    const persistent=JSON.stringify(f.lastWant)+JSON.stringify(f.state())+fs.readFileSync(path.join(f.directory,'vpn-state.json.start'),'utf8');
+    assert(!persistent.includes(f.socksPassword));assert(!persistent.includes(f.socksUsername));
+    await f.extension.tick();assert.equal(f.tun.starts,1,'unchanged options preserve active sessions');
+    f.socksPassword='public-replacement-password';await f.extension.tick();assert.equal(f.tun.starts,2,'account changes reconnect the engine');
+    f.socksAddress='127.0.0.1';await f.extension.tick();assert.equal(f.tun.starts,3,'address changes reconnect even when the port is unchanged');
+    assert(!JSON.stringify(f.state()).includes(f.socksPassword));
+    await ui.session.disableTunnel();assert.equal(f.ports.get(9090),'ui1');
+  });
+  await test('LAN rules excluding the local tunnel stop before installing VPN routes', async f => {
+    f.socksError='Local SOCKS ingress is excluded by the LAN access rules';
+    const ui=f.ui();await ui.session.initialize('/profiles/a.yaml','Rule');
+    await assert.rejects(ui.session.enableTunnel(),/excluded/);
+    assert.equal(f.drivers.size,0);assert.equal(f.tun.starts,0);assert.equal(f.ports.get(9090),'ui1');
   });
   await test('first authorization without Want parameters restores the persisted request', async f => {
     f.dropParameters = true;

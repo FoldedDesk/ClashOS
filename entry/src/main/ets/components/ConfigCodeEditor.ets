@@ -55,6 +55,13 @@ export struct ConfigCodeEditor {
       },
       markError: async (message: string): Promise<void> => {
         if (this.ready && !this.failed) await this.web.runJavaScript(`window.ClashOSEditor.markError(${JSON.stringify(message)})`);
+      },
+      replace: async (text: string): Promise<void> => {
+        if (this.disabled) throw new Error('编辑器当前只读');
+        if (this.failed) { this.fallback = text; this.onChange(++this.lastRevision); return; }
+        if (!this.ready) throw new Error('编辑器尚未就绪');
+        const result: string = await this.web.runJavaScript(`window.ClashOSEditor.replace(${JSON.stringify(text)})`);
+        if (result !== 'true') throw new Error('请先完成输入，再填入配置');
       }
     });
   }

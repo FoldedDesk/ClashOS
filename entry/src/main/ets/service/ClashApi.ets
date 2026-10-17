@@ -131,6 +131,9 @@ export interface ClashSnapshot {
   instance: string;
   configPath: string;
   temporaryConfig?: boolean;
+  proxyHost?: string;
+  allowLan?: boolean;
+  sniffing?: boolean;
   mode: string;
   httpPort: number;
   socksPort: number;
@@ -156,10 +159,33 @@ export interface ClashProxyPorts {
   overridden: boolean;
 }
 
+export interface ClashInboundAccount { username: string; password?: string; }
+export interface ClashInboundSettings {
+  allowLan: boolean;
+  bindAddress: string;
+  users: string[];
+  skipAuth: string[];
+  allowed: string[];
+  denied: string[];
+  localAddress: string;
+  overridden: boolean;
+  profile: string;
+  revision: number;
+}
+export interface ClashInboundChanges {
+  allowLan: boolean;
+  bindAddress: string;
+  users: ClashInboundAccount[];
+  skipAuth: string[];
+  allowed: string[];
+  denied: string[];
+}
+
 export interface ClashRuntimeConfig {
   mode: string;
   logLevel: string;
   ipv6: boolean;
+  sniffing?: boolean;
   path: string;
   origin?: string;
   temporary: boolean;
@@ -355,6 +381,9 @@ export class ClashApi {
       let socksPort: number = 0;
       let configPath: string = '';
       let temporaryConfig: boolean = false;
+      let proxyHost: string = '127.0.0.1';
+      let allowLan: boolean = false;
+      let sniffing: boolean = false;
       try {
         const config: Record<string, string | number | boolean> = JSON.parse(await this.request('/configs')) as Record<string, string | number | boolean>;
         const modeValue: string | number | boolean = config['mode'];
@@ -365,6 +394,10 @@ export class ClashApi {
         const pathValue: string | number | boolean = config['path'];
         configPath = typeof pathValue === 'string' ? pathValue : '';
         temporaryConfig = config['temporary'] === true;
+        allowLan = config['allow-lan'] === true;
+        sniffing = config['sniffing'] === true;
+        const bind: string = typeof config['bind-address'] === 'string' ? config['bind-address'] as string : '*';
+        proxyHost = !allowLan || bind === '*' || bind === '0.0.0.0' ? '127.0.0.1' : bind === '::' ? '::1' : bind.replace(/^\[|\]$/g, '');
         const mixedPort: number = typeof mixedValue === 'number' ? mixedValue : 0;
         httpPort = mixedPort > 0 ? mixedPort : typeof httpValue === 'number' ? httpValue : 0;
         socksPort = mixedPort > 0 ? mixedPort : typeof socksValue === 'number' ? socksValue : 0;
@@ -406,6 +439,9 @@ export class ClashApi {
         connected: true,
         version: version.version ?? '未知版本',
         temporaryConfig,
+        proxyHost,
+        allowLan,
+        sniffing,
         mode,
         httpPort,
         socksPort,
@@ -467,18 +503,42 @@ export class ClashApi {
     const config: Record<string, string | number | boolean> = JSON.parse(await this.request('/configs')) as Record<string, string | number | boolean>;
     return { mode: this.normalizeMode(typeof config['mode'] === 'string' ? config['mode'] as string : 'Rule'),
       logLevel: typeof config['log-level'] === 'string' ? config['log-level'] as string : 'info',
-      ipv6: config['ipv6'] === true, path: typeof config['path'] === 'string' ? config['path'] as string : '',
+      ipv6: config['ipv6'] === true, sniffing: config['sniffing'] === true, path: typeof config['path'] === 'string' ? config['path'] as string : '',
       origin: typeof config['origin'] === 'string' ? config['origin'] as string : '',
       temporary: config['temporary'] === true, revision: typeof config['revision'] === 'number' ? config['revision'] as number : 0 };
   }
 
   async saveRuntimeConfig(original: ClashRuntimeConfig, changed: ClashRuntimeConfig): Promise<void> {
     await this.request(`/configs?profile=${encodeURIComponent(original.path)}&revision=${original.revision}`, 'PATCH' as http.RequestMethod,
-      JSON.stringify({ mode: changed.mode, 'log-level': changed.logLevel, ipv6: changed.ipv6 }));
+      JSON.stringify({ mode: changed.mode, 'log-level': changed.logLevel, ipv6: changed.ipv6, sniffing: changed.sniffing }));
+  }
+
+  async snifferDraft(): Promise<string> {
+    const config: Record<string, string> = JSON.parse(await this.request('/configs')) as Record<string, string>;
+    return JSON.stringify({ sniffer: config['sniffer'] }, null, 2);
+  }
+
+  async saveSnifferDraft(original: ClashRuntimeConfig, text: string): Promise<void> {
+    await this.request(`/configs?profile=${encodeURIComponent(original.path)}&revision=${original.revision}`, 'PATCH' as http.RequestMethod, text);
   }
 
   async proxyPorts(): Promise<ClashProxyPorts> {
     return JSON.parse(await this.request('/clashos/ports')) as ClashProxyPorts;
+  }
+
+  async inboundSettings(): Promise<ClashInboundSettings> {
+    const value: Record<string, string | number | boolean | string[]> = JSON.parse(await this.request('/clashos/inbound')) as Record<string, string | number | boolean | string[]>;
+    return { allowLan: value['allow-lan'] === true, bindAddress: value['bind-address'] as string,
+      users: value['users'] as string[], skipAuth: value['skip-auth-prefixes'] as string[], allowed: value['lan-allowed-ips'] as string[],
+      denied: value['lan-disallowed-ips'] as string[], localAddress: value['localAddress'] as string,
+      overridden: value['overridden'] === true, profile: value['profile'] as string, revision: value['revision'] as number };
+  }
+
+  async saveInboundSettings(original: ClashInboundSettings, changes?: ClashInboundChanges): Promise<void> {
+    await this.request(`/clashos/inbound?profile=${encodeURIComponent(original.profile)}&revision=${original.revision}`,
+      changes === undefined ? http.RequestMethod.DELETE : 'PATCH' as http.RequestMethod, changes === undefined ? undefined :
+        JSON.stringify({ 'allow-lan': changes.allowLan, 'bind-address': changes.bindAddress, users: changes.users,
+          'skip-auth-prefixes': changes.skipAuth, 'lan-allowed-ips': changes.allowed, 'lan-disallowed-ips': changes.denied }));
   }
 
   async saveProxyPorts(profile: string, ports?: ClashProxyPorts): Promise<void> {

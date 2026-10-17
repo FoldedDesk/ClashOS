@@ -60,6 +60,27 @@ public:
         JS_FreeValue(context, value);
         if (!valid) error = std::string(key) + " must be an integer between 0 and 65535"; return valid;
     }
+    bool strings(const char* key, std::vector<std::string>& output, std::string& error) {
+        JSValue value = JS_GetPropertyStr(context, root, key);
+        if (JS_IsUndefined(value) || JS_IsNull(value)) { JS_FreeValue(context, value); return true; }
+        bool valid = JS_IsArray(context, value) == 1; uint32_t count = 0;
+        JSValue length = JS_GetPropertyStr(context, value, "length");
+        valid = valid && JS_ToUint32(context, &count, length) == 0 && count <= 256; JS_FreeValue(context, length);
+        std::vector<std::string> result;
+        for (uint32_t i = 0; valid && i < count; ++i) {
+            JSValue item = JS_GetPropertyUint32(context, value, i); valid = JS_IsString(item);
+            if (valid) {
+                size_t size = 0; const char* text = JS_ToCStringLen(context, &size, item);
+                valid = text != nullptr && size <= 1024;
+                if (valid) result.emplace_back(text, size);
+                if (text) JS_FreeCString(context, text);
+            }
+            JS_FreeValue(context, item);
+        }
+        JS_FreeValue(context, value);
+        if (valid) output = std::move(result); else error = std::string(key) + " must be a list of at most 256 strings";
+        return valid;
+    }
 };
 
 bool readControllerFile(const std::string& path, size_t maximum, std::string& text, std::string& error)

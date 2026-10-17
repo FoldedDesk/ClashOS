@@ -42,7 +42,12 @@ struct UdpTarget {
     std::string host;
     int port = 0;
     size_t headerSize = 0;
+    std::string sniffHost;
+    bool overrideDestination = false;
 };
+
+std::string udpRouteHost(const UdpTarget& target) { return target.sniffHost.empty() ? target.host : target.sniffHost; }
+std::string udpDestinationHost(const UdpTarget& target) { return target.overrideDestination ? udpRouteHost(target) : target.host; }
 
 bool parseUdpAddress(const std::vector<unsigned char>& packet, size_t offset, UdpTarget& target)
 {
@@ -257,7 +262,7 @@ struct UdpFlow {
     int fd = -1;
     ProxyNode node;
     UdpEndpoint remote;
-    std::string host;
+    std::string host, originalHost, routeHost;
     int port = 0;
     std::vector<unsigned char> master;
     UdpClock::time_point lastActivity = UdpClock::now();
@@ -327,7 +332,7 @@ struct UdpFlow {
 
 std::string udpFlowKey(const UdpTarget& target, const ProxyNode& node)
 {
-    return target.host + '\0' + std::to_string(target.port) + '\0' + node.name + '\0' +
+    return target.host + '\0' + target.sniffHost + '\0' + std::to_string(target.port) + '\0' + node.name + '\0' +
         std::to_string(node.revision) + '\0' + node.matchedRule;
 }
 
@@ -336,7 +341,7 @@ std::unique_ptr<UdpFlow> openUdpFlow(int owner, const UdpTarget& target, const P
     if (!supportsUdp(node)) return nullptr;
     auto flow = std::make_unique<UdpFlow>();
     flow->node = node;
-    flow->host = target.host;
+    flow->originalHost = target.host; flow->host = udpDestinationHost(target); flow->routeHost = udpRouteHost(target);
     flow->port = target.port;
     if (node.type == "ss") {
         const size_t keySize=shadowsocksKeySize(shadowsocksCipher(node.cipher));
@@ -351,20 +356,20 @@ std::unique_ptr<UdpFlow> openUdpFlow(int owner, const UdpTarget& target, const P
         bool opened;
         if (node.type == "vmess") {
             flow->vmess = std::make_unique<VmessSession>(flow->fd);
-            opened = flow->vmess->start(node, target.host, target.port, true, error);
+            opened = flow->vmess->start(node, flow->host, target.port, true, error);
         } else {
             flow->trojan = std::make_unique<TrojanSession>(flow->fd);
-            opened = flow->trojan->start(node, target.host, target.port, true, error);
+            opened = flow->trojan->start(node, flow->host, target.port, true, error);
         }
         if (!opened) {
             coreLog("warning", node.type + " UDP startup failed: " + error); return nullptr;
         }
         // One worker owns both TLS directions; mbedtls_ssl_context is never shared concurrently.
         socketTimeout(flow->fd, 60000);
-    } else flow->fd = connectUdpOutbound(node.type == "direct" ? target.host : node.server,
+    } else flow->fd = connectUdpOutbound(node.type == "direct" ? flow->host : node.server,
         node.type == "direct" ? target.port : node.port, flow->remote,node.type=="direct"?DnsPurpose::Direct:DnsPurpose::Proxy);
     if (flow->fd < 0 || !g_state.running.load() ||
-        !beginConnection(flow->fd, target.host, target.port, node.chain, node.matchedRule, "udp", owner)) return nullptr;
+        !beginConnection(flow->fd, flow->routeHost, target.port, node.chain, node.matchedRule, "udp", owner)) return nullptr;
     if (flow->streamed() && !flow->startStreamWorker()) return nullptr;
     coreLog("info", "UDP " + target.host + ":" + std::to_string(target.port) + " via " + node.name);
     return flow;
@@ -383,7 +388,8 @@ bool writeUdpFlow(UdpFlow& flow, const std::vector<unsigned char>& packet, const
     }
     if (flow.node.type == "ss") {
         const SsCipher method=shadowsocksCipher(flow.node.cipher);
-        std::vector<unsigned char> plain(packet.begin() + 3, packet.end()), salt(shadowsocksKeySize(method));
+        std::vector<unsigned char> plain = shadowsocksAddress(flow.host, flow.port), salt(shadowsocksKeySize(method));
+        plain.insert(plain.end(), packet.begin() + payloadOffset, packet.end());
         if (!randomBytes(salt) || !encryptShadowsocksUdp(flow.master,salt,plain,wire,method) || !rememberUdpSalt(flow.master,wire,method)) return false;
     }
     ssize_t sent;
@@ -410,7 +416,7 @@ bool readUdpFlow(UdpFlow& flow, std::vector<unsigned char>& reply, size_t& paylo
             if (!parseUdpAddress(packet, 0, source)) { errno = EPROTO; return false; }
             payloadSize = packet.size() - source.headerSize;
         } else {
-            const auto address=shadowsocksAddress(flow.host,flow.port);
+            const auto address=shadowsocksAddress(flow.originalHost,flow.port);
             reply.insert(reply.end(),address.begin(),address.end()); payloadSize=packet.size();
         }
         reply.insert(reply.end(),packet.begin(),packet.end());
@@ -446,6 +452,30 @@ bool readUdpFlow(UdpFlow& flow, std::vector<unsigned char>& reply, size_t& paylo
     return true;
 }
 
+bool aliasSniffedUdpReply(const UdpFlow& flow, std::vector<unsigned char>& reply)
+{
+    if (flow.routeHost == flow.originalHost) return true;
+    UdpTarget source;
+    if (!parseSocksUdp(reply, source)) return false;
+    auto header = shadowsocksAddress(flow.originalHost, flow.port);
+    if (header.empty()) return false;
+    std::vector<unsigned char> result(3, 0); result.insert(result.end(), header.begin(), header.end());
+    result.insert(result.end(), reply.begin() + 3 + source.headerSize, reply.end());
+    if (result.size() > UDP_MAX_PACKET) return false;
+    reply = std::move(result); return true;
+}
+
+struct UdpSniffEntry {
+    SniffPlan plan;
+    QuicSniffState quic;
+    std::vector<std::vector<unsigned char>> pending;
+    size_t pendingBytes = 0;
+    UdpEndpoint sender;
+    HealthClock::time_point started{}, used{};
+    uint64_t revision = 0;
+    bool decided = false;
+};
+
 struct UdpRelayOwner {
     int fd;
     ~UdpRelayOwner() { if (fd >= 0) closeSocket(fd); }
@@ -474,8 +504,68 @@ void handleUdpAssociate(int client, const std::string& requestedHost, int reques
             coreLog("warning", message); lastWarning = now;
         }
     };
+    const auto routePacket = [&](const UdpTarget& target, const std::vector<unsigned char>& packet, const UdpEndpoint& sender) {
+        ProxyNode node;bool retained=false;
+        // Select a load-balanced outbound once per target flow, not once per datagram.
+        // Reloads and explicit disconnects release the pin; established flows survive health sweeps.
+        for(const auto& entry:flows) {
+            const UdpFlow& flow=*entry.second;
+            if(!flow.node.loadBalanced||flow.failed||flow.originalHost!=target.host||flow.routeHost!=udpRouteHost(target)||flow.port!=target.port||udpConnectionCancelled(flow.fd))continue;
+            {std::lock_guard<std::mutex> lock(g_state.mutex);if(flow.node.revision!=g_state.configRevision)continue;}
+            node=flow.node;retained=true;break;
+        }
+        if (!retained) {
+            std::vector<std::string> known; int family = 0; std::array<unsigned char,16> ip{};
+            if (!target.overrideDestination && ruleIpAddress(target.host, family, ip)) known.push_back(target.host);
+            node = activeProxyNode(udpRouteHost(target), target.port, "udp", udpEndpointHost(sender), known.empty() ? nullptr : &known);
+        }
+        if (!supportsUdp(node)) {
+            warn("UDP " + target.host + ":" + std::to_string(target.port) + " is disabled or unsupported via " + node.name);
+            return;
+        }
+        if (node.type == "ss" && packet.size() - 3 - target.headerSize + shadowsocksAddress(udpDestinationHost(target), target.port).size() > UDP_MAX_PACKET - shadowsocksKeySize(shadowsocksCipher(node.cipher)) - 16) return;
+        if (node.type == "vmess" && (packet.size() == 3 + target.headerSize || packet.size() - 3 - target.headerSize > 1966)) {
+            warn("VMess UDP payload must be between 1 and 1966 bytes"); return;
+        }
+        const std::string key = udpFlowKey(target, node);
+        auto found = flows.find(key);
+        if (found != flows.end() && (found->second->failed || udpConnectionCancelled(found->second->fd))) {
+            flows.erase(found); found = flows.end();
+        }
+        if (found == flows.end()) {
+            if (flows.size() >= 64) {
+                const auto oldest = std::min_element(flows.begin(), flows.end(), [](const auto& left, const auto& right) {
+                    return left.second->lastActivity < right.second->lastActivity;
+                });
+                flows.erase(oldest);
+            }
+            auto flow = openUdpFlow(client, target, node);
+            if (flow == nullptr) { warn("Cannot open UDP outbound via " + node.name); return; }
+            found = flows.emplace(key, std::move(flow)).first;
+        }
+        if (writeUdpFlow(*found->second, packet, target)) lastActivity = UdpClock::now();
+    };
+    std::map<std::string, UdpSniffEntry> sniffed;
+    const auto flushSniffed = [&](UdpSniffEntry& entry) {
+        for (const auto& packet : entry.pending) {
+            UdpTarget target;
+            if (!parseSocksUdp(packet, target)) continue;
+            if (!entry.plan.protocol.empty()) { target.sniffHost = entry.plan.route; target.overrideDestination = entry.plan.destination != entry.plan.original; }
+            routePacket(target, packet, entry.sender);
+        }
+        entry.pending.clear(); entry.pendingBytes = 0; entry.decided = true;
+        entry.quic.bytes.clear(); entry.quic.bytes.shrink_to_fit(); entry.quic.filled.clear(); entry.quic.filled.shrink_to_fit(); entry.quic.contiguous = 0;
+    };
     while (g_state.running.load()) {
         const auto now = UdpClock::now();
+        uint64_t revision;
+        { std::lock_guard<std::mutex> lock(g_state.mutex); revision = g_state.configRevision; }
+        for (auto item = sniffed.begin(); item != sniffed.end();) {
+            auto& entry = item->second;
+            if (!entry.decided && (entry.revision != revision || now - entry.started >= std::chrono::seconds(1))) flushSniffed(entry);
+            if (entry.revision != revision || now - entry.used > std::chrono::seconds(60)) item = sniffed.erase(item);
+            else ++item;
+        }
         for (auto item = flows.begin(); item != flows.end();) {
             if (item->second->failed || udpConnectionCancelled(item->second->fd) || now - item->second->lastActivity > std::chrono::seconds(60)) item = flows.erase(item);
             else ++item;
@@ -488,7 +578,10 @@ void handleUdpAssociate(int client, const std::string& requestedHost, int reques
             active.push_back(item.second.get()); watches.push_back({item.second->streamed() ? item.second->notifyMain : item.second->fd, POLLIN, 0});
             if (item.second->streamed() && item.second->streamPending()) buffered=true;
         }
-        const int ready = poll(watches.data(), watches.size(), buffered ? 0 : 1000);
+        int timeout = buffered ? 0 : 1000;
+        for (const auto& item : sniffed) if (!item.second.decided) timeout = std::min(timeout, static_cast<int>(std::max<int64_t>(1,
+            std::chrono::duration_cast<std::chrono::milliseconds>(item.second.started + std::chrono::seconds(1) - UdpClock::now()).count())));
+        const int ready = poll(watches.data(), watches.size(), timeout);
         for (size_t i=0;i<active.size();++i) if (active[i]->streamed() && active[i]->streamPending()) watches[i+2].revents|=POLLIN;
         if (ready < 0 && errno == EINTR) continue;
         if (ready < 0 || !g_state.running.load()) break;
@@ -506,7 +599,7 @@ void handleUdpAssociate(int client, const std::string& requestedHost, int reques
                 else if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR && errno != EMSGSIZE) flow.failed = true;
                 continue;
             }
-            if (pin.pinned && sendUdpReply(relay.fd, reply, pin.endpoint)) {
+            if (pin.pinned && aliasSniffedUdpReply(flow, reply) && sendUdpReply(relay.fd, reply, pin.endpoint)) {
                 recordTransfer(flow.fd, false, payloadSize);
                 flow.lastActivity = lastActivity = UdpClock::now();
             }
@@ -519,41 +612,44 @@ void handleUdpAssociate(int client, const std::string& requestedHost, int reques
             if (receiveUdpRelay(relay.fd, packet, sender) < 0) break;
             UdpTarget target;
             if (!parseSocksUdp(packet, target) || !pin.accepts(sender)) continue;
-            ProxyNode node;bool retained=false;
-            // Select a load-balanced outbound once per target flow, not once per datagram.
-            // Reloads and explicit disconnects release the pin; established flows survive health sweeps.
-            for(const auto& entry:flows) {
-                const UdpFlow& flow=*entry.second;
-                if(!flow.node.loadBalanced||flow.failed||flow.host!=target.host||flow.port!=target.port||udpConnectionCancelled(flow.fd))continue;
-                {std::lock_guard<std::mutex> lock(g_state.mutex);if(flow.node.revision!=g_state.configRevision)continue;}
-                node=flow.node;retained=true;break;
+            const std::string sniffKey = target.host + '\0' + std::to_string(target.port);
+            auto decided = sniffed.find(sniffKey);
+            const size_t payload = 3 + target.headerSize;
+            const std::string_view data(reinterpret_cast<const char*>(packet.data() + payload), packet.size() - payload);
+            if (decided != sniffed.end() && decided->second.decided && sniffQuicInitialSize(data) > 0 &&
+                decided->second.quic.dcid != data.substr(6, static_cast<unsigned char>(data[5]))) {
+                // A new QUIC connection may use a different SNI on the same UDP
+                // target. Its Initial gets a fresh decision; active flows survive.
+                sniffed.erase(decided); decided = sniffed.end();
             }
-            if(!retained)node=activeProxyNode(target.host,target.port,"udp",udpEndpointHost(sender));
-            if (!supportsUdp(node)) {
-                warn("UDP " + target.host + ":" + std::to_string(target.port) + " is disabled or unsupported via " + node.name);
-                continue;
-            }
-            if (node.type == "ss" && packet.size() - 3 > UDP_MAX_PACKET - shadowsocksKeySize(shadowsocksCipher(node.cipher)) - 16) continue;
-            if (node.type == "vmess" && (packet.size() == 3 + target.headerSize || packet.size() - 3 - target.headerSize > 1966)) {
-                warn("VMess UDP payload must be between 1 and 1966 bytes"); continue;
-            }
-            const std::string key = udpFlowKey(target, node);
-            auto found = flows.find(key);
-            if (found != flows.end() && (found->second->failed || udpConnectionCancelled(found->second->fd))) {
-                flows.erase(found); found = flows.end();
-            }
-            if (found == flows.end()) {
-                if (flows.size() >= 64) {
-                    const auto oldest = std::min_element(flows.begin(), flows.end(), [](const auto& left, const auto& right) {
-                        return left.second->lastActivity < right.second->lastActivity;
-                    });
-                    flows.erase(oldest);
+            if (decided == sniffed.end()) {
+                auto plan = sniffPlan(target.host, target.port, udpEndpointHost(sender), true);
+                if (!plan.eligible) { routePacket(target, packet, sender); continue; }
+                if (sniffed.size() >= 64) {
+                    const auto oldest = std::min_element(sniffed.begin(), sniffed.end(), [](const auto& a, const auto& b) { return a.second.used < b.second.used; });
+                    if (!oldest->second.decided) flushSniffed(oldest->second);
+                    sniffed.erase(oldest);
                 }
-                auto flow = openUdpFlow(client, target, node);
-                if (flow == nullptr) { warn("Cannot open UDP outbound via " + node.name); continue; }
-                found = flows.emplace(key, std::move(flow)).first;
+                if (std::count_if(sniffed.begin(), sniffed.end(), [](const auto& entry) { return !entry.second.decided; }) >= 4) {
+                    auto pending = std::find_if(sniffed.begin(), sniffed.end(), [](const auto& entry) { return !entry.second.decided; });
+                    flushSniffed(pending->second);
+                }
+                UdpSniffEntry entry; entry.plan = std::move(plan); entry.sender = sender; entry.started = entry.used = UdpClock::now();
+                { std::lock_guard<std::mutex> lock(g_state.mutex); entry.revision = g_state.configRevision; }
+                decided = sniffed.emplace(sniffKey, std::move(entry)).first;
             }
-            if (writeUdpFlow(*found->second, packet, target)) lastActivity = UdpClock::now();
+            auto& entry = decided->second; entry.used = UdpClock::now();
+            if (entry.decided) {
+                if (!entry.plan.protocol.empty()) { target.sniffHost = entry.plan.route; target.overrideDestination = entry.plan.destination != entry.plan.original; }
+                routePacket(target, packet, sender); continue;
+            }
+            const auto result = sniffQuicDatagram(data, entry.quic);
+            if (entry.pending.size() >= 8 || packet.size() > SNIFF_LIMIT - entry.pendingBytes) {
+                flushSniffed(entry); routePacket(target, packet, sender); continue;
+            }
+            entry.pendingBytes += packet.size(); entry.pending.push_back(std::move(packet));
+            if (result.status == SniffStatus::Found) sniffApply(entry.plan, "QUIC", result);
+            if (result.status != SniffStatus::Need) flushSniffed(entry);
         }
     }
 }

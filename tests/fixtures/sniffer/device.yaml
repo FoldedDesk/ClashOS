@@ -1,0 +1,30 @@
+# Public isolated emulator fixture. Requires tests/sniffer_device_peer.py and
+# HDC reverse TCP ports 18089, 18090, 18092. Other traffic is rejected.
+port: 7890
+socks-port: 7891
+mode: rule
+hosts:
+  vmess.test: 127.0.0.1
+  sniff.fixture.test: 127.0.0.1
+sniffer:
+  enable: true
+  parse-pure-ip: true
+  override-destination: true
+  sniff:
+    HTTP: {ports: [18090]}
+    TLS: {ports: [18089]}
+    QUIC: {ports: [18091]}
+proxies:
+  - name: sniff-device-udp
+    type: trojan
+    server: 127.0.0.1
+    port: 18092
+    password: public-sniffer-device
+    sni: vmess.test
+    skip-cert-verify: true
+    udp: true
+rules:
+  - AND,((NETWORK,UDP),(DOMAIN,sniff.fixture.test)),sniff-device-udp
+  - DOMAIN,vmess.test,DIRECT
+  - DOMAIN,sniff.fixture.test,DIRECT
+  - MATCH,REJECT

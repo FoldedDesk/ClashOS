@@ -12,6 +12,7 @@ interface NativeCoreModule {
   startAsync(configPath: string, port: number): Promise<boolean>;
   stopAsync(): Promise<boolean>;
   info(): string;
+  localSocksOptions(): string;
   configureRuntimeDirectory(filesDir: string): boolean;
   setControllerSecret(secret: string): boolean;
   controllerSecret(): string;
@@ -20,6 +21,7 @@ interface NativeCoreModule {
   stop(): void;
   isRunning(): boolean;
   validate(content: string): string;
+  validateSniffer(content: string): string;
   ruleEditor(content: string, edits: string, render: boolean, objects: string, merges: string): string;
   objectEditor(content: string, edits: string, rules: string, validate: boolean, merges: string): string;
   objectDraft(kind: string, content: string, patch: string, validate: boolean): string;
@@ -60,6 +62,8 @@ export class ClashNativeCore implements CoreSessionHost, ControllerAccessHost {
     return JSON.parse(this.module.info()) as CoreRuntime;
   }
 
+  localSocksOptions(): string { return this.module.localSocksOptions(); }
+
   setMode(mode: string): void {
     if (!this.module.setMode(mode)) throw new Error('代理模式无效');
   }
@@ -86,6 +90,11 @@ export class ClashNativeCore implements CoreSessionHost, ControllerAccessHost {
     if (error.length > 0) {
       throw new Error(error);
     }
+  }
+
+  validateSniffer(content: string): void {
+    const error: string = this.module.validateSniffer(content);
+    if (error.length > 0) throw new Error(error);
   }
 
   ruleEditor(content: string, edits: string = '', render: boolean = false, objects: string = '', merges: string = ''): RuleEditorSnapshot {

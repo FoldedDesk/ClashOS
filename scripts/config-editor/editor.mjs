@@ -11,7 +11,7 @@ import {indentWithTab,undo,redo} from '@codemirror/commands';
 import {openSearchPanel} from '@codemirror/search';
 import {linter,setDiagnostics} from '@codemirror/lint';
 import {clashCompletions} from './completion.mjs';
-import {serializeDocument} from './document.mjs';
+import {serializeDocument,replaceDocument} from './document.mjs';
 import {scriptCompletions} from './script-completion.mjs';
 import {detectLanguage,nativeErrorLocation} from './language.mjs';
 
@@ -95,4 +95,7 @@ function markError(message){
   const from=Math.min(line.to,line.from+Math.max(0,position.column-1));
   view.dispatch(setDiagnostics(view.state,[{from,to:Math.min(line.to,from+1),severity:'error',message}]));command('goto',line.number);
 }
-window.ClashOSEditor=Object.freeze({mount,snapshot,command,markError,setTheme(theme){if(view)view.dispatch({effects:themeSlot.reconfigure(palette(theme))});}});
+function replace(text){
+  return replaceDocument(view,text);
+}
+window.ClashOSEditor=Object.freeze({mount,snapshot,command,replace,markError,setTheme(theme){if(view)view.dispatch({effects:themeSlot.reconfigure(palette(theme))});}});

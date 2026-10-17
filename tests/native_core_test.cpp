@@ -414,6 +414,9 @@ void latencyAndRuleTests() {
 #include "controller_state_test.inc"
 #include "backup_codec_test.inc"
 #include "controller_configs_test.inc"
+#include "inbound_test.inc"
+#include "sniffer_forward_test.inc"
+#include "sniffer_test.inc"
 
 int main(int argc, char** argv) {
     std::signal(SIGPIPE, SIG_IGN);
@@ -424,13 +427,15 @@ int main(int argc, char** argv) {
             std::cout << output; return 0;
         }
         if (argc == 4 && std::string(argv[3]) == "archive") { backupCodecTests(argv[2]); std::cout << "PASS " << checks << " archive assertions\n"; return 0; }
-        require(argc == 3 || (argc == 4 && (std::string(argv[3]) == "api"||std::string(argv[3]) == "rules"||std::string(argv[3])=="dns"||std::string(argv[3])=="geo"||std::string(argv[3])=="ports"||std::string(argv[3])=="rule-edits"||std::string(argv[3])=="object-edits"||std::string(argv[3])=="share-links"||std::string(argv[3])=="merges"||std::string(argv[3])=="scripts"||std::string(argv[3])=="configs")), "Expected configuration and temp directory, optionally api/rules/dns/geo/ports/rule-edits/object-edits/share-links/merges/scripts suite");
+        require(argc == 3 || (argc == 4 && (std::string(argv[3]) == "api"||std::string(argv[3]) == "rules"||std::string(argv[3])=="dns"||std::string(argv[3])=="geo"||std::string(argv[3])=="ports"||std::string(argv[3])=="rule-edits"||std::string(argv[3])=="object-edits"||std::string(argv[3])=="share-links"||std::string(argv[3])=="merges"||std::string(argv[3])=="scripts"||std::string(argv[3])=="configs"||std::string(argv[3])=="inbound"||std::string(argv[3])=="sniffer")), "Expected configuration and temp directory, optionally api/rules/dns/geo/ports/rule-edits/object-edits/share-links/merges/scripts suite");
+        if (argc == 4 && std::string(argv[3]) == "sniffer") { snifferTests(argv[2]); std::cout << "PASS " << checks << " sniffer assertions\n"; return 0; }
+        if (argc == 4 && std::string(argv[3]) == "inbound") { inboundTests(argv[2]); std::cout << "PASS " << checks << " inbound assertions\n"; return 0; }
         if (argc == 4) {
             if(std::string(argv[3])=="configs")controllerConfigTests(argv[2]);else if(std::string(argv[3])=="api"){controllerApiTests(argv[2]);controllerAuthTests(argv[2]);controllerStateTests(argv[2]);}else if(std::string(argv[3])=="scripts")configScriptTests(argv[2]);else if(std::string(argv[3])=="merges")configMergeTests(argv[2]);else if(std::string(argv[3])=="share-links")shareLinkTests();else if(std::string(argv[3])=="object-edits")objectEditsTests(argv[2]);else if(std::string(argv[3])=="rule-edits")ruleEditsTests(argv[2]);else if(std::string(argv[3])=="dns"){dnsTests(argv[2]);dnsListenerTests(argv[2]);}else if(std::string(argv[3])=="geo")geoTests(argv[2]);else if(std::string(argv[3])=="ports")proxyPortTests(argv[2]);else ruleProviderTests(argv[2]);
             std::cout << "PASS " << checks << " " << argv[3] << " assertions (shipping YAML/Zstandard/Mbed TLS backends)\n";
             return 0;
         }
-        controllerConfigTests(argv[2]); backupCodecTests(argv[2]); controllerApiTests(argv[2]); controllerAuthTests(argv[2]);controllerStateTests(argv[2]); configScriptTests(argv[2]); configMergeTests(argv[2]); shareLinkTests(); objectEditsTests(argv[2]); ruleEditsTests(argv[2]); protocolTests(); configurationTests(argv[1], argv[2]); forwardingTests(); latencyAndRuleTests();
+        snifferTests(argv[2]); inboundTests(argv[2]); controllerConfigTests(argv[2]); backupCodecTests(argv[2]); controllerApiTests(argv[2]); controllerAuthTests(argv[2]);controllerStateTests(argv[2]); configScriptTests(argv[2]); configMergeTests(argv[2]); shareLinkTests(); objectEditsTests(argv[2]); ruleEditsTests(argv[2]); protocolTests(); configurationTests(argv[1], argv[2]); forwardingTests(); latencyAndRuleTests();
         udpProtocolTests(); udpForwardingTests();
         vmessTests(argv[2]);httpsProbeTests();groupHealthTests(argv[2]);providerTests(argv[2]);loadBalanceTests(argv[2]);ssAeadTests();trojanTests(argv[2]);ruleProviderTests(argv[2]);dnsTests(argv[2]);dnsListenerTests(argv[2]);geoTests(argv[2]);proxyPortTests(argv[2]);
         std::cout << "PASS " << checks << " assertions (shipping Mbed TLS backend; Harmony networking still requires device verification)\n";

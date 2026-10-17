@@ -1,6 +1,6 @@
 {
   "applicationName": "ClashOS",
-  "reviewedCoreVersion": "0.25",
+  "reviewedCoreVersion": "0.27",
   "objective": "实现 Clash Verge 的大部分功能，包括各类右键菜单，并提供可正常使用的 ClashOS。",
   "brandingDecision": "Follow the user's later explicit spelling correction: ClashOS.",
   "referenceInventory": [
@@ -41,12 +41,18 @@
         "Immediate/periodic connection WebSocket snapshots and standard no-content disconnect acknowledgements",
         "Strict controller GET/PATCH/PUT configs: actual file/current-source reload and isolated payload configuration, standard empty 204 acknowledgements",
         "Atomic runtime mode/log-level/IPv6/HTTP/SOCKS5/mixed-port edits, listener bind rollback and established TCP connection preservation",
-        "Runtime settings GUI with source-aware temporary profile display, stale-edit rejection and saved-profile context-menu recovery"
+        "Runtime settings GUI with source-aware temporary profile display, stale-edit rejection and saved-profile context-menu recovery",
+        "Actual IPv4/IPv6 LAN listeners with per-source CIDR allow/deny and authentication bypass",
+        "HTTP Basic and SOCKS5 RFC1929 authentication before TCP/UDP routing; independent private persisted application preferences",
+        "Sharing settings GUI, right-click entry, password retention without read-back, stale revision guards and atomic listener/file rollback",
+        "HTTP Host / fragmented TLS SNI / QUIC v1-v2 Initial domain sniffing before rule selection and dialing",
+        "Per-protocol ports and destination rewrite, force/skip domain and CIDR exclusions; bounded TCP/QUIC reassembly with original-byte fallback",
+        "Strict typed sniffer controller PATCH and offline GUI validation, runtime toggle/editor and context menus with profile/revision guards"
       ],
       "remaining": [
         "Protocol and option breadth is below Mihomo",
         "No bundled Mihomo/Alpha core download/switch workflow",
-        "REST compatibility remains partial: LAN listeners, sniffing, redir/TProxy and broader TUN/general configuration fields"
+        "REST compatibility remains partial: redir/TProxy and broader TUN/general configuration fields"
       ],
       "source": [
         "entry/src/main/cpp/clash_core.cpp",
@@ -59,7 +65,11 @@
         "entry/src/main/cpp/controller_state.inc",
         "entry/src/main/cpp/controller_configs.inc",
         "entry/src/main/cpp/controller_config_store.inc",
-        "entry/src/main/ets/components/RuntimeConfigDialog.ets"
+        "entry/src/main/ets/components/RuntimeConfigDialog.ets",
+        "entry/src/main/cpp/inbound_policy.inc",
+        "entry/src/main/cpp/inbound_auth.inc",
+        "entry/src/main/cpp/inbound_settings.inc",
+        "entry/src/main/ets/components/InboundSettingsDialog.ets"
       ]
     },
     {
@@ -125,7 +135,8 @@
         "VPN extension, native TUN engine and lifecycle implementation",
         "Browser Google access through system HTTP proxy",
         "Visible enable/disable actions open the real system settings workflow; actual state refreshed on return/focus, with disabled/enabled GUI roundtrip verified",
-        "Direct HarmonyOS PC proxy-page URI verified from app after Settings cold start and from unrelated settings page"
+        "Direct HarmonyOS PC proxy-page URI verified from app after Settings cold start and from unrelated settings page",
+        "Actual bind address shown for system proxy and copied endpoints; private TUN SOCKS address/credential bridge with authenticated TCP/UDP packet coverage"
       ],
       "remaining": [
         "Automatic system proxy control and guard",
@@ -172,7 +183,8 @@
       ],
       "remaining": [
         "Actual Clash Verge desktop restoration and older archive variants",
-        "Cross-client file-provider cache/resource migration and advanced subscription options"
+        "Cross-client file-provider cache/resource migration and advanced subscription options",
+        "Optional migration of application-managed inbound and port preferences"
       ],
       "source": [
         "entry/src/main/ets/service/ProfileStore.ets",
@@ -193,7 +205,8 @@
         "Proxy group/node actions, health checks and disconnects",
         "Connections/logs/rules/DNS/provider/geodata/backup menus",
         "Editor entry actions and group-member actions",
-        "Backup right-click ZIP export with current upstream layout and lossless native data"
+        "Backup right-click ZIP export with current upstream layout and lossless native data",
+        "LAN sharing row context menu for configuration and current local proxy address"
       ],
       "source": [
         "entry/src/main/ets/pages/Index.ets",
@@ -204,16 +217,44 @@
     {
       "feature": "Daily browser connectivity",
       "status": "verified_with_limits",
-      "latest": "Core 0.25 with actual controller config reload, temporary payloads and runtime settings GUI installed. Public temporary configuration removed after saved-profile restoration; original clash-fixed/Rule/Japanese selection/7890-7891 and enabled system proxy retained. Explicit device-proxy Google HTTPS 204 / CONNECT 200 / TLS verification 0 succeeds.",
+      "latest": "Core 0.27 installed and restarted after independent HTTP/TLS/QUIC sniffer verification. Original saved profile, rule mode, node selection, ports 7890/7891 and enabled system proxy restored. Explicit HTTPS through the device proxy returns 204 / CONNECT 200 / TLS verification 0. Prior Core 0.26 authenticated LAN ingress checks remain covered by production regressions.",
       "limit": "Latest check is an explicit HTTP-proxy request. Earlier simulator browser screenshots prove system-proxy browser use. Closing the app with TUN is not proven on this simulator."
+    },
+    {
+      "feature": "Domain sniffing",
+      "status": "verified",
+      "implemented": [
+        "Configuration parsing, actual TCP/UDP sniff-based routing and optional destination rewrite",
+        "QUIC authenticated Initial v1/v2, coalescing, fragmented/out-of-order CRYPTO and original-response endpoint preservation",
+        "GUI defaults, validation, undo, runtime apply, stale-edit rejection, toggle and context-menu enable",
+        "Independent HarmonyOS PC emulator HTTP/SOCKS HTTP and verified TLS 204 requests; QUIC v1/v2 and fragmented/reversed/coalesced UDP echoes through a strict independent Trojan TLS peer",
+        "Disabled-sniffer negative control rejects the fixture IP; restored saved profile and real Google HTTPS returns 204 with CONNECT 200 and TLS verification success"
+      ],
+      "limitations": [
+        "ECH inner domains cannot be recovered; unsupported or unrecognized protocols keep original destination",
+        "Runtime GUI edits reset on reload/restart; persist the sniffer section in the profile/global extension",
+        "QUIC Initial echo verifies sniffing and encrypted proxy transport, not a full HTTP/3 application handshake",
+        "True device VPN authorization/background lifetime remains unverified"
+      ],
+      "source": [
+        "entry/src/main/cpp/sniffer_wire.inc",
+        "entry/src/main/cpp/sniffer_runtime.inc",
+        "entry/src/main/cpp/sniffer_control.inc",
+        "entry/src/main/ets/components/SnifferSettingsDialog.ets",
+        "tests/sniffer_test.inc",
+        "tests/sniffer_forward_test.inc",
+        "tests/sniffer_device_peer.py",
+        "tests/sniffer_device_client.py",
+        "tests/sniffer_device_probe.c"
+      ]
     }
   ],
   "nextWork": [
-    "Broader general config support, including LAN access and sniffer/routing options",
+    "Broader routing and ingress configuration, including redir/TProxy",
     "Supported-device TUN proof and broader archive interoperability",
     "Additional appearance customization, full-schema/reference completion"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 06:13:46 UTC",
+  "reviewedAt": "2026-10-17 08:00:10 UTC",
   "verificationNotes": "Status summary only. Historical device screenshots and per-run records are archived outside the source repository. Reproduce host checks with tests/README.md; device and true VPN validation remain separate."
 }

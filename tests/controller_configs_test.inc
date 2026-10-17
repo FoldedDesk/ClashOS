@@ -31,7 +31,7 @@ void controllerConfigTests(const std::string& directory)
         "General status reflects loaded YAML settings");
     for (const std::string& invalid : {std::string(""), std::string("[]"), std::string("null"), std::string("mode: Direct"), std::string("{\"mode\":\"Direct\"}junk"),
         std::string("{\"mode\":1}"), std::string("{\"ipv6\":\"false\"}"), std::string("{\"port\":12.5}"), std::string("{\"port\":65536}"),
-        std::string("{\"port\":-1}"), std::string("{\"log-level\":\"invalid\"}"), std::string("{\"mode\":\"Direct\",\"allow-lan\":true}"), std::string("{\"mode\":\"Direct\",\"sniffing\":true}")}) {
+        std::string("{\"port\":-1}"), std::string("{\"log-level\":\"invalid\"}"), std::string("{\"mode\":\"Direct\",\"bind-address\":\"bad address\"}"), std::string("{\"mode\":\"Direct\",\"sniffing\":\"true\"}")}) {
         const auto before = snapshot();
         require(request("PATCH", invalid).rfind("HTTP/1.1 400", 0) == 0 && snapshot() == before, "Malformed or unsupported PATCH must preserve every runtime field");
     }

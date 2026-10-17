@@ -7,6 +7,8 @@ export interface CoreRuntime {
   controllerPort: number;
   httpPort: number;
   socksPort: number;
+  proxyHost?: string;
+  allowLan?: boolean;
   error?: string;
 }
 

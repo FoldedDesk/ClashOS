@@ -9,7 +9,7 @@ import {syntaxTree} from '@codemirror/language';
 import {highlightTree,classHighlighter} from '@lezer/highlight';
 import {history,undo,redo} from '@codemirror/commands';
 import {clashCompletions,completionContext,completionEdit} from './completion.mjs';
-import {serializeDocument} from './document.mjs';
+import {serializeDocument,replaceDocument} from './document.mjs';
 import {scriptCompletions} from './script-completion.mjs';
 import {detectLanguage,nativeErrorLocation} from './language.mjs';
 
@@ -112,4 +112,20 @@ test('Script native error locations refer only to the edited source, not another
  assert.equal(nativeErrorLocation('global: Error\n at global-script.js:7','javascript','profile'),null);
  assert.equal(nativeErrorLocation('YAML line 8: invalid generated config','javascript','profile'),null);
  assert.deepEqual(nativeErrorLocation('YAML extension line 2, column 3: expected a value','yaml'),{line:2,column:3});
+});
+
+test('Template replacement preserves literal data and can undo back to exact source bytes',()=>{
+ const original='# PUBLIC 😀\r\nport: 7890\r\n';let state=EditorState.create({doc:original,extensions:[history()]});const baseline=state.doc;
+ const view={get state(){return state;},composing:false,dispatch(spec){state=spec.state||state.update(spec).state;},focus(){}};
+ const replacement='{"sniffer":{"skip-domain":["</script><img onerror=throw()>"],"enable":true}}';
+ assert(replaceDocument(view,replacement));assert.equal(state.doc.toString(),replacement);assert(undo(view));
+ assert.equal(serializeDocument(state.doc,baseline,original),original);assert(redo(view));assert.equal(state.doc.toString(),replacement);
+});
+test('Template replacement cannot overwrite readonly, composing or uninitialized documents',()=>{
+ assert.equal(replaceDocument(undefined,'x'),false);
+ for(const [readonly,composing]of [[true,false],[false,true]]){
+  let state=EditorState.create({doc:'draft',extensions:[EditorState.readOnly.of(readonly)]});
+  const view={get state(){return state;},composing,dispatch(spec){state=state.update(spec).state;},focus(){}};
+  assert.equal(replaceDocument(view,'replacement'),false);assert.equal(state.doc.toString(),'draft');
+ }
 });

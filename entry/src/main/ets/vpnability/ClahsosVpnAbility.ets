@@ -7,6 +7,7 @@ import { ClashNativeCore } from '../service/ClashNativeCore';
 import { CoreRuntime, emptyRuntime } from '../service/CoreSessionTypes';
 
 interface NativeTunnelStatus { running: boolean; error: string; }
+interface LocalSocksOptions { address: string; port: number; username: string; password: string; error?: string; }
 
 export default class ClahsosVpnAbility extends VpnExtensionAbility {
   private connection: vpnExtension.VpnConnection | undefined = undefined;
@@ -15,6 +16,7 @@ export default class ClahsosVpnAbility extends VpnExtensionAbility {
   private ownsCore: boolean = false;
   private fd: number = -1;
   private port: number = 0;
+  private socksOptions: string = '';
   private timer: number = -1;
   private destroyed: boolean = false;
   private closing: boolean = false;
@@ -70,8 +72,10 @@ export default class ClahsosVpnAbility extends VpnExtensionAbility {
       this.ownsCore = true;
       if (this.destroyed || this.closing) { await this.cleanup(); return; }
       this.core.setMode(mode);
-      this.port = this.core.info().socksPort;
-      if (this.port <= 0) throw new Error('当前配置未开启 SOCKS5 端口');
+      this.socksOptions = this.core.localSocksOptions();
+      const socks: LocalSocksOptions = JSON.parse(this.socksOptions) as LocalSocksOptions;
+      if (socks.error) throw new Error(socks.error);
+      this.port = socks.port;
       this.connection = vpnExtension.createVpnConnection(this.context);
       const config: vpnExtension.VpnConfig = {
         addresses: [
@@ -90,7 +94,7 @@ export default class ClahsosVpnAbility extends VpnExtensionAbility {
       this.creation = this.connection.create(config);
       this.fd = await this.creation;
       if (this.destroyed || this.closing) { await this.cleanup(); return; }
-      this.starting = tunnel.start(this.fd, this.port);
+      this.starting = tunnel.start(this.fd, this.port, socks.address, socks.username, socks.password);
       if (!await this.starting) {
         const status: NativeTunnelStatus = JSON.parse(tunnel.status()) as NativeTunnelStatus;
         throw new Error(status.error || 'TUN 转发引擎启动失败');
@@ -117,13 +121,15 @@ export default class ClahsosVpnAbility extends VpnExtensionAbility {
       if (!core.running) throw new Error('后台内核已停止');
       const status: NativeTunnelStatus = JSON.parse(tunnel.status()) as NativeTunnelStatus;
       if (!status.running) throw new Error(status.error || 'TUN 转发已停止');
-      if (core.socksPort !== this.port) {
-        if (core.socksPort <= 0) throw new Error('当前配置已关闭 SOCKS5 端口');
+      const options: string = this.core.localSocksOptions();
+      if (options !== this.socksOptions) {
+        const socks: LocalSocksOptions = JSON.parse(options) as LocalSocksOptions;
+        if (socks.error) throw new Error(socks.error);
         this.writeState('updating');
         await tunnel.stop();
         if (this.destroyed || this.closing) return;
-        this.port = core.socksPort;
-        this.starting = tunnel.start(this.fd, this.port);
+        this.port = socks.port; this.socksOptions = options;
+        this.starting = tunnel.start(this.fd, this.port, socks.address, socks.username, socks.password);
         if (!await this.starting) throw new Error('TUN 无法连接新的 SOCKS5 端口');
         if (this.destroyed || this.closing) return;
       }

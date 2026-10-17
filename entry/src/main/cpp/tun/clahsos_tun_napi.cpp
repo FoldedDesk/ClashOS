@@ -9,21 +9,24 @@ struct Operation {
     bool success = false;
     int fd = -1;
     int port = 0;
+    std::string address = "127.0.0.1", username, password;
 };
 
-napi_value schedule(napi_env env, bool start, int fd = -1, int port = 0)
+napi_value schedule(napi_env env, bool start, int fd = -1, int port = 0,
+    const std::string& address = "127.0.0.1", const std::string& username = "", const std::string& password = "")
 {
     auto* operation = new Operation();
     operation->start = start;
     operation->fd = fd;
     operation->port = port;
+    operation->address = address; operation->username = username; operation->password = password;
     napi_value promise, name;
     napi_create_promise(env, &operation->deferred, &promise);
     napi_create_string_utf8(env, "ClashOS VPN tunnel", NAPI_AUTO_LENGTH, &name);
     napi_create_async_work(env, nullptr, name,
         [](napi_env, void* data) {
             auto* op = static_cast<Operation*>(data);
-            if (op->start) op->success = clahsos::startTunnel(op->fd, op->port);
+            if (op->start) op->success = clahsos::startTunnel(op->fd, op->port, op->address, op->username, op->password);
             else { clahsos::stopTunnel(); op->success = true; }
         },
         [](napi_env env, napi_status status, void* data) {
@@ -40,16 +43,27 @@ napi_value schedule(napi_env env, bool start, int fd = -1, int port = 0)
 
 napi_value start(napi_env env, napi_callback_info info)
 {
-    size_t argc = 2;
-    napi_value args[2];
+    size_t argc = 5;
+    napi_value args[5];
     int32_t fd = -1, port = 0;
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
-    if (argc != 2 || napi_get_value_int32(env, args[0], &fd) != napi_ok ||
+    if ((argc != 2 && argc != 5) || napi_get_value_int32(env, args[0], &fd) != napi_ok ||
         napi_get_value_int32(env, args[1], &port) != napi_ok) {
         napi_throw_type_error(env, nullptr, "Expected TUN fd and local SOCKS port");
         return nullptr;
     }
-    return schedule(env, true, fd, port);
+    std::string address = "127.0.0.1", username, password;
+    const auto string = [&](napi_value value, std::string& output) {
+        size_t size = 0;
+        if (napi_get_value_string_utf8(env, value, nullptr, 0, &size) != napi_ok || size > 255) return false;
+        output.resize(size + 1);
+        if (napi_get_value_string_utf8(env, value, output.data(), output.size(), &size) != napi_ok) return false;
+        output.resize(size); return true;
+    };
+    if (argc == 5 && (!string(args[2], address) || !string(args[3], username) || !string(args[4], password))) {
+        napi_throw_type_error(env, nullptr, "Expected local SOCKS address and credentials"); return nullptr;
+    }
+    return schedule(env, true, fd, port, address, username, password);
 }
 napi_value stop(napi_env env, napi_callback_info) { return schedule(env, false); }
 napi_value stopSync(napi_env env, napi_callback_info)

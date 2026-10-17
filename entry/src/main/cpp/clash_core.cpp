@@ -195,7 +195,11 @@ struct CoreLog {
 struct ProxyListener {
     int fd = -1;
     int port = 0;
+    std::string host;
     std::atomic<bool> active{true};
+    std::mutex startMutex;
+    std::condition_variable startWake;
+    bool ready = false;
     std::thread thread;
 };
 
@@ -204,6 +208,27 @@ struct ProxyPortSettings {
     bool overridden = false;
     int effectiveHttp() const { return mixed > 0 ? mixed : http; }
     int effectiveSocks() const { return mixed > 0 ? mixed : socks; }
+};
+
+struct InboundConfig {
+    bool allowLan = false;
+    std::string bindAddress = "*";
+    std::vector<std::pair<std::string, std::string>> users;
+    std::vector<std::string> skipAuth, allowed{"0.0.0.0/0", "::/0"}, denied;
+    std::vector<RuleIpRange> skipRanges, allowedRanges, deniedRanges;
+};
+
+struct SnifferProtocol {
+    std::vector<std::pair<int, int>> ports;
+    bool overrideDestination = true;
+};
+struct SnifferConfig {
+    bool enabled = false, forceDnsMapping = true, parsePureIp = true, overrideDestination = true;
+    std::map<std::string, SnifferProtocol> protocols;
+    std::vector<std::string> forceDomain, skipDomain, skipSource, skipDestination;
+    RuleDomainIndex forceIndex, skipIndex;
+    std::vector<std::string> forceLiterals, skipLiterals;
+    std::vector<RuleIpRange> sourceRanges, destinationRanges;
 };
 
 struct CoreState {
@@ -234,6 +259,9 @@ struct CoreState {
     int httpPort = 7890;
     int socksPort = 7891;
     ProxyPortSettings portSettings, profilePorts;
+    InboundConfig inbound, profileInbound;
+    std::shared_ptr<const SnifferConfig> sniffer = std::make_shared<SnifferConfig>();
+    bool inboundOverridden = false;
     std::string configPath;
     std::string runtimeDirectory, configOrigin;
     bool temporaryConfig = false;
@@ -284,7 +312,8 @@ void markProxyUsedLocked(std::string name)
 thread_local int g_currentClient = -1;
 extern thread_local std::chrono::steady_clock::time_point g_probeDeadline;
 bool configureProxyListenersLocked(int httpPort, int socksPort, std::string& error,
-    const std::function<bool()>& commit = {});
+    const std::function<bool()>& commit = {}, const InboundConfig* inbound = nullptr);
+bool shareUtf8(const std::string& text);
 std::string queryValue(const std::string& path, const std::string& key);
 
 bool protectFileDescriptor(int fd)
@@ -638,6 +667,8 @@ struct ParsedConfig {
     std::string mode = "Rule";
     int logLevel = 1;
     bool ipv6 = false;
+    InboundConfig inbound;
+    SnifferConfig sniffer;
     std::vector<ProxyNode> nodes;
     std::vector<ProxyProvider> providers;
     std::vector<ProxyGroup> groups;
@@ -788,6 +819,8 @@ bool parseProxySequence(yaml_document_t& document,yaml_node_t* sequence,std::vec
 #include "backup_codec.inc"
 #include "config_merges.inc"
 #include "rule_edits.inc"
+#include "inbound_policy.inc"
+#include "sniffer_config.inc"
 
 bool parseConfigText(const std::string& text, ParsedConfig& config, std::string& error, const RuleEdits* edits = nullptr, const ObjectEdits* objects = nullptr, const ConfigMerges* merges = nullptr, std::vector<ScriptLog>* scriptLogs = nullptr)
 {
@@ -816,6 +849,8 @@ bool parseConfigText(const std::string& text, ParsedConfig& config, std::string&
     if (valid && merges && (!merges->sequence.empty() || !merges->globalScript.empty() || !merges->profileScript.empty())) valid = scriptDocumentText(document, config.enhancedSource, error);
     if (valid) valid = applyObjectEdits(document, objects, error);
     root = yaml_document_get_root_node(&document);
+    if (valid) valid = parseInboundConfig(document, root, config.inbound, error);
+    if (valid) valid = parseSnifferConfig(document, yamlValue(document, root, "sniffer"), config.sniffer, error);
     auto value = [&](yaml_node_t* node, const char* key) { return yamlText(yamlValue(document, node, key)); };
     auto portValue = [&](const char* key, int& destination) {
         auto* node = yamlValue(document, root, key);
@@ -889,7 +924,7 @@ bool parseConfigText(const std::string& text, ParsedConfig& config, std::string&
                 if(group.strategy!="round-robin"&&group.strategy!="consistent-hashing"&&group.strategy!="sticky-sessions") {
                     valid=false;error="Unsupported load-balance strategy";break;
                 }
-                if(!value(source,"hash-key").empty()) {valid=false;error="Load-balance hash-key requires inbound user authentication, which is not supported";break;}
+                if(!value(source,"hash-key").empty()) {valid=false;error="Load-balance hash-key is not implemented by this core";break;}
                 if(!value(source,"default-selected").empty()) {valid=false;error="Load-balance groups cannot pin default-selected";break;}
             }
             if((group.type=="URLTest"||group.type=="Fallback"||group.type=="LoadBalance")&&(!validProbeUrl(group.url)||!validProbeStatus(group.expectedStatus))) {
@@ -1057,6 +1092,8 @@ std::string ruleEditorJson(const std::string& source, const std::string& setting
 
 #include "port_settings.inc"
 #include "controller_config_store.inc"
+#include "inbound_settings.inc"
+#include "sniffer_control.inc"
 
 void persistSelectionsLocked()
 {
@@ -1088,7 +1125,15 @@ bool loadConfigLocked(const std::string& path, std::string& error, bool force = 
     if (!parseConfigText(text, parsed, error, &edits, &objects, &merges, &scriptLogs)) return false;
     ProxyPortSettings ports = parsed.ports;
     if (!transient && !readProxyPortSettings(path, ports, error)) return false;
-    if (!force) ports = g_state.portSettings;
+    InboundConfig inbound = parsed.inbound;
+    bool inboundOverridden = false;
+    if (!transient && !readInboundSettings(path, inbound, inboundOverridden, error)) return false;
+    if (!force) {
+        ports = g_state.portSettings;
+        const auto users = inbound.users;
+        inbound = g_state.inbound; inbound.users = users;
+        inboundOverridden = g_state.inboundOverridden;
+    }
     std::shared_ptr<DnsListener> dnsListener;
     if(g_state.running.load()&&!prepareDnsListener(parsed.dns,dnsListener,error))return false;
     if (payload && !stageRuntimeEnvelope(path, text, configOrigin, temporary, error)) return false;
@@ -1097,7 +1142,7 @@ bool loadConfigLocked(const std::string& path, std::string& error, bool force = 
         if (rename(temporary.c_str(), path.c_str()) == 0) return true;
         error = "Cannot commit temporary configuration; previous configuration has been preserved"; return false;
     };
-    const bool applied = g_state.running.load() ? configureProxyListenersLocked(ports.effectiveHttp(), ports.effectiveSocks(), error, commit) : commit();
+    const bool applied = g_state.running.load() ? configureProxyListenersLocked(ports.effectiveHttp(), ports.effectiveSocks(), error, commit, &inbound) : commit();
     if (!temporary.empty()) unlink(temporary.c_str());
     if (!applied) return false;
     g_state.configRevision++;
@@ -1121,6 +1166,8 @@ bool loadConfigLocked(const std::string& path, std::string& error, bool force = 
     if(g_state.running.load())replaceDnsListenerLocked(dnsListener);
     g_state.ruleCount = static_cast<int>(g_state.rules.size());
     g_state.profilePorts = parsed.ports; g_state.portSettings = ports;
+    g_state.profileInbound = parsed.inbound; g_state.inbound = std::move(inbound); g_state.inboundOverridden = inboundOverridden;
+    g_state.sniffer = std::make_shared<SnifferConfig>(std::move(parsed.sniffer));
     g_state.httpPort = ports.effectiveHttp();
     g_state.socksPort = ports.effectiveSocks();
     g_state.mode = parsed.mode;
@@ -1369,9 +1416,10 @@ std::string responseFor(const std::string& method, const std::string& path, cons
     }
     std::lock_guard<std::mutex> guard(g_state.mutex);
     if (path.substr(0, path.find('?')) == "/clashos/ports") return proxyPortsControlLocked(method, path, body);
+    if (path.substr(0, path.find('?')) == "/clashos/inbound") return inboundControlLocked(method, path, body);
     if (method == "GET" && path == "/version") {
-        return "{\"version\":\"ClashOS Core 0.25 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
-            "\",\"premium\":false,\"meta\":true,\"features\":[\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"trojan\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
+        return "{\"version\":\"ClashOS Core 0.27 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
+            "\",\"premium\":false,\"meta\":true,\"features\":[\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"trojan\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
     }
     if (method == "GET" && path == "/clahsos/diagnostics") return diagnosticsJson();
     const std::string resource=path.substr(0,path.find('?'));
@@ -1563,19 +1611,28 @@ void handleClient(int client)
     closeSocket(client);
 }
 
-int openListener(int port)
+int openListener(int port, const std::string& host = "127.0.0.1")
 {
-    int listener = socket(AF_INET, SOCK_STREAM, 0);
+    const int family = host.find(':') == std::string::npos ? AF_INET : AF_INET6;
+    int listener = socket(family, SOCK_STREAM, 0);
     if (listener < 0) return -1;
     int reuse = 1;
     setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-    sockaddr_in address{};
-    address.sin_family = AF_INET;
-    address.sin_port = htons(static_cast<uint16_t>(port));
-    inet_pton(AF_INET, "127.0.0.1", &address.sin_addr);
-    if (bind(listener, reinterpret_cast<sockaddr*>(&address), sizeof(address)) < 0 || listen(listener, 32) < 0) {
-        closeSocket(listener);
-        return -1;
+#ifdef SO_REUSEPORT
+    // Both generations can bind while changing loopback/wildcard addresses.
+    setsockopt(listener, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
+#endif
+    int result = -1;
+    if (family == AF_INET6) {
+        setsockopt(listener, IPPROTO_IPV6, IPV6_V6ONLY, &reuse, sizeof(reuse));
+        sockaddr_in6 address{}; address.sin6_family = AF_INET6; address.sin6_port = htons(static_cast<uint16_t>(port));
+        if (inet_pton(AF_INET6, host.c_str(), &address.sin6_addr) == 1) result = bind(listener, reinterpret_cast<sockaddr*>(&address), sizeof(address));
+    } else {
+        sockaddr_in address{}; address.sin_family = AF_INET; address.sin_port = htons(static_cast<uint16_t>(port));
+        if (inet_pton(AF_INET, host.c_str(), &address.sin_addr) == 1) result = bind(listener, reinterpret_cast<sockaddr*>(&address), sizeof(address));
+    }
+    if (result < 0 || listen(listener, 32) < 0) {
+        const int failure = errno; closeSocket(listener); errno = failure; return -1;
     }
     return listener;
 }
@@ -2381,12 +2438,22 @@ void closePair(int first, int second)
     closeSocket(second);
 }
 
+#include "inbound_auth.inc"
+#include "sniffer_wire.inc"
+#include "sniffer_runtime.inc"
+
 void handleHttpProxyClient(int client)
 {
+    InboundConfig policy; std::string source;
+    if (!inboundHandshakePolicy(client, policy, source)) { closeSocket(client); return; }
     const std::string request = readUntilHeaders(client);
     const size_t headerEnd = request.find("\r\n\r\n");
     const size_t lineEnd = request.find("\r\n");
     if (headerEnd == std::string::npos || lineEnd == std::string::npos) { closeSocket(client); return; }
+    if (!inboundHttpAuthenticated(policy, source, request)) {
+        sendAll(client, "HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"ClashOS\", charset=\"UTF-8\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        closeSocket(client); return;
+    }
     std::istringstream firstLine(request.substr(0, lineEnd));
     std::string method, target, version;
     firstLine >> method >> target >> version;
@@ -2417,14 +2484,21 @@ void handleHttpProxyClient(int client)
         closeSocket(client);
         return;
     }
-    const ProxyNode node = activeProxyNode(host, port,"tcp",clientSourceAddress(client));
-    beginConnection(client, host, port, node.chain, node.matchedRule);
+    auto plan = sniffPlan(host, port, clientSourceAddress(client));
+    bool acknowledged = false;
+    std::string prefix = request.substr(headerEnd + 4);
+    if (tunnel && plan.eligible) {
+        if (!sendAll(client, "HTTP/1.1 200 Connection Established\r\n\r\n")) { closeSocket(client); return; }
+        acknowledged = true; sniffTcp(client, plan, prefix);
+    } else if (!tunnel && plan.eligible && sniffProtocolPort(*plan.config, "HTTP", port)) sniffApply(plan, "HTTP", sniffHttp(request));
+    const ProxyNode node = activeProxyNode(plan.route, port, "tcp", plan.source, plan.originalIps.empty() ? nullptr : &plan.originalIps);
+    beginConnection(client, plan.route, port, node.chain, node.matchedRule);
     ProxyStream stream;
     std::string error;
-    if (!openProxyStream(node, host, port, stream, error)) {
+    if (!openProxyStream(node, plan.destination, port, stream, error)) {
         coreLog("error", host + ":" + std::to_string(port) + " via " + node.name + ": " + error);
         const std::string status = node.type == "reject" ? "403 Forbidden" : node.type != "ss" && node.type != "direct" && node.type != "vmess" && node.type != "trojan" ? "501 Not Implemented" : "502 Bad Gateway";
-        sendAll(client, "HTTP/1.1 " + status + "\r\nConnection: close\r\n\r\n");
+        if (!acknowledged) sendAll(client, "HTTP/1.1 " + status + "\r\nConnection: close\r\n\r\n");
         closeSocket(client);
         return;
     }
@@ -2432,8 +2506,7 @@ void handleHttpProxyClient(int client)
     coreLog("info", host + ":" + std::to_string(port) + " via " + node.name);
     bool ready = true;
     if (tunnel) {
-        ready = sendAll(client, "HTTP/1.1 200 Connection Established\r\n\r\n") &&
-            sendPayload(client, stream, request.substr(headerEnd + 4));
+        ready = (acknowledged || sendAll(client, "HTTP/1.1 200 Connection Established\r\n\r\n")) && sendPayload(client, stream, prefix);
     } else {
         const std::string forwarded = method + " " + target + " " + version + "\r\n" + forwardedHeaders +
             "Connection: close\r\n\r\n" + request.substr(headerEnd + 4);
@@ -2457,13 +2530,8 @@ void socksReply(int client, unsigned char status)
 
 void handleSocksClient(int client)
 {
-    unsigned char greeting[2];
-    if (!readExact(client, reinterpret_cast<char*>(greeting), 2) || greeting[0] != 5 || greeting[1] == 0) { closeSocket(client); return; }
-    std::vector<unsigned char> methods(greeting[1]);
-    if (!readExact(client, reinterpret_cast<char*>(methods.data()), methods.size())) { closeSocket(client); return; }
-    const bool anonymous = std::find(methods.begin(), methods.end(), 0) != methods.end();
-    const unsigned char method[] = {5, static_cast<unsigned char>(anonymous ? 0 : 0xff)};
-    if (!sendAll(client, reinterpret_cast<const char*>(method), sizeof(method)) || !anonymous) { closeSocket(client); return; }
+    InboundConfig policy; std::string source;
+    if (!inboundHandshakePolicy(client, policy, source) || !inboundSocksAuthenticate(client, policy, source)) { closeSocket(client); return; }
     unsigned char request[4];
     if (!readExact(client, reinterpret_cast<char*>(request), 4) || request[0] != 5 || request[2] != 0) { closeSocket(client); return; }
     if (request[1] != 1 && request[1] != 3) { socksReply(client, 7); closeSocket(client); return; }
@@ -2490,26 +2558,31 @@ void handleSocksClient(int client)
         return;
     }
     if (port == 0) { socksReply(client, 1); closeSocket(client); return; }
-    const ProxyNode node = activeProxyNode(host, port,"tcp",clientSourceAddress(client));
-    beginConnection(client, host, port, node.chain, node.matchedRule);
+    auto plan = sniffPlan(host, port, clientSourceAddress(client));
+    std::string prefix; const bool acknowledged = plan.eligible;
+    if (acknowledged) { socksReply(client, 0); sniffTcp(client, plan, prefix); }
+    const ProxyNode node = activeProxyNode(plan.route, port, "tcp", plan.source, plan.originalIps.empty() ? nullptr : &plan.originalIps);
+    beginConnection(client, plan.route, port, node.chain, node.matchedRule);
     ProxyStream stream;
     std::string error;
-    if (!openProxyStream(node, host, port, stream, error)) {
+    if (!openProxyStream(node, plan.destination, port, stream, error)) {
         coreLog("error", host + ":" + std::to_string(port) + " via " + node.name + ": " + error);
-        socksReply(client, node.type == "reject" ? 2 : node.type != "ss" && node.type != "direct" && node.type != "vmess" && node.type != "trojan" ? 7 : 5);
+        if (!acknowledged) socksReply(client, node.type == "reject" ? 2 : node.type != "ss" && node.type != "direct" && node.type != "vmess" && node.type != "trojan" ? 7 : 5);
         closeSocket(client);
         return;
     }
     attachUpstream(client, stream.fd);
-    socksReply(client, 0);
+    if (!acknowledged) socksReply(client, 0);
     coreLog("info", host + ":" + std::to_string(port) + " via " + node.name);
-    relayStream(client, stream);
+    if (sendPayload(client, stream, prefix)) relayStream(client, stream);
     closePair(client, stream.fd);
     stream.fd = -1;
 }
 
 void handleMixedProxyClient(int client)
 {
+    InboundConfig policy; std::string source;
+    if (!inboundHandshakePolicy(client, policy, source)) { closeSocket(client); return; }
     unsigned char first = 0;
     const ssize_t count = recv(client, reinterpret_cast<char*>(&first), 1, MSG_PEEK);
     if (count == 1 && first == 5) handleSocksClient(client);
@@ -2549,6 +2622,10 @@ void dispatchWorker(int client, int mode)
 
 void proxyLoop(int listener, int mode, std::shared_ptr<ProxyListener> context = nullptr)
 {
+    if (context) {
+        std::unique_lock<std::mutex> lock(context->startMutex);
+        context->startWake.wait(lock, [&]() { return context->ready || !context->active.load(); });
+    }
     while (g_state.running.load() && (context == nullptr || context->active.load())) {
         sockaddr_storage address{};
         socklen_t length = sizeof(address);
@@ -2564,37 +2641,38 @@ void proxyLoop(int listener, int mode, std::shared_ptr<ProxyListener> context = 
 }
 
 bool configureProxyListenersLocked(int httpPort, int socksPort, std::string& error,
-    const std::function<bool()>& commit)
+    const std::function<bool()>& commit, const InboundConfig* policy)
 {
     if (httpPort < 0 || httpPort > 65535 || socksPort < 0 || socksPort > 65535) {
         error = "Proxy ports must be between 0 and 65535"; return false;
     }
-    std::set<int> wanted{httpPort, socksPort};
-    wanted.erase(0);
-    std::vector<std::shared_ptr<ProxyListener>> next;
-    std::vector<std::shared_ptr<ProxyListener>> opened;
+    const auto& inbound = policy ? *policy : g_state.inbound;
+    const auto hosts = inboundBindAddresses(inbound);
+    std::set<int> ports{httpPort, socksPort}; ports.erase(0);
+    using Endpoint = std::pair<std::string, int>;
+    std::set<Endpoint> wanted;
+    std::vector<std::shared_ptr<ProxyListener>> next, opened;
     const auto discard = [&]() {
         for (const auto& listener : opened) {
-            listener->active.store(false); shutdown(listener->fd, SHUT_RDWR); closeSocket(listener->fd);
+            { std::lock_guard<std::mutex> lock(listener->startMutex); listener->active.store(false); }
+            listener->startWake.notify_all();
+            shutdown(listener->fd, SHUT_RDWR); closeSocket(listener->fd);
             if (listener->thread.joinable()) listener->thread.join();
         }
     };
-    for (int port : wanted) {
+    for (int port : ports) for (const auto& host : hosts) {
         std::shared_ptr<ProxyListener> current;
-        for (const auto& listener : g_state.listeners) if (listener->port == port) current = listener;
+        for (const auto& listener : g_state.listeners) if (listener->port == port && listener->host == host) current = listener;
         if (current == nullptr) {
-            const int fd = openListener(port);
+            const int fd = openListener(port, host);
             if (fd < 0) {
-                discard();
-                error = "Cannot bind proxy port " + std::to_string(port) + "; current listeners have been preserved";
-                return false;
+                if (inbound.bindAddress == "*" && host == "::" && (errno == EAFNOSUPPORT || errno == EPROTONOSUPPORT || errno == EADDRNOTAVAIL)) continue;
+                discard(); error = "Cannot bind proxy port " + std::to_string(port) + "; current listeners have been preserved"; return false;
             }
             current = std::make_shared<ProxyListener>();
-            current->fd = fd;
-            current->port = port;
-            opened.push_back(current);
+            current->fd = fd; current->port = port; current->host = host; opened.push_back(current);
         }
-        next.push_back(current);
+        wanted.emplace(host, port); next.push_back(current);
     }
     try {
         for (const auto& listener : opened) listener->thread = std::thread(proxyLoop, listener->fd, 2, listener);
@@ -2602,20 +2680,22 @@ bool configureProxyListenersLocked(int httpPort, int socksPort, std::string& err
         discard(); error = "Cannot start proxy listeners; previous listeners have been preserved"; return false;
     }
     if (commit && !commit()) { discard(); return false; }
-    // Bind new ports before retiring the old ones; existing relays keep their own sockets.
     for (const auto& listener : g_state.listeners) {
-        if (wanted.count(listener->port) != 0) continue;
-        listener->active.store(false);
-        shutdown(listener->fd, SHUT_RDWR);
-        closeSocket(listener->fd);
+        if (wanted.count({listener->host, listener->port})) continue;
+        { std::lock_guard<std::mutex> lock(listener->startMutex); listener->active.store(false); }
+        listener->startWake.notify_all();
+        shutdown(listener->fd, SHUT_RDWR); closeSocket(listener->fd);
         if (listener->thread.joinable()) listener->thread.join();
     }
     g_state.listeners = std::move(next);
-    g_state.httpProxyFd = -1;
-    g_state.socksProxyFd = -1;
+    g_state.httpProxyFd = g_state.socksProxyFd = -1;
     for (const auto& listener : g_state.listeners) {
         if (listener->port == httpPort) g_state.httpProxyFd = listener->fd;
         if (listener->port == socksPort && httpPort != socksPort) g_state.socksProxyFd = listener->fd;
+    }
+    for (const auto& listener : opened) {
+        { std::lock_guard<std::mutex> lock(listener->startMutex); listener->ready = true; }
+        listener->startWake.notify_all();
     }
     return true;
 }
@@ -2655,6 +2735,8 @@ bool startCore(const std::string& configPath, int port)
         g_state.socksPort = 7891;
         g_state.portSettings = ProxyPortSettings{}; g_state.profilePorts = ProxyPortSettings{};
         g_state.mode = "Rule";
+        g_state.inbound = InboundConfig{}; g_state.profileInbound = InboundConfig{}; g_state.inboundOverridden = false;
+        g_state.sniffer = std::make_shared<SnifferConfig>();
         g_state.logLevel.store(1); g_state.ipv6.store(false);
         g_state.temporaryConfig = false; g_state.configOrigin.clear();
         g_state.configPath.clear();
@@ -2717,7 +2799,8 @@ void stopCore()
     if(dnsListener)dnsListener->stop();
     if (server >= 0) { shutdown(server, SHUT_RDWR); closeSocket(server); }
     for (const auto& listener : listeners) {
-        listener->active.store(false);
+        { std::lock_guard<std::mutex> lock(listener->startMutex); listener->active.store(false); }
+        listener->startWake.notify_all();
         shutdown(listener->fd, SHUT_RDWR);
         closeSocket(listener->fd);
     }
@@ -2744,6 +2827,7 @@ std::string runtimeInfo()
         "\",\"temporaryConfig\":" + (g_state.temporaryConfig ? "true" : "false") + ",\"origin\":\"" + jsonEscape(g_state.configOrigin) +
         "\",\"mode\":\"" + jsonEscape(g_state.mode) + "\",\"controllerPort\":" + std::to_string(g_state.port) +
         ",\"httpPort\":" + std::to_string(g_state.httpPort) + ",\"socksPort\":" + std::to_string(g_state.socksPort) +
+        ",\"proxyHost\":\"" + jsonEscape(inboundLocalAddress(g_state.inbound)) + "\",\"allowLan\":" + (g_state.inbound.allowLan ? "true" : "false") +
         ",\"error\":\""+jsonEscape(g_state.lastError)+"\"}";
 }
 
@@ -2837,6 +2921,11 @@ napi_value RuntimeInfo(napi_env env, napi_callback_info)
     napi_create_string_utf8(env, text.c_str(), text.size(), &result);
     return result;
 }
+napi_value LocalSocksOptions(napi_env env, napi_callback_info)
+{
+    const auto text = localSocksOptions(); napi_value result;
+    napi_create_string_utf8(env, text.data(), text.size(), &result); return result;
+}
 napi_value ConfigureRuntimeDirectory(napi_env env, napi_callback_info info)
 {
     size_t argc = 1; napi_value argument = nullptr, result;
@@ -2899,6 +2988,14 @@ napi_value ProtectFile(napi_env env,napi_callback_info info)
     const bool valid=napi_get_cb_info(env,info,&argc,&argument,nullptr,nullptr)==napi_ok&&argc==1&&
         argument!=nullptr&&napi_get_value_int32(env,argument,&fd)==napi_ok;
     napi_get_boolean(env,valid&&protectFileDescriptor(fd),&result);return result;
+}
+
+napi_value ValidateSniffer(napi_env env, napi_callback_info info)
+{
+    size_t argc = 1; napi_value argument = nullptr, result;
+    napi_get_cb_info(env, info, &argc, &argument, nullptr, nullptr);
+    const auto error = snifferDraftError(argc ? napiText(env, argument) : "");
+    napi_create_string_utf8(env, error.data(), error.size(), &result); return result;
 }
 
 napi_value RuleEditor(napi_env env, napi_callback_info info)
@@ -2984,12 +3081,14 @@ napi_value Init(napi_env env, napi_value exports)
         {"startAsync", nullptr, StartAsync, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"stopAsync", nullptr, StopAsync, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"info", nullptr, RuntimeInfo, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"localSocksOptions", nullptr, LocalSocksOptions, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"configureRuntimeDirectory", nullptr, ConfigureRuntimeDirectory, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"setControllerSecret", nullptr, SetControllerSecret, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"controllerSecret", nullptr, ControllerSecret, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"setMode", nullptr, SetRuntimeMode, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"start", nullptr, Start, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"validate", nullptr, Validate, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"validateSniffer", nullptr, ValidateSniffer, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"ruleEditor", nullptr, RuleEditor, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"objectEditor", nullptr, ObjectEditor, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"objectDraft", nullptr, ObjectDraft, nullptr, nullptr, nullptr, napi_default, nullptr},

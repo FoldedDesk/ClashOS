@@ -2,6 +2,9 @@ import { VergePalette } from '../theme/VergeTheme';
 import { DEFAULT_ACCENT } from '../theme/VergeTheme';
 import { AppearanceController } from '../service/AppearanceController';
 import { RuntimeConfigDialog } from '../components/RuntimeConfigDialog';
+import { InboundSettingsDialog } from '../components/InboundSettingsDialog';
+import { SnifferSettingsDialog } from '../components/SnifferSettingsDialog';
+import { ClashInboundSettings, ClashInboundChanges } from '../service/ClashApi';
 import { ClashRuntimeConfig } from '../service/ClashApi';
 import { ProxyPortsDialog } from '../components/ProxyPortsDialog';
 import { ControllerAccessDialog } from '../components/ControllerAccessDialog';
@@ -172,6 +175,10 @@ struct Index {
   @State updatingProfiles: string[] = [];
   @State pendingProxy: string = '';
   @State httpPort: number = 0;
+  @State proxyHost: string = '127.0.0.1';
+  @State allowLan: boolean = false;
+  @State sniffing: boolean = false;
+  @State snifferBusy: boolean = false;
   @State socksPort: number = 0;
   @State diagnosing: boolean = false;
   @State testUrl: string = 'https://www.gstatic.com/generate_204';
@@ -308,6 +315,9 @@ struct Index {
     this.temporaryConfig = snapshot.temporaryConfig === true;
     this.httpPort = snapshot.httpPort;
     this.socksPort = snapshot.socksPort;
+    this.proxyHost = snapshot.proxyHost ?? '127.0.0.1';
+    this.allowLan = snapshot.allowLan === true;
+    this.sniffing = snapshot.sniffing === true;
     this.coreError = snapshot.error;
     const local: CoreRuntime = this.nativeCore.info();
     if (!snapshot.connected && (local.error ?? '').length > 0) this.coreError = local.error ?? '';
@@ -578,6 +588,45 @@ struct Index {
 
   private profileIsActive(id: string): boolean { return !this.temporaryConfig && id === this.activeProfileId; }
 
+  private async setSniffing(enabled: boolean): Promise<void> {
+    if (this.snifferBusy || enabled === this.sniffing) return;
+    if (!this.coreConnected || !this.internalCore || this.tunBusy) { this.notice = '请先连接内置内核，并等待切换完成'; return; }
+    this.snifferBusy = true;
+    try {
+      const current: ClashRuntimeConfig = await this.coreApi.runtimeConfig();
+      ++this.mutationVersion;
+      try { await this.coreApi.saveRuntimeConfig(current, { mode: current.mode, logLevel: current.logLevel, ipv6: current.ipv6,
+        sniffing: enabled, path: current.path, temporary: current.temporary, revision: current.revision }); }
+      finally { ++this.mutationVersion; }
+      await this.refreshCore(); this.notice = `域名嗅探已${enabled ? '开启' : '关闭'}，重载或重启后恢复配置中的设置`;
+    } catch (error) { this.notice = `嗅探未能切换：${(error as Error).message}`; await this.refreshCore(); }
+    finally { this.snifferBusy = false; }
+  }
+
+  private async openSnifferSettings(): Promise<void> {
+    if (!this.coreConnected || !this.internalCore || this.tunBusy) { this.notice = '请先连接内置内核，并等待切换完成'; return; }
+    try {
+      const initial: ClashRuntimeConfig = await this.coreApi.runtimeConfig();
+      const content: string = await this.coreApi.snifferDraft();
+      const instance: string = this.connectedRuntime.instance;
+      const validate = (text: string): void => {
+        this.nativeCore.validateSniffer(text);
+      };
+      this.dialogController?.close();
+      this.dialogController = new CustomDialogController({ builder: SnifferSettingsDialog({ initialContent: content, onValidate: validate,
+        onCopy: (text: string): void => { this.copyText(text, '嗅探扩展配置'); },
+        onSave: async (text: string): Promise<void> => {
+          if (this.tunBusy || !this.internalCore || this.connectedRuntime.instance !== instance) throw new Error('当前内核已变化，请重新打开嗅探设置');
+          validate(text); ++this.mutationVersion;
+          try { await this.coreApi.saveSnifferDraft(initial, text); }
+          finally { ++this.mutationVersion; }
+          await this.refreshCore(); this.notice = '嗅探设置已应用；长期保留请写入配置或扩展';
+        }
+      }), autoCancel: false, customStyle: true });
+      this.dialogController.open();
+    } catch (error) { this.notice = `无法打开嗅探设置：${(error as Error).message}`; }
+  }
+
   private async openProxyPorts(): Promise<void> {
     if (!this.coreConnected || !this.internalCore) { this.notice = '请先连接内置内核后修改端口'; return; }
     if (this.temporaryConfig) { this.notice = '请先选择保存的配置，再修改全局端口'; return; }
@@ -607,6 +656,41 @@ struct Index {
       });
       this.dialogController.open();
     } catch (error) { this.notice = `无法打开端口设置：${(error as Error).message}`; }
+  }
+
+  private async openInboundSettings(): Promise<void> {
+    if (!this.coreConnected || !this.internalCore) { this.notice = '请先连接内置内核'; return; }
+    if (this.temporaryConfig) { this.notice = '请先选择保存的配置，再修改共享设置'; return; }
+    if (this.tunBusy || this.tunEnabled) { this.notice = '请先关闭虚拟网卡，再修改共享设置'; return; }
+    try {
+      const initial: ClashInboundSettings = await this.coreApi.inboundSettings();
+      const instance: string = this.connectedRuntime.instance;
+      this.dialogController?.close();
+      this.dialogController = new CustomDialogController({ builder: InboundSettingsDialog({ initial,
+        onSave: async (changes?: ClashInboundChanges): Promise<void> => {
+          if (this.tunBusy || this.tunEnabled || !this.internalCore || this.connectedRuntime.instance !== instance) throw new Error('当前内核或虚拟网卡状态已变化，请重新打开共享设置');
+          ++this.mutationVersion;
+          try { await this.coreApi.saveInboundSettings(initial, changes); }
+          catch (error) { throw new Error(this.inboundError((error as Error).message)); }
+          finally { ++this.mutationVersion; }
+          await this.refreshCore();
+          this.notice = changes === undefined ? '共享设置已恢复为当前配置的设置' : '共享设置已保存并应用';
+        }
+      }), autoCancel: false, customStyle: true });
+      this.dialogController.open();
+    } catch (error) { this.notice = `无法打开共享设置：${(error as Error).message}`; }
+  }
+
+  private inboundError(message: string): string {
+    if (message.indexOf('Active configuration changed') >= 0) return '当前配置或运行设置已变化，请取消并重新打开共享设置';
+    if (message.indexOf('bind-address') >= 0) return '监听地址应为 *、IPv4 或 IPv6 地址';
+    if (message.indexOf('Cannot bind proxy port') >= 0) return '无法监听所选地址或端口，可能已被占用；原设置已保留';
+    if (message.indexOf('skip-auth-prefixes') >= 0) return '免认证网段应填写有效的 IPv4 / IPv6 CIDR';
+    if (message.indexOf('lan-allowed-ips') >= 0) return '允许访问的网段应填写有效的 IPv4 / IPv6 CIDR';
+    if (message.indexOf('lan-disallowed-ips') >= 0) return '禁止访问的网段应填写有效的 IPv4 / IPv6 CIDR';
+    if (message.indexOf('Proxy accounts') >= 0 || message.indexOf('Accounts require') >= 0) return '请检查账号和密码：名称不能重复，新账号必须有密码，单项最多 255 字节且不能包含控制字符';
+    if (message.indexOf('Cannot save') >= 0 || message.indexOf('Cannot commit') >= 0) return '无法保存共享设置，原设置已保留';
+    return message;
   }
 
   private refreshControllerAccessStatus(): void {
@@ -1401,7 +1485,9 @@ struct Index {
 
   private systemProxyMatchesCore(): boolean {
     return this.internalCore && this.coreConnected && this.httpPort > 0 && this.systemProxyPort === this.httpPort &&
-      ['127.0.0.1', 'localhost', '::1', '[::1]'].indexOf(this.systemProxyHost.toLowerCase()) >= 0;
+      (this.systemProxyHost.toLowerCase() === this.proxyHost.toLowerCase() ||
+        (this.proxyHost === '127.0.0.1' && ['localhost', '127.0.0.1'].indexOf(this.systemProxyHost.toLowerCase()) >= 0) ||
+        (this.proxyHost === '::1' && ['::1', '[::1]'].indexOf(this.systemProxyHost.toLowerCase()) >= 0));
   }
 
   private systemProxyDescription(): string {
@@ -1412,7 +1498,7 @@ struct Index {
   }
 
   private showSystemProxyGuide(enable?: boolean): void {
-    const host: string = this.internalCore ? '127.0.0.1' : '内核所在设备的 IP 地址';
+    const host: string = this.internalCore ? this.proxyHost : '内核所在设备的 IP 地址';
     const port: string = this.httpPort > 0 ? `${this.httpPort}` : '当前配置的 HTTP 端口';
     this.getUIContext().showAlertDialog({
       title: enable === undefined ? '系统 HTTP 代理' : enable ? '开启系统代理' : '关闭系统代理',
@@ -3203,6 +3289,26 @@ struct Index {
   }
 
   @Builder
+  private inboundSettingsMenu() {
+    Menu() {
+      MenuItem({ content: '配置局域网共享' }).enabled(this.coreConnected && !this.tunBusy && !this.tunEnabled)
+        .onClick(() => this.openInboundSettings());
+      MenuItem({ content: '复制本机代理地址' }).enabled(this.httpPort > 0)
+        .onClick(() => this.copyText(`${this.proxyHost.indexOf(':') >= 0 ? `[${this.proxyHost}]` : this.proxyHost}:${this.httpPort}`, '本机代理地址'));
+    }
+  }
+
+  @Builder
+  private snifferMenu() {
+    Menu() {
+      MenuItem({ content: this.sniffing ? '关闭域名嗅探' : '开启域名嗅探' }).enabled(this.coreConnected && !this.tunBusy)
+        .onClick(() => this.setSniffing(!this.sniffing));
+      MenuItem({ content: '编辑嗅探配置' }).enabled(this.coreConnected && !this.tunBusy).onClick(() => this.openSnifferSettings());
+      MenuItem({ content: '编辑全局扩展配置' }).onClick(() => this.openMergeEditor(true));
+    }.backgroundColor(this.theme.surface).backgroundBlurStyle(BlurStyle.NONE)
+  }
+
+  @Builder
   private proxyPortMenu(socks: boolean) {
     Menu() {
       MenuItem({ content: '修改代理端口', startIcon: $r('app.media.verge_settings') })
@@ -3210,7 +3316,7 @@ struct Index {
       MenuItem({ content: '复制端口' }).enabled((socks ? this.socksPort : this.httpPort) > 0)
         .onClick(() => this.copyText(`${socks ? this.socksPort : this.httpPort}`, '端口'));
       MenuItem({ content: '复制代理地址' }).enabled((socks ? this.socksPort : this.httpPort) > 0)
-        .onClick(() => this.copyText(`${this.internalCore ? '127.0.0.1:' : ''}${socks ? this.socksPort : this.httpPort}`, '代理地址'));
+        .onClick(() => this.copyText(`${this.internalCore ? `${this.proxyHost.indexOf(':') >= 0 ? `[${this.proxyHost}]` : this.proxyHost}:` : ''}${socks ? this.socksPort : this.httpPort}`, '代理地址'));
     }.backgroundColor(this.theme.surface).backgroundBlurStyle(BlurStyle.NONE)
   }
 
@@ -3220,7 +3326,7 @@ struct Index {
       Row() {
         this.settingRow({ title: socks ? 'SOCKS5 代理' : 'HTTP 代理', detail: this.internalCore ? '当前监听端口 · 点击修改' : '当前内核监听端口',
           value: !this.coreConnected ? '未连接' : (socks ? this.socksPort : this.httpPort) > 0 ?
-            `${this.internalCore ? '127.0.0.1:' : ''}${socks ? this.socksPort : this.httpPort}` : '关闭' });
+            `${this.internalCore ? `${this.proxyHost.indexOf(':') >= 0 ? `[${this.proxyHost}]` : this.proxyHost}:` : ''}${socks ? this.socksPort : this.httpPort}` : '关闭' });
       }.layoutWeight(1).onClick(() => this.openProxyPorts());
       if (this.internalCore) {
         Button('修改', { type: ButtonType.Normal }).height(32).fontSize(12).borderRadius(5)
@@ -3398,6 +3504,25 @@ struct Index {
           .border({ width: { bottom: 1 }, color: this.theme.divider });
         this.proxyPortRow(false);
         this.proxyPortRow(true);
+        if (this.internalCore) {
+          Row({ space: 12 }) {
+            Column({ space: 5 }) {
+              Text('域名嗅探').fontSize(13).fontColor(this.theme.text);
+              Text(this.sniffing ? '已开启 · 按当前协议和端口配置识别' : '已关闭 · 使用请求中的原地址').fontSize(11).fontColor(this.theme.textMuted);
+            }.alignItems(HorizontalAlign.Start).layoutWeight(1);
+            this.outlineButton('嗅探配置', $r('app.media.verge_settings'), () => this.openSnifferSettings());
+            Toggle({ type: ToggleType.Switch, isOn: this.sniffing }).width(36).height(22).selectedColor(this.theme.primary)
+              .enabled(this.coreConnected && !this.tunBusy && !this.snifferBusy).accessibilityText('域名嗅探开关').onChange((value: boolean) => this.setSniffing(value));
+          }.width('100%').padding(20).border({ width: { top: 1 }, color: this.theme.divider }).bindContextMenu(this.snifferMenu(), ResponseType.RightClick);
+          Row({ space: 12 }) {
+            Column({ space: 5 }) {
+              Text('局域网共享').fontSize(13).fontColor(this.theme.text);
+              Text(this.allowLan ? '已开启 · 允许其他设备连接' : '已关闭 · 仅允许本机连接').fontSize(11).fontColor(this.theme.textMuted);
+            }.alignItems(HorizontalAlign.Start).layoutWeight(1);
+            this.outlineButton('共享设置', $r('app.media.verge_settings'), () => this.openInboundSettings());
+          }.width('100%').padding(20).border({ width: { top: 1 }, color: this.theme.divider })
+            .bindContextMenu(this.inboundSettingsMenu(), ResponseType.RightClick);
+        }
       }.width('100%').borderRadius(8).clip(true).border({ width: 1, color: this.theme.border }).backgroundColor(this.theme.surface);
       Column({ space: 14 }) {
         this.cardTitle('节点测速', $r('app.media.verge_chart'));

@@ -47,7 +47,7 @@ export struct ProxyPortsDialog {
   build() {
     Column({ space: 16 }) {
       Text('自定义代理端口').fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.theme.text).width('100%');
-      Text('应用于所有配置，订阅更新后仍保留。监听地址为 127.0.0.1。')
+      Text('应用于所有配置，订阅更新后仍保留。监听地址可在局域网共享设置中修改。')
         .fontSize(12).fontColor(this.theme.textSecondary).width('100%');
       Row() {
         Text('混合端口模式').fontSize(14).fontColor(this.theme.text).layoutWeight(1);

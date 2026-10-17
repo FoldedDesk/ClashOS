@@ -5,7 +5,8 @@ const ts=require('./test_env.cjs')();
 const root=path.resolve(__dirname,'../entry/src/main/ets'),directory=fs.mkdtempSync(path.join(os.tmpdir(),'clashos-controller-access-'));
 let checks=0,maxWrite=Infinity,failWrite=false,failRename=false,failProtect=false,created=0,destroyed=0,connectionMemory=64*1024*1024;
 const descriptors=new Set(),requests=[];
-let configValues={mode:'Rule',port:7890,'socks-port':7891,'log-level':'warning',ipv6:true,path:'/public/profiles/配置 😀.yaml',temporary:false,revision:7};
+let configValues={mode:'Rule',port:7890,'socks-port':7891,'log-level':'warning',ipv6:true,sniffing:true,
+ sniffer:{enable:true,sniff:{TLS:{ports:[443],'override-destination':false}}},path:'/public/profiles/配置 😀.yaml',temporary:false,revision:7};
 const check=(value,message)=>{assert(value,message);checks++;};
 const fileIo={OpenMode:{CREATE:1,READ_WRITE:2,TRUNC:4},accessSync:p=>fs.existsSync(p),statSync:p=>fs.statSync(p),readTextSync:p=>fs.readFileSync(p,'utf8'),
  openSync:p=>{const fd=fs.openSync(p,'w+');descriptors.add(fd);return{fd};},closeSync:v=>{const fd=typeof v==='number'?v:v.fd;fs.closeSync(fd);descriptors.delete(fd);},
@@ -62,6 +63,11 @@ function loader(native){const modules=new Map();function load(name){const filena
  check(requests.length>0&&requests.every(r=>r.header.Authorization==='Bearer '+second),'All requests to the owned controller authenticate automatically');
  check(requests.every(r=>r.usingProxy===false),'Managed loopback credentials must never be routed through the system proxy');
  const config=await api.runtimeConfig();check(config.mode==='Rule'&&config.logLevel==='warning'&&config.ipv6&&config.path===configValues.path&&config.revision===7&&!config.temporary,'Runtime config maps real controller fields without exposing payload YAML');
+ check(config.sniffing&&(await api.readSnapshot()).sniffing,'Runtime editor and dashboard read the same actual sniffer toggle');
+ const snifferDraft=await api.snifferDraft();check(Object.keys(JSON.parse(snifferDraft)).join(',')==='sniffer'&&JSON.parse(snifferDraft).sniffer.sniff.TLS['override-destination']===false,'Sniffer editor preserves nested protocol options without copying unrelated controller fields');
+ await api.saveSnifferDraft(config,snifferDraft);let snifferRequest=requests.at(-1),snifferRoute=new URL(snifferRequest.url);
+ check(snifferRequest.method==='PATCH'&&snifferRequest.body===snifferDraft&&snifferRoute.searchParams.get('profile')===config.path&&snifferRoute.searchParams.get('revision')==='7','Sniffer apply carries the captured Unicode profile and revision with the exact validated draft');
+ await api.saveRuntimeConfig(config,{...config,sniffing:false});check(JSON.parse(requests.at(-1).body).sniffing===false,'Disabling sniffing sends explicit false rather than omitting the change');
  await api.saveRuntimeConfig(config,{...config,mode:'Direct',logLevel:'error',ipv6:false});
  let mutation=requests.at(-1),route=new URL(mutation.url),patch=JSON.parse(mutation.body);
  check(mutation.method==='PATCH'&&route.searchParams.get('profile')===config.path&&route.searchParams.get('revision')==='7'&&patch.mode==='Direct'&&patch['log-level']==='error'&&patch.ipv6===false,'Runtime edit sends the original path/revision and typed values, accepting standard empty 204');

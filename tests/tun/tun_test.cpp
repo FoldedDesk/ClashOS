@@ -25,6 +25,8 @@ using Bytes = std::vector<uint8_t>;
 std::atomic<int> checks{0};
 std::atomic<int> connector{-1};
 std::atomic<int> udpConnector{-1};
+std::string expectedSocksAddress = "127.0.0.1";
+std::atomic<bool> socksAddressCorrect{true};
 extern "C" int clahsos_test_socket(int type) {
     int fd = type == SOCK_DGRAM ? udpConnector.exchange(-1) : connector.exchange(-1);
     if (fd < 0) return -1;
@@ -33,7 +35,20 @@ extern "C" int clahsos_test_socket(int type) {
     return fd;
 }
 extern "C" int clahsos_test_connect(int fd, const sockaddr* address, socklen_t size,
-    HevTaskIOYielder yielder, void* data) { return 0; }
+    HevTaskIOYielder yielder, void* data) {
+    int type = 0; socklen_t typeSize = sizeof(type);
+    getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &typeSize);
+    if (type != SOCK_STREAM) return 0; // UDP relay address is supplied by the SOCKS server.
+    char text[INET6_ADDRSTRLEN]{};
+    if (address->sa_family == AF_INET) inet_ntop(AF_INET, &reinterpret_cast<const sockaddr_in*>(address)->sin_addr, text, sizeof(text));
+    else if (address->sa_family == AF_INET6) {
+        const auto& ip = reinterpret_cast<const sockaddr_in6*>(address)->sin6_addr;
+        if (IN6_IS_ADDR_V4MAPPED(&ip)) inet_ntop(AF_INET, &ip.s6_addr[12], text, sizeof(text));
+        else inet_ntop(AF_INET6, &ip, text, sizeof(text));
+    }
+    if (expectedSocksAddress != text) socksAddressCorrect.store(false);
+    return 0;
+}
 void check(bool value, const char* message) {
     if (!value) { std::cerr << "FAIL: " << message << '\n'; clahsos::stopTunnel(); std::exit(1); }
     ++checks;
@@ -129,7 +144,7 @@ bool readExactly(int fd, Bytes& bytes, size_t length) {
     return true;
 }
 
-void tunneledTcp(int packetFd, const std::string& destination) {
+void tunneledTcp(int packetFd, const std::string& destination, const std::string& username, const std::string& password) {
     const Bytes synack = exchangePacket(packetFd, tcpPacket(destination, 12345, 0, 2));
     check(synack.size() >= 40 && synack[9] == 6, "TUN TCP engine handles SYN packet");
     const size_t offset = (synack[0] & 15) * 4;
@@ -145,8 +160,19 @@ void tunneledTcp(int packetFd, const std::string& destination) {
     std::atomic<bool> serverOk{false};
     std::thread server([&] {
         Bytes b;
-        if (!readExactly(stream[1], b, 3) || b != Bytes({5, 1, 0})) return;
-        send(stream[1], "\5\0", 2, 0);
+        if (!readExactly(stream[1], b, 2) || b[0] != 5 || b[1] == 0) return;
+        const auto count = b[1];
+        if (!readExactly(stream[1], b, count)) return;
+        const uint8_t selected = username.empty() ? 0 : 2;
+        if (std::find(b.begin(), b.end(), selected) == b.end()) return;
+        const char method[] = {5, static_cast<char>(selected)}; send(stream[1], method, 2, 0);
+        if (selected == 2) {
+            if (!readExactly(stream[1], b, 2) || b[0] != 1 || b[1] != username.size()) return;
+            if (!readExactly(stream[1], b, username.size()) || std::string(b.begin(), b.end()) != username) return;
+            if (!readExactly(stream[1], b, 1) || b[0] != password.size()) return;
+            if (!readExactly(stream[1], b, password.size()) || std::string(b.begin(), b.end()) != password) return;
+            send(stream[1], "\1\0", 2, 0);
+        }
         if (!readExactly(stream[1], b, 5) || b[0] != 5 || b[1] != 1 || b[3] != 3) return;
         const size_t length = b[4];
         if (!readExactly(stream[1], b, length + 2) || std::string(b.begin(), b.begin() + length) != "www.google.com" || u16(b, length) != 443) return;
@@ -184,7 +210,12 @@ int main() {
     check(!clahsos::startTunnel(-1, 1080), "invalid fd rejected");
     for (int round = 0; round < 3; round++) {
         int pair[2]; check(socketpair(AF_UNIX, SOCK_DGRAM, 0, pair) == 0, "create packet device without network permission");
-        check(clahsos::startTunnel(pair[0], 1080), "production tunnel starts with provided packet fd");
+        const std::string username = round == 0 ? "" : "tun'用户", password = round == 0 ? "" : "p'#: public";
+        expectedSocksAddress = round == 2 ? "::1" : "127.0.0.1"; socksAddressCorrect.store(true);
+        { std::lock_guard<std::mutex> lock(g_state.mutex); g_state.inbound = InboundConfig{};
+          if (round > 0) g_state.inbound.users = {{username, password}}; }
+        check(!clahsos::startTunnel(pair[0], 1080, "not-an-ip") && !clahsos::startTunnel(pair[0], 1080, "127.0.0.1", "user", ""), "Invalid addresses and incomplete credentials fail before engine startup");
+        check(clahsos::startTunnel(pair[0], 1080, expectedSocksAddress, username, password), "production tunnel starts with the chosen address and credentials");
         check(clahsos::tunnelStatus().find("\"running\":true") != std::string::npos, "ready state requires engine initialization");
         check(!clahsos::startTunnel(pair[0], 1080), "second start preserves live tunnel");
         const std::string first = dnsReply(pair[1], "www.google.com", 1, 0x1234);
@@ -193,7 +224,8 @@ int main() {
         dnsReply(pair[1], "www.google.com", 28, 0x3333);
         tunneledUdp(pair[1], first, round);
         ipv6Handshake(pair[1]);
-        tunneledTcp(pair[1], first);
+        tunneledTcp(pair[1], first, username, password);
+        check(socksAddressCorrect.load(), "TUN connections use the selected IPv4 or IPv6 local SOCKS listener");
         clahsos::stopTunnel();
         check(clahsos::tunnelStatus().find("\"running\":false") != std::string::npos, "stop joins tunnel worker");
         check(fcntl(pair[0], F_GETFD) >= 0, "engine preserves caller ownership of original fd");

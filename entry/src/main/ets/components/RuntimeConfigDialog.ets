@@ -11,11 +11,13 @@ export struct RuntimeConfigDialog {
   @State mode: string = 'Rule';
   @State logLevel: string = 'info';
   @State ipv6: boolean = false;
+  @State sniffing: boolean = false;
   @State busy: boolean = false;
   @State error: string = '';
 
   aboutToAppear(): void {
     this.mode = this.initial.mode; this.logLevel = this.initial.logLevel; this.ipv6 = this.initial.ipv6;
+    this.sniffing = this.initial.sniffing === true;
   }
 
   private async apply(reload: boolean): Promise<void> {
@@ -23,7 +25,7 @@ export struct RuntimeConfigDialog {
     this.busy = true; this.error = '';
     try {
       if (reload) await this.onReload();
-      else await this.onSave({ mode: this.mode, logLevel: this.logLevel, ipv6: this.ipv6,
+      else await this.onSave({ mode: this.mode, logLevel: this.logLevel, ipv6: this.ipv6, sniffing: this.sniffing,
         path: this.initial.path, temporary: this.initial.temporary, revision: this.initial.revision });
       this.controller?.close();
     } catch (error) { this.error = (error as Error).message || '设置未能应用'; }
@@ -60,6 +62,14 @@ export struct RuntimeConfigDialog {
         }.alignItems(HorizontalAlign.Start).layoutWeight(1);
         Toggle({ type: ToggleType.Switch, isOn: this.ipv6 }).width(38).height(24).selectedColor(this.theme.primary)
           .enabled(!this.busy).accessibilityText('允许内核 IPv6 解析').onChange((value: boolean) => this.ipv6 = value);
+      }.width('100%');
+      Row({ space: 18 }) {
+        Column({ space: 5 }) {
+          Text('域名嗅探').fontSize(14).fontColor(this.theme.text);
+          Text('根据 HTTP Host、TLS / QUIC SNI 匹配域名规则。').fontSize(11).fontColor(this.theme.textMuted);
+        }.alignItems(HorizontalAlign.Start).layoutWeight(1);
+        Toggle({ type: ToggleType.Switch, isOn: this.sniffing }).width(38).height(24).selectedColor(this.theme.primary)
+          .enabled(!this.busy).accessibilityText('启用域名嗅探').onChange((value: boolean) => this.sniffing = value);
       }.width('100%');
       if (this.error) Text(this.error).fontSize(12).fontColor(this.theme.danger).width('100%');
       Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.End }) {
