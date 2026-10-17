@@ -2,10 +2,12 @@ import { UIAbility, Want, AbilityConstant, ConfigurationConstant } from '@kit.Ab
 import { window } from '@kit.ArkUI';
 import { loadAppearance } from '../service/AppearanceStore';
 import { subscriptionImports } from '../service/SubscriptionImport';
+import { attachDesktopWindow, detachDesktopWindow, desktopWindowEvent } from '../service/DesktopSession';
 
 export default class EntryAbility extends UIAbility {
   private proxyWindowStage: window.WindowStage | undefined = undefined;
   private proxyWindowListener = (event: window.WindowStageEventType): void => {
+    desktopWindowEvent(event);
     if (event === window.WindowStageEventType.ACTIVE || event === window.WindowStageEventType.SHOWN) this.onForeground();
   };
   onCreate(want: Want, _launchParam: AbilityConstant.LaunchParam): void {
@@ -19,6 +21,8 @@ export default class EntryAbility extends UIAbility {
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
     this.proxyWindowStage = windowStage;
+    try { attachDesktopWindow(this.context, windowStage.getMainWindowSync()); }
+    catch (_) { console.warn('ClashOS desktop window integration unavailable'); }
     try { windowStage.on('windowStageEvent', this.proxyWindowListener); }
     catch (_) { console.warn('ClashOS window focus observation unavailable'); }
     windowStage.loadContent('pages/Index', (error) => {
@@ -43,6 +47,7 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageDestroy(): void {
+    detachDesktopWindow();
     try { this.proxyWindowStage?.off('windowStageEvent', this.proxyWindowListener); } catch (_) {}
     this.proxyWindowStage = undefined;
   }

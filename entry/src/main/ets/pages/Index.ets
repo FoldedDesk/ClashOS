@@ -47,6 +47,8 @@ import { ClashProfile, ProfileStore, MergeEditSnapshot, DEFAULT_PROFILE } from '
 import { SubscriptionOptions, subscriptionTraffic, subscriptionExpiry, subscriptionUrl } from '../service/SubscriptionTypes';
 import { SubscriptionImport, subscriptionImports } from '../service/SubscriptionImport';
 import { dialogActivity } from '../service/DialogActivity';
+import { DesktopSnapshot } from '../service/DesktopController';
+import { desktopSession, updateDesktopMode } from '../service/DesktopSession';
 import { MessageDialog, MessageDialogOptions } from '../components/MessageDialog';
 import { VpnTunnelService } from '../service/VpnTunnelService';
 import { CoreRuntime, VpnState, emptyRuntime } from '../service/CoreSessionTypes';
@@ -216,12 +218,18 @@ struct Index {
   @State systemProxyOpening: boolean = false;
   @StorageLink('clashosForeground') @Watch('onAbilityForeground') foregroundRevision: number = 0;
   private systemProxyReadVersion: number = 0;
-  @StorageLink('clashosImportRevision') @Watch('reviewNextImport') importRevision: number = 0;
+  @StorageLink('clashosImportRevision') @Watch('reviewQueuedActions') importRevision: number = 0;
+  @StorageLink('clashosDesktopRevision') @Watch('onDesktopChanged') desktopRevision: number = 0;
+  @State desktop: DesktopSnapshot = desktopSession.snapshot();
+  @State desktopExiting: boolean = false;
+  private desktopDispatching: boolean = false;
+  private desktopModalPending: boolean = false;
 
   aboutToAppear(): void {
     this.pageActive = true;
     this.initializingCore = true;
-    dialogActivity.onIdle = (): void => { setTimeout(() => this.reviewNextImport(), 0); };
+    this.desktop = desktopSession.snapshot();
+    dialogActivity.onIdle = (): void => { setTimeout(() => this.reviewQueuedActions(), 0); };
     let defaultConfigPath: string = '';
     try {
       const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -267,7 +275,7 @@ struct Index {
     this.coreApi.setConfig(this.endpoint, this.secret);
     this.refreshSystemProxy();
     this.initializeCore(defaultConfigPath);
-    this.refreshTimer = setInterval(() => this.refreshCore(), 5000);
+    this.refreshTimer = setInterval(() => { this.refreshCore(); this.reviewQueuedActions(); }, 5000);
     this.subscriptionTimer = setInterval(() => this.autoUpdateSubscriptions(), 60000);
   }
 
@@ -279,10 +287,11 @@ struct Index {
     await this.refreshCore();
     if (this.coreConnected && !this.internalCore && this.savedMode.length > 0) await this.changeMode(this.savedMode);
     this.autoUpdateSubscriptions();
-    this.reviewNextImport();
+    this.reviewQueuedActions();
   }
 
   private reviewNextImport(): void {
+    if (this.desktopDispatching || this.desktopModalPending || this.desktopExiting) return;
     if (!this.pageActive || this.initializingCore || !this.profileStore || dialogActivity.busy()) return;
     const error: string = subscriptionImports.takeError();
     if (error) this.notice = error;
@@ -300,6 +309,83 @@ struct Index {
   private showMessageDialog(options: MessageDialogOptions): void {
     this.messageDialogController = new CustomDialogController({ builder: MessageDialog({ options }), autoCancel: true, customStyle: true });
     this.messageDialogController.open();
+  }
+
+  private onDesktopChanged(): void {
+    this.desktop = desktopSession.snapshot();
+    this.reviewQueuedActions();
+  }
+
+  private reviewQueuedActions(): void {
+    if (!this.pageActive || this.initializingCore || this.desktopDispatching || this.desktopModalPending || this.desktopExiting || dialogActivity.busy()) return;
+    if (desktopSession.hasActions()) {
+      if (!this.tunBusy && !this.snifferBusy && this.updatingProfiles.length === 0) this.processDesktopAction();
+    } else this.reviewNextImport();
+  }
+
+  private async processDesktopAction(): Promise<void> {
+    const action: string | undefined = desktopSession.takeAction();
+    if (!action) return;
+    this.desktopDispatching = true;
+    try {
+      if (action === 'exit') {
+        this.desktopModalPending = true;
+        this.showMessageDialog({ title: '退出 ClashOS？',
+          message: '退出会停止内置内核和 TUN。系统代理设置保持不变；若仍指向 ClashOS，请在退出后关闭系统代理。',
+          primaryButton: { value: '取消', action: (): void => {} },
+          secondaryButton: { value: '退出应用', fontColor: this.theme.danger, action: (): void => { this.exitDesktop(); } },
+          onDismiss: (): void => { this.desktopModalPending = false; desktopSession.finishAction('exit'); }
+        });
+      } else if (action.startsWith('mode-')) await this.changeMode(action.substring(5));
+      else if (action === 'system-proxy') await this.openSystemNetworkSettings();
+      else if (action === 'network-check') {
+        this.desktopModalPending = true;
+        const opened: boolean = await this.openSystemNetworkCheck((): void => {
+          this.desktopModalPending = false; desktopSession.finishAction('network-check');
+        });
+        if (!opened) this.desktopModalPending = false;
+      }
+    } catch (error) { this.desktopModalPending = false; this.notice = (error as Error).message || '托盘操作失败'; }
+    finally {
+      this.desktopDispatching = false;
+      if (!this.desktopModalPending) desktopSession.finishAction(action);
+      setTimeout(() => this.reviewQueuedActions(), 0);
+    }
+  }
+
+  private async exitDesktop(): Promise<void> {
+    if (this.desktopExiting) return;
+    if (this.tunBusy || this.snifferBusy || this.updatingProfiles.length > 0) { this.notice = '配置正在更新，请完成后再退出'; return; }
+    this.desktopExiting = true;
+    try {
+      this.persistSettings();
+      await this.vpnService?.stop();
+      await this.nativeCore.stopAsync();
+      await desktopSession.exit();
+    } catch (error) {
+      this.desktopExiting = false;
+      const profile: ClashProfile | undefined = this.profiles.find((value: ClashProfile) => value.id === this.activeProfileId);
+      try { await this.coreSession?.initialize(profile?.path ?? '', this.savedMode); await this.refreshCore(); }
+      catch (_) { this.notice = '退出失败，内核恢复未确认，请检查连接状态'; return; }
+      this.notice = `退出失败，窗口保持打开：${(error as Error).message}`;
+    }
+  }
+
+  private async setDesktopTray(enabled: boolean): Promise<void> {
+    try { await desktopSession.setEnabled(enabled); }
+    catch (error) { this.notice = (error as Error).message; }
+    this.desktop = desktopSession.snapshot();
+  }
+
+  private setDesktopClose(value: boolean): void {
+    try { desktopSession.setCloseToTray(value); }
+    catch (error) { this.notice = (error as Error).message; }
+    this.desktop = desktopSession.snapshot();
+  }
+
+  private async minimizeDesktop(): Promise<void> {
+    try { await desktopSession.hide(); }
+    catch (error) { this.notice = (error as Error).message; }
   }
 
   private persistSettings(): void {
@@ -327,7 +413,7 @@ struct Index {
   }
 
   private async refreshCore(): Promise<void> {
-    if (this.syncing || this.tunBusy || this.initializingCore || !this.pageActive) {
+    if (this.syncing || this.tunBusy || this.initializingCore || !this.pageActive || this.desktopExiting) {
       return;
     }
     this.refreshControllerAccessStatus();
@@ -361,6 +447,7 @@ struct Index {
     this.isRunning = snapshot.connected;
     this.coreVersion = snapshot.version;
     this.coreMode = snapshot.mode;
+    updateDesktopMode(snapshot.mode);
     this.temporaryConfig = snapshot.temporaryConfig === true;
     this.httpPort = snapshot.httpPort;
     this.socksPort = snapshot.socksPort;
@@ -548,6 +635,7 @@ struct Index {
     try {
       await this.coreApi.setMode(mode);
       this.coreMode = mode;
+      updateDesktopMode(mode);
       this.savedMode = mode;
       this.mutationVersion++;
       this.persistSettings();
@@ -1074,8 +1162,9 @@ struct Index {
   }
 
   private async autoUpdateSubscriptions(): Promise<void> {
-    if (this.profileStore === undefined) return;
+    if (this.profileStore === undefined || this.desktopExiting || !this.pageActive) return;
     for (const profile of this.profiles) {
+      if (this.desktopExiting || !this.pageActive) return;
       if (this.profileStore.isUpdateDue(profile)) await this.updateSubscription(profile);
     }
   }
@@ -1803,7 +1892,7 @@ struct Index {
     } catch (error) { this.notice = `清除会话分配失败：${(error as Error).message}`; }
   }
 
-  private async openSystemNetworkCheck(): Promise<void> {
+  private async openSystemNetworkCheck(onDismiss: () => void = (): void => {}): Promise<boolean> {
     const version: number = this.mutationVersion, connected: boolean = this.coreConnected;
     const instance: string = this.connectedRuntime.instance;
     try {
@@ -1820,15 +1909,17 @@ struct Index {
         }
         return true;
       };
-      if (!await isCurrent()) return;
+      if (!await isCurrent()) return false;
+      if (dialogActivity.busy()) { this.notice = '请先完成当前编辑或关闭窗口后再检测'; return false; }
       this.dialogController?.close();
-      this.dialogController = new CustomDialogController({ builder: SystemNetworkDialog({ isCurrent,
+      this.dialogController = new CustomDialogController({ builder: SystemNetworkDialog({ isCurrent, onDismiss,
         onCopy: (text: string): void => { this.copyText(text, '联网检测报告'); },
         onSettings: (): void => { this.openSystemNetworkSettings(); },
         onFinished: (): void => { this.refreshSystemProxy(); this.refreshCore(); }
       }), autoCancel: false, customStyle: true });
       this.dialogController.open();
-    } catch (_) { this.notice = '无法打开联网检测，请刷新内核状态后重试'; }
+      return true;
+    } catch (_) { this.notice = '无法打开联网检测，请刷新内核状态后重试'; return false; }
   }
 
   private async openProbeSeries(name: string = this.selectedProxy): Promise<void> {
@@ -2176,6 +2267,7 @@ struct Index {
       }
       .height(this.theme.navigationItemHeight).padding(0).backgroundColor(Color.Transparent)
       .accessibilityText('ClashOS 首页')
+      .bindContextMenu(this.desktopMenu(), ResponseType.RightClick)
       .onClick(() => this.navigate(0));
       Scroll(this.navigationScroller) {
         Row({ space: 4 }) {
@@ -3646,8 +3738,51 @@ struct Index {
   }
 
   @Builder
+  private desktopMenu() {
+    Menu() {
+      MenuItem({ content: '最小化到托盘' }).enabled(this.desktop.ready && !this.desktop.busy).onClick(() => this.minimizeDesktop());
+      MenuItem({ content: '窗口与托盘设置' }).onClick(() => this.navigate(6));
+      MenuItem({ content: '退出 ClashOS' }).contentFontColor(this.theme.danger).onClick(() => desktopSession.enqueue('exit'));
+    }.backgroundColor(this.theme.surface).backgroundBlurStyle(BlurStyle.NONE);
+  }
+
+  @Builder
+  private desktopSettings() {
+    Column({ space: 16 }) {
+      this.cardTitle('窗口与托盘', $r('app.media.verge_home'));
+      Row({ space: 12 }) {
+        Column({ space: 5 }) {
+          Text('系统托盘').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
+          Text(this.desktop.busy ? '正在切换…' : this.desktop.ready ? '已启用，可从托盘返回主窗口或退出' : '托盘未启用，关闭窗口将提示退出')
+            .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
+        }.layoutWeight(1).alignItems(HorizontalAlign.Start);
+        Toggle({ type: ToggleType.Switch, isOn: this.desktop.ready }).selectedColor(this.theme.primary)
+          .enabled(!this.desktop.busy && !this.desktopExiting).accessibilityText('启用系统托盘')
+          .onChange((value: boolean) => this.setDesktopTray(value));
+      }.width('100%');
+      Row({ space: 12 }) {
+        Text('点击关闭按钮时').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1);
+        Select([{ value: '最小化到托盘' }, { value: '提示退出应用' }]).selected(this.desktop.closeToTray ? 0 : 1)
+          .value(this.desktop.closeToTray ? '最小化到托盘' : '提示退出应用').font({ size: this.theme.font(12), family: this.theme.fontFamily })
+          .backgroundColor(this.theme.field).fontColor(this.theme.text).borderRadius(this.theme.radius(5))
+          .enabled(!this.desktop.busy && this.desktop.closeHook).accessibilityText('关闭窗口行为')
+          .onSelect((index: number) => this.setDesktopClose(index === 0));
+      }.width('100%');
+      Row({ space: 12 }) {
+        this.outlineButton('最小化到托盘', $r('app.media.verge_home'), () => this.minimizeDesktop(), this.desktop.ready && !this.desktop.busy);
+        this.outlineButton('退出 ClashOS', $r('app.media.verge_close'), () => desktopSession.enqueue('exit'));
+      }.width('100%');
+      if (this.desktop.error) Text(this.desktop.error).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.warning).width('100%');
+      if (!this.desktop.closeHook) Text('当前系统未提供关闭拦截；请使用“最小化到托盘”保留代理。')
+        .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.warning).width('100%');
+    }.width('100%').padding(20).borderRadius(this.theme.radius(8)).backgroundColor(this.theme.surface).border({ width: 1, color: this.theme.border })
+      .bindContextMenu(this.desktopMenu(), ResponseType.RightClick);
+  }
+
+  @Builder
   private settingsPage() {
     Column({ space: 16 }) {
+      this.desktopSettings();
       this.appearanceSettings();
       Column({ space: 0 }) {
         Row({ space: 9 }) {

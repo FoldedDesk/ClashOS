@@ -20,6 +20,7 @@ function load(file) {
     if (name === '@kit.AbilityKit') return {UIAbility: class { context = {filesDir: '/public-fixture', getApplicationContext: () => ({setColorMode() {}})}; }, ConfigurationConstant: {ColorMode: {}}};
     if (name === '@kit.ArkUI') return {window: {WindowStageEventType: {ACTIVE: 1, SHOWN: 2}}};
     if (name === '../service/AppearanceStore') return {loadAppearance: () => ({mode: 'system'})};
+    if (name === '../service/DesktopSession') return {attachDesktopWindow() {}, detachDesktopWindow() {}, desktopWindowEvent() {}};
     if (name.startsWith('.')) return load(path.resolve(path.dirname(file), name + '.ets'));
     throw Error('Unexpected import ' + name);
   }});

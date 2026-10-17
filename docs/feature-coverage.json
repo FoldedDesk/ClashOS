@@ -411,7 +411,8 @@
       ],
       "remaining": [
         "Actual Clash Verge desktop restoration and older archive variants",
-        "Cross-client file-provider cache/resource migration and subscription TLS certificate overrides beyond system trust"
+        "Cross-client file-provider cache/resource migration and subscription TLS certificate overrides beyond system trust",
+        "Desktop tray and close-button preferences are local; their archive migration remains pending"
       ],
       "source": [
         "entry/src/main/ets/service/ProfileStore.ets",
@@ -442,7 +443,8 @@
         "LAN sharing row context menu for configuration and current local proxy address",
         "Proxy-group custom icon and restore-config-icon menu actions",
         "Appearance card custom-style editor and restore-default-style menu actions",
-        "Node/provider-node continuous-check entries and dialog right-click copy-report/stop actions; actual mouse right-click entry, enabled states and stop/copy behavior verified on the simulator"
+        "Node/provider-node continuous-check entries and dialog right-click copy-report/stop actions; actual mouse right-click entry, enabled states and stop/copy behavior verified on the simulator",
+        "Real system tray mode/settings/network/exit menus, application-brand desktop menu and window-settings context menu; actions defer across active editors and confirmations"
       ],
       "source": [
         "entry/src/main/ets/pages/Index.ets",
@@ -505,7 +507,7 @@
     {
       "feature": "Daily browser connectivity",
       "status": "verified_with_limits",
-      "latest": "Final Core 0.43 ARM64/x86_64 HAP installed. Six Shadowsocks 2022 cipher/identity variants pass actual UI selection, HTTP/SOCKS, certificate-verified TLS and uncached UDP against an independent OS-crypto peer. Invalid/wrong-key and certificate controls, visual edits and cold persistence pass. After original profile restoration, Google HTTPS through the emulator core returns 204 with successful certificate verification. Configuration/rules/providers and all 11 group choices match the private pre-test snapshot, original ports and exact window placement are restored, and the owned fixture app/public files/extra forwards are removed. This bounded sample does not establish long-term route reliability or true-device TUN behavior.",
+      "latest": "Final Core 0.43 ARM64/x86_64 HAP installed. Six Shadowsocks 2022 cipher/identity variants pass actual UI selection, HTTP/SOCKS, certificate-verified TLS and uncached UDP against an independent OS-crypto peer. Invalid/wrong-key and certificate controls, visual edits and cold persistence pass. After original profile restoration, Google HTTPS through the emulator core returns 204 with successful certificate verification. Configuration/rules/providers and all 11 group choices match the private pre-test snapshot, original ports and exact window placement are restored, and the owned fixture app/public files/extra forwards are removed. This bounded sample does not establish long-term route reliability or true-device TUN behavior. After tray/window lifecycle verification, a separate real OS-client system-network run completes 3 targets with only 1 success and 2 network failures. The unsuccessful bounded sample is retained; it is not replaced by the earlier 3/3 sample or by successful host-curl Google controls. Original runtime and all 11 choices still compare equal after the desktop tests.",
       "limit": "Intermittent early external closure remains unresolved. A full independent on-device Shadowsocks AES-GCM reference uses OS cryptography/sockets and the same OS HTTP/1.1 client, pinned to the same endpoint and credentials as the native control. Its 287 public Python/OpenSSL vector assertions pass. Across 12 attempts per site/client, native Google succeeds 10/12 and reference 9/12; Gstatic succeeds 12/12 in both, GitHub 12/12 native and 11/12 reference. Each reference failure closes before receiving any encrypted reply, with no decode/authentication error and no core transfer increments. Thus failure also occurs outside the production core; this does not identify a single cause or prove core correctness. A second existing endpoint completes all 16 Google checks but returns HTTP 403 for all 16 GitHub checks across the two clients, so it was not adopted as a default. These are bounded external samples, not evidence of long-term reliability or full browser compatibility. True-device TUN authorization/background survival and broader protocol interoperability remain unverified."
     },
     {
@@ -535,6 +537,40 @@
         "tests/sniffer_device_client.py",
         "tests/sniffer_device_probe.c"
       ]
+    },
+    {
+      "feature": "PC system tray and window lifecycle",
+      "status": "verified_with_limits",
+      "implemented": [
+        "Native Huawei status-bar icon with light/dark variants derived from the existing vector; private singleton resident attaches the current app process through ATTACH_TO_STATUS_BAR_ITEM without starting another core",
+        "Actual tray left-click restores the existing window; right-click provides show, Rule/Global/Direct modes, direct system proxy settings, system network checks and confirmed exit; the in-app brand and settings card also have desktop context menus",
+        "Persisted tray toggle and close-button preference in an independent atomic 0600 file; unavailable capabilities and registration/attachment failures never claim readiness or hide the only usable window",
+        "API15 windowWillClose intercept preserves the current native core when minimizing; foreground lifecycle completion precedes queued menu dispatch, so Settings is not covered by a late main-window launch",
+        "Allowlisted bounded commands serialize across real editor and confirmation lifecycles, retain unsaved fields, coalesce repeated pending/active actions and recover from failed foreground or dialog opening",
+        "Confirmed exit stops the app-owned native core and VPN, terminates the attached resident, removes its icon and terminates the main ability; simulator verifies process absence, closed controller and absent icon in the expanded system tray",
+        "76 production controller/private-file/page assertions cover lifecycle ordering, concurrent initialization, short writes, failed permissions/fsync/rename, runtime/persistence rollback, foreground barriers, cancellation and modal ownership; 88 subscription-import and 44 OS-network service regressions pass",
+        "Installed simulator verifies actual OS menus and mode changes, left-click restoration, native title-bar close with identical core instance and certificate-verified Google204, real unsaved profile-information draft retention and deferred mode application",
+        "Actual tray disable preserves core forwarding; disabled and close-policy preferences survive cold startup, enabling again restores the real icon, repeated title-bar close opens one cancellable exit dialog, and explicit quit/relaunch reloads the original saved profile",
+        "720px-wide window inspected with all desktop controls visible; original proxy profile, 11 group choices and application window placement are restored after verification"
+      ],
+      "limitations": [
+        "Requires API15+ and the PC status-bar capability; unsupported devices expose the limitation",
+        "Minimization retains the native main window and its taskbar entry; long-term survival on physical hardware is not established by the bounded simulator checks",
+        "System HTTP proxy remains controlled through the OS Settings workflow and is not automatically cleared when quitting",
+        "Desktop preferences are currently local and are not included in archive migration"
+      ],
+      "source": [
+        "entry/src/main/ets/service/DesktopController.ets",
+        "entry/src/main/ets/service/DesktopSession.ets",
+        "entry/src/main/ets/service/DesktopStore.ets",
+        "entry/src/main/ets/entryability/TrayResidentAbility.ets",
+        "entry/src/main/ets/entryability/EntryAbility.ets",
+        "entry/src/main/ets/pages/Index.ets",
+        "entry/src/main/ets/components/MessageDialog.ets",
+        "entry/src/main/ets/components/SystemNetworkDialog.ets",
+        "tests/desktop_test.cjs",
+        ".github/workflows/native-compatibility.yml"
+      ]
     }
   ],
   "nextWork": [
@@ -545,6 +581,6 @@
     "Advanced style assets and full Mihomo schema"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 22:38:27 UTC",
-  "verificationNotes": "Full-goal completion remains unproven; partial categories retain their outstanding requirements. Core 0.43 adds Shadowsocks 2022 TCP/UDP and SIP023 AES identity chains with 5250 independent host assertions, 4772 legacy Shadowsocks assertions, 137 share-link assertions, 58 object-edit assertions and 1133 controller/API assertions. The native network-backup suite passes 70 assertions and the offline editor retains 257 passing checks. Separate-process official Mihomo v1.19.32 interoperability passes all 26 real-listener assertions in Linux CI (commit fa7dbf31bb9ee84f876e8abe27649af116c79d00; https://github.com/FoldedDesk/ClashOS/actions/runs/39075420517), including uncached UDP and certificate negative controls. The installed emulator HAP independently verifies six cipher/identity variants, wrong-key no-fallback, visual editing, cold persistence and visible crypto diagnostics. Both architectures and all seven unmodified BLAKE3 upstream file checksums, notices and generated editor bundle are inspected. Original meaningful runtime, all 11 group selections and exact window placement are restored, with owned test artifacts removed. Install-config URL schemes were implemented and device-verified in commit 071c8b7; they are no longer pending. Public fixtures and reusable source are versioned; private receipts, personal configurations, credentials, downloaded executables, build caches and HAPs stay outside Git. Existing intermittent external closure, broader protocol/options support, desktop archive interoperability and true-device VPN/background lifetime remain unresolved. Earlier host DNS/ingress/sniffer listener restrictions are not reclassified as passing by the SS2022 CI evidence."
+  "reviewedAt": "2026-10-17 23:11:31 UTC",
+  "verificationNotes": "Full-goal completion remains unproven; partial categories retain their outstanding requirements. Core 0.43 adds Shadowsocks 2022 TCP/UDP and SIP023 AES identity chains with 5250 independent host assertions, 4772 legacy Shadowsocks assertions, 137 share-link assertions, 58 object-edit assertions and 1133 controller/API assertions. The native network-backup suite passes 70 assertions and the offline editor retains 257 passing checks. Separate-process official Mihomo v1.19.32 interoperability passes all 26 real-listener assertions in Linux CI (commit fa7dbf31bb9ee84f876e8abe27649af116c79d00; https://github.com/FoldedDesk/ClashOS/actions/runs/39075420517), including uncached UDP and certificate negative controls. The installed emulator HAP independently verifies six cipher/identity variants, wrong-key no-fallback, visual editing, cold persistence and visible crypto diagnostics. Both architectures and all seven unmodified BLAKE3 upstream file checksums, notices and generated editor bundle are inspected. Original meaningful runtime, all 11 group selections and exact window placement are restored, with owned test artifacts removed. Install-config URL schemes were implemented and device-verified in commit 071c8b7; they are no longer pending. Public fixtures and reusable source are versioned; private receipts, personal configurations, credentials, downloaded executables, build caches and HAPs stay outside Git. Existing intermittent external closure, broader protocol/options support, desktop archive interoperability and true-device VPN/background lifetime remain unresolved. Earlier host DNS/ingress/sniffer listener restrictions are not reclassified as passing by the SS2022 CI evidence. The PC tray/window lifecycle implementation adds 76 host assertions plus actual emulator OS registration, attached same-process resident, mode menus, private settings cold persistence, title-bar close forwarding, protected unsaved drafts, foreground ordering, narrow layout and explicit process/listener/icon cleanup. Existing import/network services retain 88/44 passing assertions. A Node24/TypeScript5.8.3 service job is versioned separately from native protocol CI. Physical-device background survival, desktop preference archive migration and broader goal requirements remain pending. The final desktop-era OS system-network sample is 1/3 successful (2 network failures), so external connectivity reliability is not proven fixed. Failed outcomes are retained alongside successful minimized Google controls."
 }

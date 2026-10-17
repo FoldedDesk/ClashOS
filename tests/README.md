@@ -81,6 +81,15 @@ CLAHSOS_TYPESCRIPT=/path/to/typescript node tests/probe_series_test.cjs
 模拟器中可使用同一个独立对端验证交替 204/503、TLS 提前关闭、慢请求停止/关闭、
 检测期间切换配置，并在系统设置中关闭/恢复代理检查实际提示和排除项行为。
 
+`node tests/desktop_test.cjs` 检查托盘驻留/移除顺序、关闭行为、前台显示完成后再分派操作、
+重复/非法/过期菜单操作、失败回滚、取消退出及编辑窗口保护。私有设置检查使用真实临时文件，
+覆盖短写、权限、fsync/rename 失败时保留旧文件并清理临时文件。
+普通 Node.js 环境可安装 TypeScript 5.8.3，并以 `CLAHSOS_TYPESCRIPT` 指定模块路径；
+CI 将其安装到 runner 临时目录，不增加应用或仓库依赖。
+这些检查不模拟真实 ArkUI；设备验证必须实际点击系统托盘菜单和标题栏关闭按钮，
+确认原生 HTTP 转发及实例保留、编辑草稿保护、设置页焦点、开关冷启动和退出释放。
+原配置、所有组选择及窗口位置需在验证后恢复，截图与私有状态快照不提交。
+
 同一可移除应用还提供 [独立 Shadowsocks HTTPS 对照](webdav_device_server/README.md#independent-shadowsocks-https-reference)：
 通过系统加密库和套接字实现 AES-GCM，先检查公开 Python 向量，再用同一个系统 HTTP/TLS 客户端
 交替访问内核及独立参考路径。参考路径只接受三个固定公开 HTTPS 目标，私有节点参数只留在内存；

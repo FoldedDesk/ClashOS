@@ -12,6 +12,7 @@ export interface MessageDialogOptions {
   message: string;
   primaryButton: MessageDialogButton;
   secondaryButton: MessageDialogButton;
+  onDismiss?: () => void;
 }
 
 @CustomDialog
@@ -22,7 +23,7 @@ export struct MessageDialog {
   private dialogActivityId: number = 0;
 
   aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter(); }
-  aboutToDisappear(): void { dialogActivity.leave(this.dialogActivityId); }
+  aboutToDisappear(): void { this.options.onDismiss?.(); dialogActivity.leave(this.dialogActivityId); }
 
   private choose(button: MessageDialogButton): void {
     this.controller?.close();

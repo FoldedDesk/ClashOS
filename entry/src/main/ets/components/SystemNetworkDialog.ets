@@ -12,6 +12,7 @@ export struct SystemNetworkDialog {
   onCopy: (text: string) => void = (_text: string): void => {};
   onSettings: () => void = (): void => {};
   onFinished: () => void = (): void => {};
+  onDismiss: () => void = (): void => {};
   @State custom: string = '';
   @State result: NetworkCheck = emptyNetworkCheck();
   @State error: string = '';
@@ -19,7 +20,7 @@ export struct SystemNetworkDialog {
   private runner?: SystemNetworkCheck;
   private active: boolean = true;
   aboutToAppear(): void { this.dialogActivityId = dialogActivity.enter(); this.runner = new SystemNetworkCheck(this.isCurrent); }
-  aboutToDisappear(): void { this.active = false; this.runner?.dispose(); dialogActivity.leave(this.dialogActivityId); }
+  aboutToDisappear(): void { this.active = false; this.runner?.dispose(); this.onDismiss(); dialogActivity.leave(this.dialogActivityId); }
   private async start(): Promise<void> {
     if (this.busy) return; this.busy = true; this.error = '';
     try { await this.runner?.run(this.custom, (state: NetworkCheck): void => { this.result = state; }); if (this.active) this.onFinished(); }

@@ -1,4 +1,4 @@
-name: Native protocol compatibility
+name: Native protocol and desktop compatibility
 on:
   push:
   pull_request:
@@ -8,6 +8,24 @@ concurrency:
   group: native-protocol-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  desktop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Desktop lifecycle and existing import/network services
+        run: |
+          npm install --prefix "$RUNNER_TEMP/service-tests" --ignore-scripts --no-audit --no-fund typescript@5.8.3
+          export CLAHSOS_TYPESCRIPT="$RUNNER_TEMP/service-tests/node_modules/typescript"
+          node tests/desktop_test.cjs
+          node tests/subscription_import_test.cjs
+          node tests/system_network_check_test.cjs
   ss2022:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
