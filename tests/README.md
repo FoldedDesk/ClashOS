@@ -49,6 +49,22 @@ VMess 双向转发检查会先发送不完整的响应头、长度或负载，�
 也不阻塞后续客户端写入；覆盖 AEAD / 旧版响应头、AES-GCM、ChaCha20-Poly1305 和 none。
 专项不能替代真实设备的网络、VPN 授权和后台运行验证。
 
+Shadowsocks 增量接收与双向传输专项：
+
+```sh
+python3 tests/run_native_tests.py --suite ss-duplex --build-dir .host-build/native
+```
+
+独立 Python cryptography/OpenSSL 对端先发送不完整的 salt、长度、负载或认证标签，
+等待实际 HTTP/SOCKS 客户端的后续请求后才完成响应；覆盖三种加密、服务器先发数据、
+连续认证空帧、多个分帧及 TCP 半关闭。数据作为连续字节流检查，不依赖 TCP/AEAD 分帧边界一致。
+独立已知向量另检查每个分片/EOF 位置、阻塞与非阻塞读取交接、认证失败、长度保留位和 nonce 上限，
+并运行现有 SS TCP/UDP/HTTPS 互通检查。旧 Core 0.34 的首个 salt 分片场景会阻塞后续请求；
+Core 0.35 必须在相同独立对端上完成收发。
+设备“内核自检”使用同源公开向量，逐字节验证本机 `MSG_DONTWAIT` 接收、完整分帧输出、
+截断与认证失败；不读取个人配置、不连接测试服务器。完整分帧规则见
+[Shadowsocks AEAD TCP 规范](https://shadowsocks.org/doc/aead.html#tcp)。
+
 VLESS 专项同样使用继承的 Unix socket，无需主机监听权限：
 
 ```sh

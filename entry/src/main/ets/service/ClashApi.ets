@@ -119,6 +119,7 @@ export interface CoreDiagnostics {
   aesDecrypt: boolean;
   authentication: boolean;
   shadowsocks?: boolean;
+  shadowsocksTcp?: boolean;
   vmess?: boolean;
   trojan?: boolean;
   vless?: boolean;
