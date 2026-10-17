@@ -1,6 +1,6 @@
 {
   "applicationName": "ClashOS",
-  "reviewedCoreVersion": "0.38",
+  "reviewedCoreVersion": "0.39",
   "objective": "实现 Clash Verge 的大部分功能，包括各类右键菜单，并提供可正常使用的 ClashOS。",
   "brandingDecision": "Follow the user's later explicit spelling correction: ClashOS.",
   "referenceInventory": [
@@ -84,7 +84,9 @@
         "Core 0.38 HTTP ingress parses each request/response boundary, authenticates and routes each persistent/pipelined request independently, canonicalizes absolute-URI authority and removes proxy credentials and Connection-nominated hop fields",
         "Bounded streaming Content-Length/chunk/trailer handling, HEAD/no-body statuses, 100/103 informational replies, HTTP/1.0 plain-chunked decoding and explicit malformed/truncated-message outcomes; accepted Upgrade switches to the existing transparent duplex relay with both coalesced directions retained",
         "Canceled client records cannot be resurrected by queued requests; a failed protocol/TLS upload-EOF notification preserves the authenticated receive path instead of discarding a fully queued reply",
-        "Independent TLS peer queues its valid response and exits before client FIN is relayed: unchanged old receive loop deterministically drops the reply, corrected loop returns it; no certificate or record authentication checks are relaxed"
+        "Independent TLS peer queues its valid response and exits before client FIN is relayed: unchanged old receive loop deterministically drops the reply, corrected loop returns it; no certificate or record authentication checks are relaxed",
+        "Core 0.39 stops failed uploads while preserving the independent receive direction, including initial HTTP CONNECT/SOCKS optimistic prefixes and upgraded HTTP tunnels; incoming SS/VMess/VLESS/TLS authentication remains mandatory and failed uploads are never replayed",
+        "Independent Python/OpenSSL/AEAD peers cover 18 outbound/transport combinations, 50 KB multi-record replies, already-closed upload directions and corrupted response controls across 51 deterministic cases; the pre-fix core loses its queued SS reply after a late write fails"
       ],
       "remaining": [
         "Protocol and option breadth is below Mihomo, including VLESS Reality/Vision/XUDP/extra encryption, other advanced transports and additional outbound protocols",
@@ -143,7 +145,8 @@
         "entry/src/main/cpp/http_message.inc",
         "entry/src/main/cpp/http_ingress.inc",
         "tests/http_ingress_test.inc",
-        "tests/http_ingress_reference_peer.py"
+        "tests/http_ingress_reference_peer.py",
+        "tests/relay_response_reference_peer.py"
       ]
     },
     {
@@ -157,7 +160,11 @@
         "1597 independent native HTTP assertions include prior forwarding/accounting/disconnect controls, dense fragmentation cases, malformed messages and deterministic closed-TLS-response retention; 1467 forward/2577 hosts/1438 VLESS/1041 dialer/1133 API/63 TLS/150 YAML assertions also pass on final sources",
         "Old Core 0.37 simulator fails both public pipelining and WebSocket controls; final ARM64/x86_64 Core 0.38 HAP passes all nine real-loopback cases, including 64 KB uploads, chunked/legacy responses, Continue and optimistic WebSocket frames",
         "Independent device origin sees exactly nine new TCP connections, zero rejections, three uploads, two chunked requests and one accepted WebSocket frame; ambiguous framing is rejected before dialing",
-        "Final installed HAP native diagnostics pass; original profile, full meaningful runtime, all 11 selections/candidate lists and exact window placement restored, owned fixture app/device probe/extra forwarding removed"
+        "Final installed HAP native diagnostics pass; original profile, full meaningful runtime, all 11 selections/candidate lists and exact window placement restored, owned fixture app/device probe/extra forwarding removed",
+        "Final origin responses are parsed before further uploads; incomplete or stopped request bodies cannot truncate length, chunked or EOF-delimited responses, and connections with unfinished uploads are closed rather than reused",
+        "An upstream header/body write failure can still deliver a valid queued origin error response; missing or invalid responses retain proxy-error handling, with a bounded six-second wait before any final response and immediate cleanup for fatal client read errors",
+        "2443 native HTTP assertions include five closed-origin write failures and three coordinated early-final body controls; the pre-fix host witnesses fail and the old simulator Core 0.38 fails the chunked early-final case while passing its length/EOF controls",
+        "Final Core 0.39 HAP contains ARM64/x86_64 libraries; the ARM64 simulator passes all 12 device TCP cases; the independent origin accepts exactly 12 connections, rejects zero, observes one upgraded exchange, delivers three delayed early replies and receives zero late upload bytes; device crypto/listener diagnostics pass"
       ],
       "limitations": [
         "HTTP/1 pipelined requests are processed sequentially; upstream origin connections are not pooled across requests",
@@ -171,7 +178,8 @@
         "tests/http_ingress_reference_peer.py",
         "tests/http_ingress_device_probe.c",
         "tests/fixtures/http/device.yaml",
-        "tests/webdav_device_server/entry/src/main/ets/entryability/HttpIngressFixtureServer.ets"
+        "tests/webdav_device_server/entry/src/main/ets/entryability/HttpIngressFixtureServer.ets",
+        "tests/relay_response_reference_peer.py"
       ]
     },
     {
@@ -402,7 +410,7 @@
     {
       "feature": "Daily browser connectivity",
       "status": "verified_with_limits",
-      "latest": "Final ARM64/x86_64 Core 0.38 HAP installed. HTTP ingress and WebSocket public origin controls pass after old Core 0.37 fails both regression witnesses. Native diagnostics pass and original saved profile/full meaningful runtime/all 11 selections/candidate lists/window placement are restored. The final HarmonyOS OS HTTP/TLS client using system proxy returns Google 204 and increases actual core upload/download by 833/3589 bytes. Earlier checks in this change returned Google/Gstatic 204 but one GitHub OS-client request failed 2300999 with upload 517/download 0. Owned fixture app/device probe/extra forwarding are removed; intermittent external TLS closure remains unresolved.",
+      "latest": "Final Core 0.39 HAP installed. Both deterministic native upload-loss witnesses are repaired; 51 authenticated/corrupt protocol controls and all 12 real simulator TCP cases pass, with independent origin counters. Same saved profile OS HTTP/1.1 samples before/after (8 per site) are Google 5/8 to 6/8, Gstatic 8/8 to 8/8, GitHub 5/8 to 6/8; this small uncontrolled external sample does not establish a reliability improvement or resolve intermittent TLS closure. A separate final OS system-proxy sample returns Google/Gstatic 204 and GitHub 200 with actual per-request core upload/download increases. Original runtime/all 11 groups/selections/window are restored, and the owned fixture app/probe/forward are removed.",
       "limit": "Intermittent early TLS closure remains a real unresolved reliability limit. Core 0.36 comparisons reproduced failures in both the native Mbed TLS probe and host HTTP/SOCKS clients. The independent HarmonyOS HTTP/1.1 client with explicit close succeeded in 19 of 24 requests and reported five failures. A separately encoded Python/cryptography SS first-flight control with raw curl transport, bypassing ClashOS, received authenticated TLS bytes in 23 of 24 trials and one clean zero-byte remote EOF. This isolates one occurrence beyond the core codec; it is not a full independent HTTPS exchange and does not establish a single cause for all failures. Target/node TLS certificate checks remain enabled according to their existing policies. Native failure controls and repeated-check UI improve diagnosis; they do not eliminate the observed upstream-path failure. Full native suite still needs host loopback binding, which returns EPERM here. True-device TUN authorization and background survival, advanced protocols and wider interoperability remain unproven."
     },
     {
@@ -442,5 +450,5 @@
   ],
   "goalCompletionProven": false,
   "reviewedAt": "2026-10-17 17:16:54 UTC",
-  "verificationNotes": "Status summary only; goal completion remains unproven. Final Core 0.38 sources pass HTTP/forward/hosts/VLESS/dialer/API/TLS/YAML suites with independent protocol peers and a deterministic pre-fix closed-TLS-response witness. The final simulator HAP passes nine actual HTTP ingress cases, independent origin counters and native diagnostics. Original runtime/selections/window are restored and final OS system-proxy Google HTTPS returns verified success with actual counters. Full real-listener host DNS/inbound/sniffer suites remain unavailable because loopback binds return EPERM; these are not reported passing. Existing intermittent external TLS closure remains unresolved. Per-run data, screenshots and unsigned HAPs stay outside Git. Shared-template schema assistance now passes 240 offline editor tests and 25 production-controller transport checks, plus actual simulator insertion/validation/save/cold-reopen proof. The attempted full external Shadowsocks reference control is not evidence of route success or failure: device shell binds and app execution were denied, and host listener binds returned EPERM; temporary code, private inputs and device fixture were removed. Intermittent external TLS closure is still unresolved."
+  "verificationNotes": "Status summary only; full goal completion remains unproven. Core 0.39 passes HTTP, SS duplex, forward, VLESS, dialer, TLS, hosts, API and YAML host suites with independent peers, plus final simulator crypto diagnostics and all 12 TCP ingress cases. The earlier offline editor remains covered by 240 tests and 25 controller checks. Original user runtime, all 11 groups/selections and window placement are restored. External Google/GitHub TLS failures remain reproducible after the upload-loss fixes; final successful system-proxy samples do not prove stability. Full real-listener host DNS/inbound/sniffer suites remain unavailable because binds return EPERM and are not reported passing. Per-run evidence and HAPs stay outside Git."
 }

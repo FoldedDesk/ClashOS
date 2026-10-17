@@ -11,6 +11,62 @@ void httpIngressTests(const std::string& directory)
     { std::lock_guard<std::mutex> lock(g_state.mutex); g_state.mode = "Direct"; }
     const char* selected = std::getenv("CLAHSOS_HTTP_CASE");
     const std::string only = selected ? selected : "";
+    if(only.empty()||only=="unread-response")for(const std::string framing:{"length","chunked","eof","empty","invalid"}) {
+        VmessReferencePeer peer(0,"unread-early",framing,"http_ingress_reference_peer.py");
+        ProxyStream stream;stream.fd=peer.take();peer.finish();
+        HttpIngress::Head head;HttpIngress::Request request;
+        require(HttpIngress::parseHead("POST http://origin.fixture.test/upload HTTP/1.1\r\nHost: origin.fixture.test\r\nContent-Length: 1024\r\n\r\n",head)&&HttpIngress::request(head,request),"Parse the request used by an origin that closes before reading it");
+        int client[2];pairFor(client);trackSocket(client[0]);std::string input="unsubmitted-body";
+        const auto result=HttpIngress::exchange(client[0],stream,request,input);closeSocket(client[0]);const auto response=httpTestAll(client[1]);close(client[1]);
+        const bool valid=framing!="empty"&&framing!="invalid";
+        require(result==HttpIngress::Result::Close&&input=="unsubmitted-body","Failed origin writes must close without replaying or consuming unused application bytes");
+        const std::string suffix=framing=="chunked"?"8\r\ndenied!!\r\n0\r\n\r\n":"denied!!";
+        require(valid?response.find("413 Payload Too Large")!=std::string::npos&&response.size()>=suffix.size()&&response.substr(response.size()-suffix.size())==suffix:
+            response.find("502 Bad Gateway")!=std::string::npos&&response.find("private-response")==std::string::npos,"A failed HTTP write must preserve a valid queued origin response and still reject absent or invalid origin responses");
+    }
+    if(only.empty()||only=="early-final")for(const std::string framing:{"length","chunked","eof"}) {
+        const auto marker=directory+"/http-early-final";unlink(marker.c_str());
+        VmessReferencePeer peer(0,"early-final",framing+"|"+marker,"http_ingress_reference_peer.py");
+        g_testConnector=[&](const std::string&,int,int){return peer.take();};
+        int client[2];pairFor(client);dispatchWorker(client[0],0);
+        const auto request=std::string("POST http://origin.fixture.test/upload HTTP/1.1\r\nHost: origin.fixture.test\r\nExpect: 100-continue\r\n")+
+            (framing=="chunked"?"Transfer-Encoding: chunked\r\n":"Content-Length: 1024\r\n")+"\r\n";
+        require(sendAll(client[1],request),"Send an upload that the independent origin rejects before its body");
+        const auto head=httpTestHead(client[1]);require(head.find("413 Payload Too Large")!=std::string::npos&&head.find("Connection: close")!=std::string::npos,"Early final response must reach the client before its upload");
+        if(framing=="chunked")require(sendAll(client[1],"not-a-chunk\r\n"),"Queue unused upload bytes after an early final response");
+        else shutdown(client[1],SHUT_WR);
+        {std::ofstream file(marker);file<<"client stopped its rejected upload\n";require(file.good(),"Write the independent response release signal");}
+        const auto body=httpTestAll(client[1]);close(client[1]);workersIdle();g_testConnector=nullptr;peer.finish();unlink(marker.c_str());
+        require(body==(framing=="chunked"?"8\r\ndenied!!\r\n0\r\n\r\n":"denied!!"),"Stopping a rejected HTTP upload must not truncate the independent origin's later response body");
+    }
+    if(only.empty()||only=="upload-failure") {
+        const auto roots=readTestFile(std::string(CLAHSOS_TEST_ROOT)+"/fixtures/vmess/ca.pem");const auto previousRoots=g_testVmessTrust;g_testVmessTrust=roots.c_str();
+        for(const std::string kind:{"direct:tcp","ss:aes-128-gcm","ss:aes-256-gcm","ss:chacha20-ietf-poly1305","vmess:tcp","vmess:tls","vmess:ws","vmess:ws-tls","trojan:tls","trojan:ws-tls","vless:tcp","vless:tls","vless:ws","vless:ws-tls","http:tcp","http:tls","socks5:tcp","socks5:tls"})
+        for(const std::string fault:{"valid","closed-upload","corrupt"}) {
+            const auto colon=kind.find(':');const auto protocol=kind.substr(0,colon),transport=kind.substr(colon+1);
+            if(fault=="corrupt"&&(protocol=="direct"||(protocol=="http"||protocol=="socks5")&&transport=="tcp"))continue;
+            std::cerr<<"Upload-failure reply: "<<kind<<" fault="<<fault<<'\n';
+            VmessReferencePeer peer(0,kind,fault,"relay_response_reference_peer.py");
+            g_testConnector=[&](const std::string&,int,int){return peer.take();};
+            ProxyNode node;
+            if(protocol=="trojan")node=trojanTestNode(transport);
+            else if(protocol=="vmess")node=vmTestNode(0,transport,"auto");
+            else if(protocol=="vless")node=vlessTestNode(transport);
+            else if(protocol=="http"||protocol=="socks5")node=forwardTestNode(protocol+"-"+transport);
+            else {node.name="Queued response fixture";node.type=protocol;node.server="node.invalid";node.port=443;node.cipher=transport;node.password="pässword-测试";}
+            ProxyStream stream;std::string error;VmBytes payload(6000);for(size_t i=0;i<payload.size();++i)payload[i]=static_cast<unsigned char>(i*17+3);
+            require(openProxyStream(node,"192.0.2.9",443,stream,error),"Open independent queued-response upload-failure fixture");
+            int capacity=262144;require(setsockopt(stream.fd,SOL_SOCKET,SO_RCVBUF,&capacity,sizeof(capacity))==0,"Provide capacity for the independent queued binary response");
+            require(streamWrite(stream,reinterpret_cast<const char*>(payload.data()),payload.size()),"Send initial application request");
+            peer.finish();g_testConnector=nullptr;
+            int client[2];pairFor(client);trackSocket(client[0]);require(sendAll(client[1],"late upload"),"Queue client data after upstream closed with an unread response");
+            std::thread relay([&]{relayStream(client[0],stream,fault!="closed-upload");closeSocket(client[0]);});
+            const auto response=httpTestAll(client[1]);close(client[1]);relay.join();
+            std::string expected(50000,'\0');for(size_t i=0;i<expected.size();++i)expected[i]=static_cast<char>(i*23+11);
+            require(fault=="corrupt"?response.empty():response==expected,"Upload failure must retain every independently authenticated response chunk and must never release a corrupt response");
+        }
+        g_testVmessTrust=previousRoots;
+    }
     if(only.empty()||only=="closed-response") {
         const auto roots=readTestFile(std::string(CLAHSOS_TEST_ROOT)+"/fixtures/vmess/ca.pem");const auto previousRoots=g_testVmessTrust;g_testVmessTrust=roots.c_str();
         VmessReferencePeer peer(0,"trojan-tls","tcp","hosts_reference_peer.py");

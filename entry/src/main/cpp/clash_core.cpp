@@ -1548,7 +1548,7 @@ std::string responseFor(const std::string& method, const std::string& path, cons
     if (path.substr(0, path.find('?')) == "/clashos/ports") return proxyPortsControlLocked(method, path, body);
     if (path.substr(0, path.find('?')) == "/clashos/inbound") return inboundControlLocked(method, path, body);
     if (method == "GET" && path == "/version") {
-        return "{\"version\":\"ClashOS Core 0.38 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
+        return "{\"version\":\"ClashOS Core 0.39 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
             "\",\"premium\":false,\"meta\":true,\"features\":[\"http-message-framing\",\"http-upgrade\",\"yaml-merge-keys\",\"dialer-proxy\",\"dialer-proxy-udp\",\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"vless\",\"trojan\",\"http-outbound\",\"socks5-outbound\",\"socks5-udp\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
     }
     if (method == "GET" && path == "/clahsos/diagnostics") return diagnosticsJson();
@@ -2551,9 +2551,10 @@ bool sendPayload(int client, ProxyStream& stream, const std::string& data)
     return true;
 }
 
-void relayStream(int client, ProxyStream& stream)
+void relayStream(int client, ProxyStream& stream, bool clientOpen = true)
 {
-    bool clientOpen = true, remoteOpen = true;
+    bool remoteOpen = true;
+    if (!clientOpen) shutdown(stream.fd, SHUT_WR);
     std::vector<unsigned char> buffer(16384);
     while (clientOpen || remoteOpen) {
         pollfd reads[2] = {{clientOpen ? client : -1, POLLIN, 0}, {remoteOpen ? stream.fd : -1, POLLIN, 0}};
@@ -2584,8 +2585,14 @@ void relayStream(int client, ProxyStream& stream)
                 if (errno == EINTR) continue;
                 break;
             } else {
-                if (!streamWrite(stream, reinterpret_cast<const char*>(buffer.data()), static_cast<size_t>(count))) break;
-                recordTransfer(client, true, static_cast<size_t>(count));
+                if (!streamWrite(stream, reinterpret_cast<const char*>(buffer.data()), static_cast<size_t>(count))) {
+                    // A failed upload does not invalidate independent incoming
+                    // records. Never replay it; stop writing and drain the peer
+                    // through the same authenticated receive path as before.
+                    clientOpen = false;
+                    shutdown(stream.fd, SHUT_WR);
+                    coreLog("debug", "Upstream upload stopped; draining response");
+                } else recordTransfer(client, true, static_cast<size_t>(count));
             }
         }
         if (remoteOpen && reads[1].revents != 0) {
@@ -2725,7 +2732,7 @@ void handleSocksClient(int client)
     attachUpstream(client, stream.fd);
     if (!acknowledged) socksReply(client, 0);
     coreLog("info", host + ":" + std::to_string(port) + " via " + node.name);
-    if (sendPayload(client, stream, prefix)) relayStream(client, stream);
+    relayStream(client, stream, sendPayload(client, stream, prefix));
     closePair(client, stream.fd);
     stream.fd = -1;
 }

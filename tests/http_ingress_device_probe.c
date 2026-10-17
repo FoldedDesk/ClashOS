@@ -12,12 +12,13 @@
 
 static const unsigned char body[]="data\0xyz";
 static const unsigned char chunks[]="4;ext=\"a,b\"\r\ndata\r\n4\r\n\0xyz\r\n0\r\nX-Trailer: ok\r\n\r\n";
-static int connect_proxy(void) {
+static int connect_local(unsigned port) {
     int fd=socket(AF_INET,SOCK_STREAM,0);if(fd<0)return -1;
     struct timeval timeout={4,0};setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof timeout);setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&timeout,sizeof timeout);
-    struct sockaddr_in endpoint={0};endpoint.sin_family=AF_INET;endpoint.sin_port=htons(7890);inet_pton(AF_INET,"127.0.0.1",&endpoint.sin_addr);
+    struct sockaddr_in endpoint={0};endpoint.sin_family=AF_INET;endpoint.sin_port=htons(port);inet_pton(AF_INET,"127.0.0.1",&endpoint.sin_addr);
     if(connect(fd,(struct sockaddr*)&endpoint,sizeof endpoint)){close(fd);return -1;}return fd;
 }
+static int connect_proxy(void) {return connect_local(7890);}
 static int write_all(int fd,const void* data,size_t size) {
     const unsigned char* bytes=data;
     while(size){ssize_t count=send(fd,bytes,size,0);if(count<0&&errno==EINTR)continue;if(count<=0)return 0;bytes+=count;size-=(size_t)count;}return 1;
@@ -72,6 +73,23 @@ static int websocket(void) {
     char header[8192];int ok=write_all(fd,wire,size+sizeof frame)&&head(fd,header,sizeof header)&&strstr(header,"101 Switching Protocols")&&strstr(header,"Connection: Upgrade")&&strstr(header,"s3pPLMBiTxaQ9kYGzzhZRbK+xOo=");
     ok=ok&&exact(fd,payload,sizeof payload)&&!memcmp(payload,expected,sizeof expected);close(fd);return ok;
 }
+static int release_origin(void) {
+    int fd=connect_local(18088);if(fd<0)return 0;
+    const char* request="POST /test-admin/http/release HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+    char header[8192],body[2];int ok=write_all(fd,request,strlen(request))&&head(fd,header,sizeof header)&&strstr(header,"200 Fixture")&&exact(fd,body,2)&&!memcmp(body,"{}",2);close(fd);return ok;
+}
+static int early_final(int mode) {
+    int fd=connect_proxy();if(fd<0)return 0;
+    char request[1024],header[8192],body[32];const char* kind=mode==0?"length":mode==1?"chunked":"eof";
+    snprintf(request,sizeof request,"POST http://origin.fixture.test:18105/early-%s HTTP/1.1\r\nHost: origin.fixture.test:18105\r\nExpect: 100-continue\r\n%s\r\n",kind,mode==1?"Transfer-Encoding: chunked\r\n":"Content-Length: 1024\r\n");
+    int ok=write_all(fd,request,strlen(request))&&head(fd,header,sizeof header)&&strstr(header,"413 Payload Too Large")&&strstr(header,"Connection: close");
+    if(mode==1)ok=ok&&write_all(fd,"not-a-chunk\r\n",13);
+    if(mode==2)ok=ok&&write_all(fd,"ignored-upload",14);
+    shutdown(fd,SHUT_WR);
+    ok=release_origin()&&ok;
+    const char* expected=mode==1?"8\r\ndenied!!\r\n0\r\n\r\n":"denied!!";
+    ok=ok&&exact(fd,body,strlen(expected))&&!memcmp(body,expected,strlen(expected));close(fd);return ok;
+}
 static int invalid_framing(void) {
     int fd=connect_proxy();if(fd<0)return 0;
     const char* request="POST http://origin.fixture.test:18105/upload HTTP/1.1\r\nHost: origin.fixture.test:18105\r\nContent-Length: 0\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n";
@@ -82,7 +100,9 @@ int main(int argc,char** argv) {
     signal(SIGPIPE,SIG_IGN);int failed=0;
     if(argc==2&&!strcmp(argv[1],"pipeline"))return report("pipeline",pipeline());
     if(argc==2&&!strcmp(argv[1],"websocket"))return report("websocket",websocket());
+    if(argc==2&&!strcmp(argv[1],"early-final")){failed+=report("early-length",early_final(0));failed+=report("early-chunked",early_final(1));failed+=report("early-eof",early_final(2));return failed?1:0;}
     failed+=report("pipeline",pipeline());failed+=report("length-upload-and-authority",upload(0));failed+=report("chunked-upload",upload(1));
     failed+=report("large-upload",upload(2));failed+=report("chunked-response",chunked_response(0));failed+=report("http10-dechunk",chunked_response(1));
-    failed+=report("expect-continue",expect_continue());failed+=report("websocket",websocket());failed+=report("ambiguous-request-rejected",invalid_framing());return failed?1:0;
+    failed+=report("expect-continue",expect_continue());failed+=report("websocket",websocket());failed+=report("ambiguous-request-rejected",invalid_framing());
+    failed+=report("early-length",early_final(0));failed+=report("early-chunked",early_final(1));failed+=report("early-eof",early_final(2));return failed?1:0;
 }

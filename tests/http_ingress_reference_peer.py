@@ -7,6 +7,7 @@ import select
 import socket
 import sys
 import time
+from pathlib import Path
 
 
 BODY = b'data\x00xyz'
@@ -26,6 +27,15 @@ def main():
     channel = socket.socket(fileno=int(sys.argv[1]))
     channel.settimeout(5)
     number, mode, fault = int(sys.argv[2]), sys.argv[3], sys.argv[4]
+    if mode == 'unread-early':
+        if fault == 'invalid':
+            channel.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\nprivate-response')
+        elif fault != 'empty':
+            framing = b'Transfer-Encoding: chunked\r\n' if fault == 'chunked' else b'Content-Length: 8\r\n' if fault == 'length' else b''
+            body = b'8\r\ndenied!!\r\n0\r\n\r\n' if fault == 'chunked' else b'denied!!'
+            channel.sendall(b'HTTP/1.1 413 Payload Too Large\r\n' + framing + b'Connection: close\r\n\r\n' + body)
+        channel.close()
+        return
     stream = channel.makefile('rb', buffering=0)
     line = stream.readline(65537)
     headers = http.client.parse_headers(stream)
@@ -61,6 +71,19 @@ def main():
         channel.sendall(b'HTTP/1.1 103 Early Hints\r\nLink: </style>; rel=preload\r\n\r\nHTTP/1.1 100 Continue\r\n\r\n')
         assert exact(stream, int(headers['Content-Length'])) == BODY
         channel.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nuploaded')
+    elif mode == 'early-final':
+        framing, marker = fault.split('|', 1)
+        assert line == b'POST /upload HTTP/1.1\r\n' and headers['Expect'].lower() == '100-continue'
+        header = b'Transfer-Encoding: chunked\r\n' if framing == 'chunked' else b'Content-Length: 8\r\n' if framing == 'length' else b''
+        channel.sendall(b'HTTP/1.1 413 Payload Too Large\r\n' + header + b'Connection: close\r\n\r\n')
+        deadline = time.monotonic() + 5
+        while not Path(marker).exists() and time.monotonic() < deadline:
+            time.sleep(.001)
+        assert Path(marker).exists(), 'Client did not observe the early final response'
+        try:
+            channel.sendall(b'8\r\ndenied!!\r\n0\r\n\r\n' if framing == 'chunked' else b'denied!!')
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # The pre-fix proxy closes before the independent response body.
     elif mode == 'response':
         assert line.startswith(b'GET /verify HTTP/1.')
         if fault == 'canonical-host':

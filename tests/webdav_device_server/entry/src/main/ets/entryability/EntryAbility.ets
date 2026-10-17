@@ -78,6 +78,7 @@ export default class EntryAbility extends UIAbility {
 
   private handle(client: socket.TCPSocketConnection, method: string, path: string, headers: Record<string, string>, body: string): void {
     if (path === '/test-admin/http/start' && method === 'POST') { this.httpIngress.start(); this.respond(client, 200, '{}'); return; }
+    if (path === '/test-admin/http/release' && method === 'POST') { this.httpIngress.releaseEarly().then(() => this.respond(client, 200, '{}')).catch(() => this.respond(client, 500, '{}')); return; }
     if (path === '/test-admin/http/state') { this.respond(client, 200, this.httpIngress.status()); return; }
     if (path.startsWith('/test-admin/https/') && method === 'POST') {
       const parts: string[] = path.substring('/test-admin/https/'.length).split('/');

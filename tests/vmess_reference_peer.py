@@ -123,7 +123,7 @@ def body_aead(key, security):
         first=hashlib.md5(key).digest();return ChaCha20Poly1305(first+hashlib.md5(first).digest())
     return None
 
-def read_request(wire, command, datagram_count=2):
+def read_request(wire, command, datagram_count=2, byte_limit=None):
     iv,key=command[1:17],command[17:33];options=command[34]; security=command[35]&15
     if not options&1:
         assert security==5
@@ -141,7 +141,11 @@ def read_request(wire, command, datagram_count=2):
         if command[37]==2:
             packets.append(data)
             if len(packets)==datagram_count:return packets
-        else:result+=data
+        else:
+            result+=data
+            if byte_limit is not None and len(result)>=byte_limit:
+                assert len(result)==byte_limit, 'Initial request crossed its expected application boundary'
+                return result
     return result
 
 def response_packet(command, alter, failure, data_chunks=None):

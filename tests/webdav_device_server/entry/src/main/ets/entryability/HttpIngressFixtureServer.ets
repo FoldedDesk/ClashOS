@@ -5,6 +5,7 @@ interface HttpFixtureState {
   input: Uint8Array; head: boolean; path: string; method: string; fields: Record<string, string>;
   upgraded: boolean; closing: boolean; queue: Promise<void>;
 }
+interface EarlyHttpReply { client: socket.TCPSocketConnection; chunked: boolean; }
 
 // A separate, fixed-response origin. It never routes traffic, reads app data or
 // accepts arbitrary WebSocket messages. Only public test vectors are accepted.
@@ -20,6 +21,9 @@ export class HttpIngressFixtureServer {
   private rejected: number = 0;
   private frames: number = 0;
   private requests: Record<string, number> = {};
+  private early: EarlyHttpReply[] = [];
+  private earlyReplies: number = 0;
+  private lateUploadBytes: number = 0;
 
   start(): void {
     if (this.active) return; this.active = true;
@@ -27,7 +31,16 @@ export class HttpIngressFixtureServer {
     this.server.listen({ address: '127.0.0.1', port: 18105, family: 1 }).then(() => { this.ready = true; }).catch(() => { this.failed = true; });
   }
   stop(): void { if (!this.active) return; this.active = false; this.clients.forEach((client: socket.TCPSocketConnection) => client.close().catch(() => {})); this.clients = []; this.server.close().catch(() => {}); }
-  status(): string { return JSON.stringify({ ready: this.ready, failed: this.failed, accepted: this.accepted, rejected: this.rejected, frames: this.frames, requests: this.requests }); }
+  status(): string { return JSON.stringify({ ready: this.ready, failed: this.failed, accepted: this.accepted, rejected: this.rejected, frames: this.frames, requests: this.requests, earlyReplies: this.earlyReplies, lateUploadBytes: this.lateUploadBytes }); }
+  async releaseEarly(): Promise<void> {
+    const pending = this.early; this.early = [];
+    for (const reply of pending) {
+      try {
+        await this.send(reply.client, this.encoder.encodeInto(reply.chunked ? '8\r\ndenied!!\r\n0\r\n\r\n' : 'denied!!'));
+        await reply.client.close(); this.earlyReplies++;
+      } catch (_) { /* An old proxy may already have discarded this response. */ }
+    }
+  }
   private join(first: Uint8Array, second: Uint8Array): Uint8Array { const bytes = new Uint8Array(first.length + second.length); bytes.set(first); bytes.set(second, first.length); return bytes; }
   private equal(first: Uint8Array, second: Uint8Array): boolean { return first.length === second.length && first.every((value: number, index: number) => value === second[index]); }
   private accept(client: socket.TCPSocketConnection): void {
@@ -49,7 +62,7 @@ export class HttpIngressFixtureServer {
     await client.close();
   }
   private async receive(client: socket.TCPSocketConnection, state: HttpFixtureState, bytes: Uint8Array): Promise<void> {
-    if (state.closing) return;
+    if (state.closing) { if (state.path.startsWith('/early-')) this.lateUploadBytes += bytes.length; return; }
     if (state.input.length + bytes.length > 192 * 1024) { await this.reject(client, state); return; }
     state.input = this.join(state.input, bytes);
     if (!state.head) {
@@ -60,9 +73,17 @@ export class HttpIngressFixtureServer {
       state.method = first[0]; state.path = first[1];
       lines.slice(1).forEach((line: string) => { const colon: number = line.indexOf(':'); if (colon > 0) state.fields[line.substring(0, colon).toLowerCase()] = line.substring(colon + 1).trim(); });
       if (!['HTTP/1.1', 'HTTP/1.0'].includes(first[2]) || !['origin.fixture.test:18105', 'origin1.fixture.test:18105', 'origin2.fixture.test:18105'].includes(state.fields['host']) ||
-        state.fields['proxy-authorization'] || state.fields['proxy-connection'] || state.fields['x-hop'] || !['/1', '/2', '/upload', '/chunked', '/expect', '/socket'].includes(state.path)) { await this.reject(client, state); return; }
+        state.fields['proxy-authorization'] || state.fields['proxy-connection'] || state.fields['x-hop'] || !['/1', '/2', '/upload', '/chunked', '/expect', '/socket', '/early-length', '/early-chunked', '/early-eof'].includes(state.path)) { await this.reject(client, state); return; }
       state.input = state.input.slice(end + 4); state.head = true;
       this.requests[state.path] = (this.requests[state.path] || 0) + 1;
+      if (state.path.startsWith('/early-')) {
+        if (state.method !== 'POST' || state.fields['expect']?.toLowerCase() !== '100-continue' || state.input.length !== 0) { await this.reject(client, state); return; }
+        state.closing = true;
+        const chunked: boolean = state.path === '/early-chunked';
+        this.early.push({ client, chunked });
+        const framing: string = chunked ? 'Transfer-Encoding: chunked\r\n' : state.path === '/early-length' ? 'Content-Length: 8\r\n' : '';
+        await this.send(client, this.encoder.encodeInto('HTTP/1.1 413 Payload Too Large\r\n' + framing + 'Connection: close\r\n\r\n')); return;
+      }
       if (state.path === '/socket') {
         if (state.method !== 'GET' || state.fields['upgrade']?.toLowerCase() !== 'websocket' || !state.fields['connection']?.toLowerCase().split(',').map((value: string) => value.trim()).includes('upgrade') || state.fields['sec-websocket-key'] !== 'dGhlIHNhbXBsZSBub25jZQ==') { await this.reject(client, state); return; }
         state.upgraded = true;

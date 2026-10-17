@@ -37,18 +37,18 @@ bool buffered(const ProxyStream& stream) {
 bool toClient(int client,const std::string& data) {
     if(data.empty())return true;if(!sendAll(client,data))return false;recordTransfer(client,false,data.size());return true;
 }
-enum class Result {Close,Next,Upgrade};
+enum class Result {Close,Next,Upgrade,Drain};
 Result exchange(int client,ProxyStream& stream,const Request& request,std::string& input) {
     Body upload(request.body,request.head.connection),download;
     Response response;std::string remote,output;bool final=false,finalSent=false,keep=false;
     unsigned interim=0;
     auto fail=[&](const char* status){if(!finalSent)errorReply(client,status);return Result::Close;};
-    if(!sendPayload(client,stream,forwarded(request)))return fail("502 Bad Gateway");
+    const char* uploadError=nullptr;HealthClock::time_point responseDeadline{};
+    auto stopUpload=[&](const char* error){if(!uploadError){uploadError=error;responseDeadline=HealthClock::now()+std::chrono::seconds(6);shutdown(stream.fd,SHUT_WR);}};
+    if(!sendPayload(client,stream,forwarded(request)))stopUpload("502 Bad Gateway");
     while(alive(client)) {
-        if(!upload.done()) {
-            if(!upload.consume(input,output))return fail("400 Bad Request");
-            if(!sendPayload(client,stream,output))return fail("502 Bad Gateway");
-        }
+        // A final origin response ends this upload, including an unsent Expect
+        // body. Parse it before touching any more client bytes or write errors.
         if(!final)while(true) {
             const auto end=remote.find("\r\n\r\n");
             if(end==std::string::npos){if(remote.size()>headerLimit)return fail("502 Bad Gateway");break;}
@@ -59,11 +59,11 @@ Result exchange(int client,ProxyStream& stream,const Request& request,std::strin
                 continue;
             }
             if(response.upgrade){
-                if(!upload.done())return fail("502 Bad Gateway");
-                if(!toClient(client,rendered(response,request,false))||!toClient(client,remote)||!sendPayload(client,stream,input))return Result::Close;
-                input.clear();return Result::Upgrade;
+                if(uploadError||!upload.done())return fail("502 Bad Gateway");
+                if(!toClient(client,rendered(response,request,false))||!toClient(client,remote))return Result::Close;
+                const bool sent=sendPayload(client,stream,input);input.clear();return sent?Result::Upgrade:Result::Drain;
             }
-            keep=request.persistent&&!request.upgrade&&upload.done()&&response.body.kind!=BodyKind::Eof;
+            keep=request.persistent&&!request.upgrade&&!uploadError&&upload.done()&&response.body.kind!=BodyKind::Eof;
             if(!toClient(client,rendered(response,request,!keep)))return Result::Close;
             finalSent=final=true;download=Body(response.body,response.head.connection);
             download.dechunk=request.version=="HTTP/1.0"&&response.body.kind==BodyKind::Chunked;break;
@@ -73,23 +73,30 @@ Result exchange(int client,ProxyStream& stream,const Request& request,std::strin
             if(!toClient(client,output))return Result::Close;
             if(download.done())return keep?Result::Next:Result::Close;
         }
-        const bool pending=buffered(stream);
-        pollfd watches[2]={{upload.done()?-1:client,POLLIN,0},{stream.fd,POLLIN,0}};
-        const int ready=poll(watches,2,pending?0:300000);
-        if(ready<0&&errno==EINTR)continue;if(ready<0||!ready&&!pending)return Result::Close;
-        if(pending)watches[1].revents|=POLLIN;
-        if(watches[0].revents){
-            char bytes[16384];const auto count=recv(client,bytes,sizeof(bytes),MSG_DONTWAIT);
-            if(count>0)input.append(bytes,static_cast<size_t>(count));
-            else if(!count||errno!=EAGAIN&&errno!=EWOULDBLOCK&&errno!=EINTR)return fail("400 Bad Request");
+        if(!final&&!uploadError&&!upload.done()) {
+            if(!upload.consume(input,output))return fail("400 Bad Request");
+            if(!sendPayload(client,stream,output))stopUpload("502 Bad Gateway");
         }
+        const bool pending=buffered(stream);
+        int wait=300000;
+        if(uploadError&&!final){const auto remaining=std::chrono::duration_cast<std::chrono::milliseconds>(responseDeadline-HealthClock::now()).count();if(remaining<=0)return fail(uploadError);wait=static_cast<int>(remaining);}
+        pollfd watches[2]={{final||uploadError||upload.done()?-1:client,POLLIN,0},{stream.fd,POLLIN,0}};
+        const int ready=poll(watches,2,pending?0:wait);
+        if(ready<0&&errno==EINTR)continue;if(ready<0||!ready&&!pending)return uploadError&&!final?fail(uploadError):Result::Close;
+        if(pending)watches[1].revents|=POLLIN;
         if(watches[1].revents){
             std::vector<unsigned char> bytes;
             if(streamRead(stream,bytes,true))remote.append(reinterpret_cast<const char*>(bytes.data()),bytes.size());
             else if(errno!=EAGAIN&&errno!=EWOULDBLOCK&&errno!=EINTR){
                 if(errno==0&&final&&download.framing.kind==BodyKind::Eof)return Result::Close;
-                return fail("502 Bad Gateway");
+                return fail(uploadError?uploadError:"502 Bad Gateway");
             }
+        }
+        if(watches[0].revents){
+            char bytes[16384];const auto count=recv(client,bytes,sizeof(bytes),MSG_DONTWAIT);
+            if(count>0)input.append(bytes,static_cast<size_t>(count));
+            else if(!count)stopUpload("400 Bad Request");
+            else if(errno!=EAGAIN&&errno!=EWOULDBLOCK&&errno!=EINTR)return Result::Close;
         }
     }
     return Result::Close;
@@ -111,7 +118,7 @@ void connect(int client,const Request& request,std::string& prefix) {
         if(!acknowledged)errorReply(client,openFailure(node));return;
     }
     attachUpstream(client,stream.fd);coreLog("info",request.host+":"+std::to_string(request.port)+" via "+node.name);
-    if((acknowledged||sendAll(client,"HTTP/1.1 200 Connection Established\r\n\r\n"))&&sendPayload(client,stream,prefix))relayStream(client,stream);
+    if(acknowledged||sendAll(client,"HTTP/1.1 200 Connection Established\r\n\r\n"))relayStream(client,stream,sendPayload(client,stream,prefix));
 }
 } // namespace HttpIngress
 
@@ -148,7 +155,7 @@ void handleHttpProxyClient(int client)
         }
         attachUpstream(client,stream.fd);coreLog("info",request.host+":"+std::to_string(request.port)+" via "+node.name);
         const auto result=HttpIngress::exchange(client,stream,request,pending);
-        if(result==HttpIngress::Result::Upgrade){relayStream(client,stream);return;}
+        if(result==HttpIngress::Result::Upgrade||result==HttpIngress::Result::Drain){relayStream(client,stream,result==HttpIngress::Result::Upgrade);return;}
         if(result==HttpIngress::Result::Close)return;
     }
 }
