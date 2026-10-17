@@ -104,6 +104,25 @@ sniffer:
 未知协议、超时或无效握手保留原始数据并按原目标处理。
 详细排除项使用 `force-domain`、`skip-domain`、`skip-src-address` 和 `skip-dst-address`。
 
+## hosts 映射
+
+配置中的 `hosts` 同时用于 DNS 查询、直连和 SS / VMess / Trojan 的 TCP / UDP 目标。
+支持域名别名链、通配域名和多个 IPv4 / IPv6 地址，具体域名优先于较宽的匹配。
+例如以下测试地址需替换为实际服务地址：
+
+```yaml
+dns:
+  use-hosts: true
+hosts:
+  service.example: 192.0.2.10
+  alias.example: service.example
+```
+
+映射保留 HTTP Host 和客户端 TLS 证书校验使用的域名；别名与已配置 IP 也参与分流规则。
+别名循环、空映射及不可用地址族会报错，不会自动绕过映射。
+`use-hosts: false` 可关闭此行为；未匹配的代理目标继续使用远端 DNS。
+配置切换后新连接使用新映射；握手时保留原有映射快照，避免混用新旧配置。
+
 ## 代理组图标
 
 在“代理”页右键代理组，选择“自定义图标”，可使用内置图标、HTTP / HTTPS 图片链接，

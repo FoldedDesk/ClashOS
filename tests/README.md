@@ -22,6 +22,18 @@ python3 tests/run_native_tests.py --build-dir .host-build/native --config /path/
 `CLAHSOS_REFERENCE_PYTHON` 可指定已安装 cryptography 的 Python。
 原生测试会绑定本机回环端口；限制 socket 绑定的沙箱无法完成这些检查。
 
+hosts 与加密转发专项使用继承的 Unix socket，不需要绑定回环端口：
+
+```sh
+python3 tests/run_native_tests.py --suite hosts --build-dir .host-build/native
+```
+
+它通过独立 Python cryptography / OpenSSL 参考端检查 SS、VMess、Trojan 的实际 TCP / UDP
+目的地址、TLS / WebSocket、HTTPS Host / SNI、原生规则与配置切换快照。
+VMess 双向转发检查会先发送不完整的响应头、长度或负载，确认此时既不泄露应用数据，
+也不阻塞后续客户端写入；覆盖 AEAD / 旧版响应头、AES-GCM、ChaCha20-Poly1305 和 none。
+专项不能替代真实设备的网络、VPN 授权和后台运行验证。
+
 ArkTS 服务测试通过 TypeScript 转译执行，不需要运行 ArkUI。
 可使用 DevEco Studio 随附的 TypeScript，或安装经过验证的标准版本：
 

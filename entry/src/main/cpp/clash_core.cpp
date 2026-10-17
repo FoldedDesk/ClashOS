@@ -115,6 +115,7 @@ struct ProxyGroup {
     bool hidden = false;
 };
 
+struct DnsConfig;
 struct ProxyNode {
     std::string name;
     std::string type;
@@ -139,6 +140,9 @@ struct ProxyNode {
     std::string matchedRule;
     std::string provider;
     bool loadBalanced=false;
+    // Per-connection DNS policy: routing and dialing must use the same hosts.
+    std::shared_ptr<DnsConfig> destinationDns;
+    bool destinationIpv6=false;
 };
 
 struct ProxyProvider {
@@ -815,6 +819,7 @@ bool parseProxySequence(yaml_document_t& document,yaml_node_t* sequence,std::vec
 #include "dns_codec.inc"
 #include "dns_wire.inc"
 #include "dns_config.inc"
+#include "dns_hosts.inc"
 #include "geo_config.inc"
 #include "object_edits.inc"
 #include "config_scripts.inc"
@@ -1432,7 +1437,7 @@ std::string responseFor(const std::string& method, const std::string& path, cons
     if (path.substr(0, path.find('?')) == "/clashos/ports") return proxyPortsControlLocked(method, path, body);
     if (path.substr(0, path.find('?')) == "/clashos/inbound") return inboundControlLocked(method, path, body);
     if (method == "GET" && path == "/version") {
-        return "{\"version\":\"ClashOS Core 0.30 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
+        return "{\"version\":\"ClashOS Core 0.31 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
             "\",\"premium\":false,\"meta\":true,\"features\":[\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"trojan\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
     }
     if (method == "GET" && path == "/clahsos/diagnostics") return diagnosticsJson();
@@ -2109,18 +2114,22 @@ ProxyNode resolveProxyLocked(std::string selection,const RouteContext* context)
 ProxyNode activeProxyNode(const std::string& host, int port = 0, const std::string& network = "tcp",const std::string& source="",const std::vector<std::string>* knownIps=nullptr)
 {
     RuleQuery query;query.host=host;query.port=port;query.network=network;query.source=source;
-    if(knownIps){query.ips=*knownIps;query.resolved=true;}
     for(int retry=0;retry<3;++retry) {
-    if(retry>0&&!knownIps){query.resolved=false;query.ips.clear();}
     std::vector<ProxyRule> rules;RuleSnapshots providers;uint64_t revision;std::string mode;
+    std::shared_ptr<DnsConfig> dns;bool destinationIpv6=false;
     {
         std::lock_guard<std::mutex> guard(g_state.mutex);revision=g_state.configRevision;mode=lower(g_state.mode);
+        dns=g_state.dns;destinationIpv6=g_state.ipv6.load()&&(!dns->enabled||dns->ipv6);
         query.geo=geoSnapshotsLocked();
         if(mode!="direct"&&mode!="global") {rules=g_state.rules;for(const auto& provider:g_state.ruleProviders)providers[provider.name]={provider.behavior,provider.data};}
     }
+    const auto mapped=dnsHostOverride(*dns,host,destinationIpv6);
+    query.host=mapped.route;query.ips=knownIps?*knownIps:mapped.addresses;
+    query.resolved=knownIps||!mapped.addresses.empty();
     std::string selection = "DIRECT";
     std::string matchedRule = "MATCH";
-    if(mode!="global"&&mode!="direct")for(const auto& rule:rules) {
+    if(!mapped.error.empty()){selection="REJECT";matchedRule="hosts (unavailable)";}
+    else if(mode!="global"&&mode!="direct")for(const auto& rule:rules) {
         const auto result=evaluateRule(rule,query,providers);
         if(result==RuleVerdict::No)continue;
         selection=result==RuleVerdict::Unavailable?"REJECT":rule.target;
@@ -2128,13 +2137,13 @@ ProxyNode activeProxyNode(const std::string& host, int port = 0, const std::stri
     }
     std::lock_guard<std::mutex> guard(g_state.mutex);
     if(revision!=g_state.configRevision||mode!=lower(g_state.mode))continue;
-    if (mode == "global") {
+    if (mode == "global"&&mapped.error.empty()) {
         matchedRule = "GLOBAL";
         if (std::any_of(g_state.groups.begin(),g_state.groups.end(),[](const ProxyGroup& group){return group.name=="GLOBAL";})) selection = "GLOBAL";
         else if (!g_state.groups.empty()) selection = g_state.groups.front().name;
         else if (!g_state.nodes.empty()) selection = g_state.nodes.front().name;
-    } else if(mode=="direct")matchedRule="DIRECT";
-    const RouteContext context{host,source,network};
+    } else if(mode=="direct"&&mapped.error.empty())matchedRule="DIRECT";
+    const RouteContext context{query.host,source,network};
     ProxyNode node = resolveProxyLocked(selection,&context);
     wakeHealthChecks();
     if(network=="udp")for(const std::string& name:node.chain) {
@@ -2144,6 +2153,7 @@ ProxyNode activeProxyNode(const std::string& host, int port = 0, const std::stri
     if(!node.provider.empty())for(ProxyProvider& provider:g_state.providers)if(provider.name==node.provider){provider.health.lastUsed=HealthClock::now();wakeHealthChecks();break;}
     node.matchedRule = matchedRule;
     node.revision = g_state.configRevision;
+    node.destinationDns=dns;node.destinationIpv6=destinationIpv6;
     return node;
     }
     ProxyNode rejected;rejected.name="REJECT";rejected.type="reject";rejected.matchedRule="Configuration changed during routing";return rejected;
@@ -2285,13 +2295,16 @@ struct ProxyStream {
 bool openProxyStream(const ProxyNode& node, const std::string& host, int port, ProxyStream& stream,
     std::string& error, int timeoutMs = 6000)
 {
+    DestinationDnsScope dnsScope(node);
+    std::string destination;
+    if(!proxyDestination(node,host,destination,error))return false;
     if (node.type == "direct") {
         stream.fd = connectUpstream(host, port, timeoutMs);
     } else if (node.type == "ss" && shadowsocksCipher(node.cipher)!=SsCipher::Unsupported) {
         stream.encrypted = true;
         stream.ssCipher=shadowsocksCipher(node.cipher);
         stream.masterKey = evpBytesToKey(node.password, shadowsocksKeySize(stream.ssCipher));
-        if (!connectShadowsocks(node, host, port, stream.fd, stream.sendKey, stream.sendNonce, timeoutMs)) {
+        if (!connectShadowsocks(node, destination, port, stream.fd, stream.sendKey, stream.sendNonce, timeoutMs)) {
             error = "Shadowsocks connection or handshake failed";
             return false;
         }
@@ -2301,13 +2314,13 @@ bool openProxyStream(const ProxyNode& node, const std::string& host, int port, P
         if (stream.fd < 0) { error = "Cannot connect to Trojan server"; return false; }
         socketTimeout(stream.fd, timeoutMs);
         stream.trojan = std::make_unique<TrojanSession>(stream.fd);
-        if (!stream.trojan->start(node, host, port, false, error)) return false;
+        if (!stream.trojan->start(node, destination, port, false, error)) return false;
     } else if (node.type == "vmess") {
         stream.fd = connectUpstream(node.server, node.port, timeoutMs,DnsPurpose::Proxy);
         if (stream.fd < 0) { error = "Cannot connect to VMess server"; return false; }
         socketTimeout(stream.fd, timeoutMs);
         stream.vmess = std::make_unique<VmessSession>(stream.fd);
-        if (!stream.vmess->start(node, host, port, false, error)) return false;
+        if (!stream.vmess->start(node, destination, port, false, error)) return false;
     } else {
         error = node.type == "reject" ? "Connection rejected by routing policy" : "Unsupported outbound: " + node.type + " " + node.cipher;
         return false;
@@ -2334,7 +2347,7 @@ bool streamWrite(ProxyStream& stream, const char* data, size_t size)
 bool streamRead(ProxyStream& stream, std::vector<unsigned char>& output, bool nonblocking = false)
 {
     output.clear();
-    if (stream.vmess) return stream.vmess->read(output);
+    if (stream.vmess) return stream.vmess->read(output, nonblocking);
     if (stream.trojan) return stream.trojan->read(output, nonblocking);
     if (stream.encrypted) return shadowsocksReceive(stream.fd, stream.masterKey, stream.receivedSalt,
         stream.receiveKey, stream.receiveNonce, output,stream.ssCipher);
@@ -2385,7 +2398,7 @@ void relayStream(int client, ProxyStream& stream)
         if (remoteOpen && reads[1].revents != 0) {
             std::vector<unsigned char> plain;
             if (!streamRead(stream, plain, true)) {
-                if (stream.trojan && (errno == EAGAIN || errno == EWOULDBLOCK)) continue;
+                if ((stream.vmess || stream.trojan) && (errno == EAGAIN || errno == EWOULDBLOCK)) continue;
                 if (errno != 0) {
                     if (stream.vmess) coreLog("warning", errno == EBADMSG ? "VMess response authentication failed" :
                         errno == EOVERFLOW ? "VMess connection reached its nonce limit" : "VMess transport interrupted or timed out");

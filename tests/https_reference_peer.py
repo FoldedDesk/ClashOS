@@ -6,12 +6,13 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
 from vmess_reference_peer import Wire, decode_header, Mask, kdf
-from trojan_reference_peer import read_header
+from trojan_reference_peer import read_header, address as socks_address
 
 class Tunnel:
     def __init__(self, wire, kind, alter, fault):
         self.wire,self.kind,self.send_count,self.read_count=wire,kind,0,0
         self.response_header=False
+        target_host='192.0.2.9' if fault=='hosts' else 'wrong.test' if fault=='wronghost' else 'vmess.test'
         if kind.startswith('ss'):
             size=16 if kind=='ss-aes128' else 32
             algorithm=ChaCha20Poly1305 if kind=='ss-chacha' else AESGCM
@@ -22,16 +23,15 @@ class Tunnel:
             self.reader=algorithm(HKDF(algorithm=hashes.SHA1(),length=size,salt=salt,info=b'ss-subkey').derive(master[:size]))
             self.salt=bytes(range(size));self.writer=algorithm(HKDF(algorithm=hashes.SHA1(),length=size,salt=self.salt,info=b'ss-subkey').derive(master[:size]))
             address=self.receive()
-            host='wrong.test' if fault=='wronghost' else 'vmess.test'
-            assert address==b'\x03'+bytes([len(host)])+host.encode()+b'\x01\xbb'
+            assert address==socks_address(target_host,443)
         elif kind.startswith('vmess'):
-            self.command=decode_header(wire,alter,'wrong.test' if fault=='wronghost' else 'vmess.test')
+            self.command=decode_header(wire,alter,target_host)
             self.reader=AESGCM(self.command[17:33]);self.read_iv=self.command[1:17];self.read_mask=Mask(self.read_iv)
             digest=hashlib.sha256 if alter==0 else hashlib.md5
             self.key=digest(self.command[17:33]).digest()[:16];self.iv=digest(self.read_iv).digest()[:16]
             self.writer=AESGCM(self.key);self.mask=Mask(self.iv);self.alter=alter
         elif kind.startswith('trojan'):
-            read_header(wire, 'wrong.test' if fault=='wronghost' else 'vmess.test', password='probe-password')
+            read_header(wire,target_host,password='probe-password')
     def receive(self):
         if self.kind=='direct' or self.kind.startswith('trojan'):
             if self.wire.buffer:
@@ -110,6 +110,7 @@ def main():
         request=b''
         while b'\r\n\r\n' not in request:request+=drive(lambda:endpoint.read(4096))
         assert request.startswith(b'GET /probe?ok=1 HTTP/1.1\r\n')
+        if fault=='hosts':assert b'\r\nHost: vmess.test:443\r\n' in request
         code=b'503 Service Unavailable' if fault=='status' else b'204 No Content'
         response=b'HTTP/1.1 '+code+b'\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
         if fault=='slow':

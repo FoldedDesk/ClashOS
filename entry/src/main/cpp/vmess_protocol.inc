@@ -117,6 +117,8 @@ struct VmessSession {
     unsigned char responseAuth = 0;
     int security = 3;
     bool aead = true, responseReady = false, sentEof = false, receivedEof = false, raw = false;
+    VmBytes receiveInput, responsePrefix;
+    size_t receiveOffset=0, responseLength=65536, frameLength=65536, framePadding=0;
     explicit VmessSession(int fd) : transport(fd) {}
     bool makeHeader(const ProxyNode& node, const std::string& host, int port, bool udp, uint64_t timestamp,
         const VmBytes& random, VmBytes& wire) {
@@ -193,30 +195,53 @@ struct VmessSession {
         if (!transport.write(header)) { error = "Cannot write VMess request header"; return false; }
         return true;
     }
-    bool responseHeader() {
+    size_t available() const { return receiveInput.size()-receiveOffset; }
+    bool fill(size_t count,bool nonblocking) {
+        if(count>65535){errno=EPROTO;return false;}
+        while(available()<count) {
+            VmBytes part;
+            if(!(nonblocking?transport.tryReadSome(part):transport.readSome(part))) {
+                if(errno==0)errno=EPROTO;
+                return false;
+            }
+            if(receiveOffset){receiveInput.erase(receiveInput.begin(),receiveInput.begin()+receiveOffset);receiveOffset=0;}
+            vmAppend(receiveInput,part);
+        }
+        return true;
+    }
+    VmBytes take(size_t count) {
+        VmBytes result(receiveInput.begin()+receiveOffset,receiveInput.begin()+receiveOffset+count);receiveOffset+=count;
+        if(receiveOffset==receiveInput.size()){receiveInput.clear();receiveOffset=0;}
+        return result;
+    }
+    bool responseHeader(bool nonblocking=false) {
         VmBytes header;
-        if (aead) {
-            VmBytes encrypted(18), length;
-            if (!transport.exact(encrypted.data(), encrypted.size()) ||
-                !vmAead(false, vmKdf(responseKey, {vmBytes("AEAD Resp Header Len Key")}, 16),
-                    vmKdf(responseIv, {vmBytes("AEAD Resp Header Len IV")}, 12), {}, encrypted, length)) return false;
-            const size_t size = (length[0] << 8) | length[1];
-            if (size < 4 || size > 4096) { errno = EBADMSG; return false; }
-            encrypted.resize(size + 16);
-            if (!transport.exact(encrypted.data(), encrypted.size()) ||
-                !vmAead(false, vmKdf(responseKey, {vmBytes("AEAD Resp Header Key")}, 16),
-                    vmKdf(responseIv, {vmBytes("AEAD Resp Header IV")}, 12), {}, encrypted, header)) return false;
-            if (header.size() != static_cast<size_t>(4 + header[3])) { errno = EBADMSG; return false; }
-        } else {
-            VmBytes encrypted(4);
-            if (!transport.exact(encrypted.data(), 4) || !vmCfb(false, responseKey, responseIv, encrypted, header)) return false;
-            if (header[3] != 0) {
-                const size_t size = header[3]; encrypted.resize(4 + size);
-                if (!transport.exact(encrypted.data() + 4, size) || !vmCfb(false, responseKey, responseIv, encrypted, header)) return false;
+        if(responseLength==65536) {
+            if(!fill(aead?18:4,nonblocking))return false;
+            responsePrefix=take(aead?18:4);
+            if(aead) {
+                VmBytes length;
+                if(!vmAead(false,vmKdf(responseKey,{vmBytes("AEAD Resp Header Len Key")},16),
+                    vmKdf(responseIv,{vmBytes("AEAD Resp Header Len IV")},12),{},responsePrefix,length))return false;
+                const size_t size=(length[0]<<8)|length[1];
+                if(size<4||size>4096){errno=EBADMSG;return false;}
+                responseLength=size+16;
+            } else {
+                if(!vmCfb(false,responseKey,responseIv,responsePrefix,header))return false;
+                responseLength=header[3];
             }
         }
-        if (header[0] != responseAuth) { errno = EBADMSG; return false; }
-        responseReady = true; return true;
+        if(!fill(responseLength,nonblocking))return false;
+        VmBytes encrypted=take(responseLength);
+        if(aead) {
+            if(!vmAead(false,vmKdf(responseKey,{vmBytes("AEAD Resp Header Key")},16),
+                vmKdf(responseIv,{vmBytes("AEAD Resp Header IV")},12),{},encrypted,header))return false;
+        } else {
+            vmAppend(responsePrefix,encrypted);
+            if(!vmCfb(false,responseKey,responseIv,responsePrefix,header))return false;
+        }
+        if(header.size()!=static_cast<size_t>(4+header[3])||header[0]!=responseAuth){errno=EBADMSG;return false;}
+        responsePrefix.clear();responseReady=true;return true;
     }
     VmBytes nonce(const VmBytes& iv, uint32_t count) {
         VmBytes result(iv.begin(), iv.begin() + 12); result[0] = count >> 8; result[1] = count; return result;
@@ -250,28 +275,35 @@ struct VmessSession {
         if (raw) { sentEof = true; return transport.closeWrite(); }
         const unsigned char empty = 0; return chunk(&empty, 0);
     }
-    bool read(VmBytes& output) {
-        output.clear(); errno = 0;
-        if (receivedEof) return false;
-        if (!responseReady && !responseHeader()) { if (errno == 0) errno = EPROTO; return false; }
-        if (raw) return transport.readSome(output);
-        if (security != 5 && receiveCounter >= 65536) { errno = EOVERFLOW; return false; }
-        unsigned char bytes[2];
-        if (!transport.exact(bytes, 2)) { if (errno == 0) errno = EPROTO; return false; }
-        const size_t padding = security == 5 ? 0 : receiveMask.next() % 64;
-        const size_t length = static_cast<size_t>(((bytes[0] << 8) | bytes[1]) ^ receiveMask.next());
-        const size_t overhead = security == 5 ? 0 : 16;
-        if (length < padding + overhead) { errno = EBADMSG; return false; }
-        VmBytes encrypted(length);
-        if (!transport.exact(encrypted.data(), encrypted.size())) { if (errno == 0) errno = EPROTO; return false; }
-        encrypted.resize(length - padding);
-        if (security == 5) output = encrypted;
-        else if (!vmAead(false, vmBodyKey(responseKey, security), nonce(responseIv, receiveCounter), {}, encrypted, output, security == 4)) return false;
-        ++receiveCounter;
-        if (output.empty()) { receivedEof = true; errno = 0; return false; }
+    bool read(VmBytes& output,bool nonblocking=false) {
+        output.clear();errno=0;
+        if(receivedEof)return false;
+        if(!responseReady&&!responseHeader(nonblocking))return false;
+        if(raw) {
+            if(available()){output=take(std::min<size_t>(16384,available()));return true;}
+            return nonblocking?transport.tryReadSome(output):transport.readSome(output);
+        }
+        if(security!=5&&receiveCounter>=65536){errno=EOVERFLOW;return false;}
+        if(frameLength==65536) {
+            if(!fill(2,nonblocking))return false;
+            const auto bytes=take(2);
+            framePadding=security==5?0:receiveMask.next()%64;
+            frameLength=static_cast<size_t>(((bytes[0]<<8)|bytes[1])^receiveMask.next());
+            if(frameLength<framePadding+(security==5?0:16)){errno=EBADMSG;return false;}
+        }
+        if(!fill(frameLength,nonblocking))return false;
+        auto encrypted=take(frameLength);encrypted.resize(frameLength-framePadding);
+        if(security==5)output=std::move(encrypted);
+        else if(!vmAead(false,vmBodyKey(responseKey,security),nonce(responseIv,receiveCounter),{},encrypted,output,security==4))return false;
+        ++receiveCounter;frameLength=65536;
+        if(output.empty()){receivedEof=true;errno=0;return false;}
         return true;
     }
-    bool pending() const { return transport.pending(); }
+    bool pending() const {
+        const size_t needed=!responseReady?(responseLength==65536?(aead?18:4):responseLength):raw?1:frameLength==65536?2:frameLength;
+        return (!receivedEof&&available()>=needed)||transport.pending();
+    }
+
 };
 
 bool vmessCryptoSelfTest()

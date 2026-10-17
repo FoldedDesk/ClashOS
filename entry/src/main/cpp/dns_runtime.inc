@@ -253,8 +253,7 @@ DnsAnswer queryDns(const std::string& input,uint16_t type,DnsPurpose purpose,Hea
         }
     }
     if(config->useHosts&&purpose!=DnsPurpose::Bootstrap&&(type==1||type==28)&&(!options||options->servers.empty())) {
-        const DnsHost* selected=nullptr;
-        for(const auto& host:config->hosts)if((host.expression=="*"||host.pattern->matches(answer.name))&&(!selected||host.expression.size()>selected->expression.size()))selected=&host;
+        const DnsHost* selected=configuredDnsHost(*config,answer.name);
         if(selected) {
             answer.server="hosts";
             for(const auto& address:selected->addresses) {

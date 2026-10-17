@@ -1,6 +1,6 @@
 {
   "applicationName": "ClashOS",
-  "reviewedCoreVersion": "0.30",
+  "reviewedCoreVersion": "0.31",
   "objective": "实现 Clash Verge 的大部分功能，包括各类右键菜单，并提供可正常使用的 ClashOS。",
   "brandingDecision": "Follow the user's later explicit spelling correction: ClashOS.",
   "referenceInventory": [
@@ -47,7 +47,14 @@
         "Sharing settings GUI, right-click entry, password retention without read-back, stale revision guards and atomic listener/file rollback",
         "HTTP Host / fragmented TLS SNI / QUIC v1-v2 Initial domain sniffing before rule selection and dialing",
         "Per-protocol ports and destination rewrite, force/skip domain and CIDR exclusions; bounded TCP/QUIC reassembly with original-byte fallback",
-        "Strict typed sniffer controller PATCH and offline GUI validation, runtime toggle/editor and context menus with profile/revision guards"
+        "Strict typed sniffer controller PATCH and offline GUI validation, runtime toggle/editor and context menus with profile/revision guards",
+        "Configured hosts overrides apply to SS/VMess/Trojan TCP and UDP destinations; exact/wildcard precedence, aliases and enabled address families are consistent with DNS lookups",
+        "Hosts aliases and known literal addresses participate in domain/IP no-resolve routing without unsolicited DNS; cyclic/empty/unavailable-family mappings fail closed",
+        "Per-connection hosts/DNS snapshots preserve selected proxy mapping across profile changes; literal destinations retained for sniffer override-destination false",
+        "Incremental VMess response parsing retains AEAD/legacy header, length, masking, nonce and payload state across EAGAIN; partial replies and TLS control messages do not block later client writes",
+        "Independent OpenSSL/cryptography peers verify actual SS/VMess/Trojan TCP/UDP addresses, IPv6/aliases, TLS/WebSocket, HTTPS original Host/SNI, maximum SS datagrams and snapshot restoration",
+        "60 deterministic VMess partial-response duplex cases cover plain TCP, TLS, WebSocket, WebSocket/TLS, legacy/AEAD headers and AES-GCM/ChaCha20-Poly1305/none",
+        "HarmonyOS PC simulator Core 0.30/0.31 comparison: same .invalid mapped destination fails on old core, passes verified HTTPS via new HTTP/SOCKS, fails with use-hosts false and passes again after re-enabling"
       ],
       "remaining": [
         "Protocol and option breadth is below Mihomo",
@@ -69,7 +76,12 @@
         "entry/src/main/cpp/inbound_policy.inc",
         "entry/src/main/cpp/inbound_auth.inc",
         "entry/src/main/cpp/inbound_settings.inc",
-        "entry/src/main/ets/components/InboundSettingsDialog.ets"
+        "entry/src/main/ets/components/InboundSettingsDialog.ets",
+        "entry/src/main/cpp/dns_hosts.inc",
+        "entry/src/main/cpp/vmess_protocol.inc",
+        "tests/dns_hosts_test.inc",
+        "tests/hosts_reference_peer.py",
+        "tests/vmess_duplex_reference_peer.py"
       ]
     },
     {
@@ -249,8 +261,8 @@
     {
       "feature": "Daily browser connectivity",
       "status": "verified_with_limits",
-      "latest": "Current HAP includes document-aware reference completion. Actual emulator edits validated, saved, reopened and exported; exported bytes match exactly the selected edits. Original saved profile, rule mode, all 11 group selections, ports 7890/7891 and original window restored; owned test profile and public files removed. Explicit Google HTTPS through the device proxy returns 204 / CONNECT 200 / TLS verification 0.",
-      "limit": "Latest check is an explicit HTTP-proxy request; prior simulator browser evidence proves system-proxy browser use. Intermittent TLS failures on api.github.com remain unresolved through both HTTP and SOCKS. A same-node independent-core control could not listen in this environment because socket binds were denied, so the failure has not been attributed to either core or upstream. Device TUN authorization/background survival remains unproven."
+      "latest": "Core 0.31 installed. Actual old/new simulator hosts control uses a reserved .invalid CONNECT destination and preserves the real public website TLS name: HTTP/SOCKS success, disabled-mapping failure and re-enabled success. Original saved profile, rule mode, all 11 group selections, ports 7890/7891 and original window restored; private test payloads and owned forward removed. Explicit Google HTTPS via the restored device proxy returns 204 / CONNECT 200 / TLS verification 0.",
+      "limit": "Device hosts proof covers the selected SS node with HTTP and SOCKS TCP. VMess/Trojan/UDP and partial-response duplex use independent host-side peers with shipping crypto backends; device-specific validation remains separate. Ordinary api.github.com domain connections still fail intermittently; pinned-address controls passed but cause is not proven. Some host test wrappers cannot access HDC forwards. Full native suite cannot run here because host loopback binding is denied. Device TUN authorization/background survival remains unproven."
     },
     {
       "feature": "Domain sniffing",
@@ -288,6 +300,6 @@
     "Advanced style assets and full Mihomo schema/alias/downloaded-provider completion"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 10:38:04 UTC",
+  "reviewedAt": "2026-10-17 11:18:16 UTC",
   "verificationNotes": "Status summary only. Historical device screenshots and per-run records are archived outside the source repository. Reproduce host checks with tests/README.md; device and true VPN validation remain separate."
 }

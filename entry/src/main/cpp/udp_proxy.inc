@@ -304,8 +304,8 @@ struct UdpFlow {
             if (!ok || streamStopping.load()) break;
             if (buffered || watches[0].revents) {
                 VmBytes packet;
-                const bool read = vmess ? vmess->read(packet) : trojan->readDatagram(packet, true);
-                if (!read) { if (trojan && (errno == EMSGSIZE || errno == EAGAIN || errno == EWOULDBLOCK)) continue; streamError.store(errno); break; }
+                const bool read = vmess ? vmess->read(packet, true) : trojan->readDatagram(packet, true);
+                if (!read) { if (errno == EAGAIN || errno == EWOULDBLOCK || (trojan && errno == EMSGSIZE)) continue; streamError.store(errno); break; }
                 if (packet.size() <= UDP_MAX_PACKET - (trojan ? 3 : 0)) {
                     { std::lock_guard<std::mutex> lock(streamMutex); if (streamOutput.size() >= 64) streamOutput.pop_front(); streamOutput.push_back(std::move(packet)); }
                     notify(notifyWorker);
@@ -339,10 +339,14 @@ std::string udpFlowKey(const UdpTarget& target, const ProxyNode& node)
 std::unique_ptr<UdpFlow> openUdpFlow(int owner, const UdpTarget& target, const ProxyNode& node)
 {
     if (!supportsUdp(node)) return nullptr;
+    DestinationDnsScope dnsScope(node);
     auto flow = std::make_unique<UdpFlow>();
     flow->node = node;
     flow->originalHost = target.host; flow->host = udpDestinationHost(target); flow->routeHost = udpRouteHost(target);
     flow->port = target.port;
+    std::string destination,error;
+    if(!proxyDestination(node,flow->host,destination,error)){coreLog("warning","UDP hosts mapping failed: "+error);return nullptr;}
+    flow->host=destination;
     if (node.type == "ss") {
         const size_t keySize=shadowsocksKeySize(shadowsocksCipher(node.cipher));
         flow->master = evpBytesToKey(node.password,keySize);
@@ -523,7 +527,9 @@ void handleUdpAssociate(int client, const std::string& requestedHost, int reques
             warn("UDP " + target.host + ":" + std::to_string(target.port) + " is disabled or unsupported via " + node.name);
             return;
         }
-        if (node.type == "ss" && packet.size() - 3 - target.headerSize + shadowsocksAddress(udpDestinationHost(target), target.port).size() > UDP_MAX_PACKET - shadowsocksKeySize(shadowsocksCipher(node.cipher)) - 16) return;
+        std::string destination,error;
+        if(!proxyDestination(node,udpDestinationHost(target),destination,error)){warn("UDP hosts mapping failed: "+error);return;}
+        if (node.type == "ss" && packet.size() - 3 - target.headerSize + shadowsocksAddress(destination, target.port).size() > UDP_MAX_PACKET - shadowsocksKeySize(shadowsocksCipher(node.cipher)) - 16) return;
         if (node.type == "vmess" && (packet.size() == 3 + target.headerSize || packet.size() - 3 - target.headerSize > 1966)) {
             warn("VMess UDP payload must be between 1 and 1966 bytes"); return;
         }
