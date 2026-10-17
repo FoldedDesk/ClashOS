@@ -26,3 +26,24 @@ come from `tests/fixtures/vmess`. The only DNS fixture answer is
 On the HarmonyOS PC emulator, shell processes cannot bind network sockets and
 the app sandbox rejects executing external Go binaries. Neither restriction is
 disabled by these tests. The production HAP continues to use its own native core.
+
+For device execution, the removable test application supplies its own
+`OsSs2022Server`: CryptoFramework AES/ChaCha/ECB and an independent ArkTS frame
+codec. Only the standard BLAKE3 primitive is shared; its answers are independently
+checked against Rust. `POST /test-admin/ss2022/start` runs 25 known-answer checks
+then listens on 18894–18899 (three methods and AES one/two identity-key cases).
+Use `device-os-client.yaml`. Allowed TCP targets are public loopback HTTP18088
+and TLS18098, and UDP returns the fixed DNS answer without a direct DNS listener.
+The existing TLS fixture provides `/ss2022-probe` (204), using the public test CA.
+State/counters are available at `/test-admin/ss2022/state`; `/stop` closes owned
+listeners. No endpoint accepts real node credentials or arbitrary destinations.
+
+Before each UDP route check, call `DELETE /clahsos/dns/cache` on the client core;
+the next answer must have `cached: false`, not reuse another selected node's answer.
+Verify UI node selection, right-click editing, invalid/wrong key rejection, TLS
+CA/hostname failures, cold persistence and actual origin counters. Restore the
+original runtime, every group/selection, files and window; remove owned public
+profiles/downloads, screenshots, extra forwards and the removable test app.
+
+Regenerate the OS primitive vectors with:
+`python tests/ss2022_reference_peer.py --crypto-vectors` (stdout JSON).

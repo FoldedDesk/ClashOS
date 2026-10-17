@@ -1,0 +1,89 @@
+{
+  "port": 18890,
+  "socks-port": 18891,
+  "mode": "rule",
+  "hosts": {
+    "vmess.test": "127.0.0.1",
+    "wrong.test": "127.0.0.1"
+  },
+  "dns": {
+    "enable": false,
+    "use-hosts": true,
+    "nameserver": [
+      "udp://127.0.0.1:18553#SS2022 public"
+    ]
+  },
+  "proxies": [
+    {
+      "name": "SS2022 AES128",
+      "type": "ss",
+      "server": "127.0.0.1",
+      "port": 18894,
+      "cipher": "2022-blake3-aes-128-gcm",
+      "password": "AAECAwQFBgcICQoLDA0ODw==",
+      "udp": true
+    },
+    {
+      "name": "SS2022 AES256",
+      "type": "ss",
+      "server": "127.0.0.1",
+      "port": 18895,
+      "cipher": "2022-blake3-aes-256-gcm",
+      "password": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "udp": true
+    },
+    {
+      "name": "SS2022 ChaCha",
+      "type": "ss",
+      "server": "127.0.0.1",
+      "port": 18896,
+      "cipher": "2022-blake3-chacha20-poly1305",
+      "password": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "udp": true
+    },
+    {
+      "name": "SS2022 AES128 EIH",
+      "type": "ss",
+      "server": "127.0.0.1",
+      "port": 18897,
+      "cipher": "2022-blake3-aes-128-gcm",
+      "password": "AAECAwQFBgcICQoLDA0ODw==:HyAhIiMkJSYnKCkqKywtLg==",
+      "udp": true
+    },
+    {
+      "name": "SS2022 AES256 EIH",
+      "type": "ss",
+      "server": "127.0.0.1",
+      "port": 18898,
+      "cipher": "2022-blake3-aes-256-gcm",
+      "password": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=:HyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4=",
+      "udp": true
+    },
+    {
+      "name": "SS2022 AES128 EIH2",
+      "type": "ss",
+      "server": "127.0.0.1",
+      "port": 18899,
+      "cipher": "2022-blake3-aes-128-gcm",
+      "password": "AAECAwQFBgcICQoLDA0ODw==:HyAhIiMkJSYnKCkqKywtLg==:Pj9AQUJDREVGR0hJSktMTQ==",
+      "udp": true
+    }
+  ],
+  "proxy-groups": [
+    {
+      "name": "SS2022 public",
+      "type": "select",
+      "proxies": [
+        "SS2022 AES128",
+        "SS2022 AES256",
+        "SS2022 ChaCha",
+        "SS2022 AES128 EIH",
+        "SS2022 AES256 EIH",
+        "SS2022 AES128 EIH2"
+      ]
+    }
+  ],
+  "rules": [
+    "MATCH,SS2022 public"
+  ]
+}

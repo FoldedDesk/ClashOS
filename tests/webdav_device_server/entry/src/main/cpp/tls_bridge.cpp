@@ -20,6 +20,7 @@
 #include <thread>
 #include <vector>
 #include <cerrno>
+#include <blake3.h>
 
 namespace {
 struct Bridge {
@@ -115,6 +116,13 @@ struct Bridge {
 std::string stringArg(napi_env env,napi_value value){size_t size=0;if(napi_get_value_string_utf8(env,value,nullptr,0,&size)!=napi_ok||size>16384)return {};std::vector<char> bytes(size+1);if(napi_get_value_string_utf8(env,value,bytes.data(),bytes.size(),&size)!=napi_ok)return {};return {bytes.data(),size};}
 napi_value start(napi_env env,napi_callback_info info){size_t count=2;napi_value args[2]{};napi_get_cb_info(env,info,&count,args,nullptr,nullptr);napi_value result;napi_get_boolean(env,count==2&&bridge.start(stringArg(env,args[0]),stringArg(env,args[1])),&result);return result;}
 napi_value stop(napi_env env,napi_callback_info){bridge.stop();napi_value result;napi_get_undefined(env,&result);return result;}
-napi_value init(napi_env env,napi_value exports){napi_property_descriptor methods[]={{"start",nullptr,start,nullptr,nullptr,nullptr,napi_default,nullptr},{"stop",nullptr,stop,nullptr,nullptr,nullptr,napi_default,nullptr}};napi_define_properties(env,exports,2,methods);return exports;}
+napi_value blake3(napi_env env,napi_callback_info info){
+    size_t count=3;napi_value args[3]{};napi_get_cb_info(env,info,&count,args,nullptr,nullptr);napi_typedarray_type type;size_t size=0,offset=0;void* input=nullptr;napi_value buffer;int32_t length=0;
+    if(count!=3||napi_get_typedarray_info(env,args[0],&type,&size,&input,&buffer,&offset)!=napi_ok||type!=napi_uint8_array||size>1024||napi_get_value_int32(env,args[2],&length)!=napi_ok||(length!=16&&length!=32)){napi_throw_error(env,nullptr,"public fixture hash input");return nullptr;}
+    const auto context=stringArg(env,args[1]);if(!context.empty()&&context!="shadowsocks 2022 session subkey"&&context!="shadowsocks 2022 identity subkey"){napi_throw_error(env,nullptr,"public fixture hash context");return nullptr;}
+    blake3_hasher hash;if(context.empty())blake3_hasher_init(&hash);else blake3_hasher_init_derive_key(&hash,context.c_str());blake3_hasher_update(&hash,input,size);
+    void* bytes=nullptr;napi_value result;napi_create_arraybuffer(env,length,&bytes,&buffer);blake3_hasher_finalize(&hash,static_cast<uint8_t*>(bytes),length);napi_create_typedarray(env,napi_uint8_array,length,buffer,0,&result);return result;
+}
+napi_value init(napi_env env,napi_value exports){napi_property_descriptor methods[]={{"start",nullptr,start,nullptr,nullptr,nullptr,napi_default,nullptr},{"stop",nullptr,stop,nullptr,nullptr,nullptr,napi_default,nullptr},{"blake3",nullptr,blake3,nullptr,nullptr,nullptr,napi_default,nullptr}};napi_define_properties(env,exports,3,methods);return exports;}
 }
 NAPI_MODULE(vlessfixture,init)

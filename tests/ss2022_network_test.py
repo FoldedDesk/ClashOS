@@ -25,11 +25,11 @@ http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 checks = 0
 
 
-def api(port, path, data=None):
+def api(port, path, data=None, method=None):
     request = urllib.request.Request('http://127.0.0.1:' + str(port) + path,
                                      data=None if data is None else json.dumps(data).encode(),
                                      headers={'Content-Type': 'application/json'},
-                                     method='GET' if data is None else 'PUT')
+                                     method=method or ('GET' if data is None else 'PUT'))
     with http.open(request, timeout=8) as response:
         content = response.read()
         return json.loads(content) if content else {}
@@ -95,6 +95,7 @@ with tempfile.TemporaryDirectory(prefix='clashos-ss2022-network-') as temp:
                 result = subprocess.run(command + [target], capture_output=True, text=True, timeout=15)
                 check(result.returncode == 60, 'SS2022 forwarding must preserve target certificate/hostname rejection')
             query = urllib.parse.urlencode({'name': 'udp-fixture.test', 'type': 'A', 'server': 'udp://127.0.0.1:18553#SS2022 public'}, quote_via=urllib.parse.quote)
+            api(19090, '/clahsos/dns/cache', method='DELETE')
             answer = api(19090, '/dns/query?' + query)
             check(answer.get('Status') == 0 and not answer.get('cached') and any(record.get('data') == '192.0.2.44' for record in answer.get('Answer', [])),
                   'Actual SS2022 UDP DNS must reach the independent resolver without a cached or direct substitute')

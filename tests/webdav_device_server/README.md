@@ -49,6 +49,11 @@ separately verify accepted CA chains, SNI, malformed frames and HTTPS destinatio
 
 ## Subscription device verification
 
+Shadowsocks 2022 device and independent-server verification is documented in
+[`../fixtures/ss2022/README.md`](../fixtures/ss2022/README.md). The test app's
+`/test-admin/ss2022/start`, `/state` and `/stop` routes use only public fixed
+keys and loopback HTTP/TLS/DNS fixtures.
+
 `GET /test-admin/subscription/source` supplies a public local starter profile with HTTP **18890**, SOCKS disabled,
 the public `subscription-fixture` / `public-proxy-password` account and a hosts override for `subscription.device.test`.
 After importing it, add `http://subscription.device.test:18088/public-subscription.yaml` with a blank name,

@@ -3,7 +3,6 @@
 
 Public synthetic keys only. No production framing helpers or app configuration.
 """
-import base64
 import json
 import os
 from pathlib import Path
@@ -257,5 +256,22 @@ def main():
     conn.close()
 
 
+def crypto_vectors():
+    result = []
+    for method in ['2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm', '2022-blake3-chacha20-poly1305']:
+        size = 16 if 'aes-128' in method else 32
+        key, salt, nonce = bytes(range(size)), bytes(range(128, 128 + size)), bytes(range(24))
+        plain = b'public SS2022 crypto vector'
+        result.append({'method': method, 'key': key.hex(), 'salt': salt.hex(), 'subkey': derive(key, salt).hex(),
+                       'identity': derive(key, salt, True).hex(), 'hash': blake3(key).digest(16).hex(), 'plain': plain.hex(),
+                       'sealed': seal(method, derive(key, salt), bytes(12), plain).hex(), 'nonce': nonce.hex(),
+                       'udp': seal(method, key, nonce, plain).hex() if 'chacha' in method else '',
+                       'block': AES.new(key, AES.MODE_ECB).encrypt(bytes(16)).hex() if 'chacha' not in method else ''})
+    print(json.dumps(result, indent=2))
+
+
 if __name__ == '__main__':
-    main()
+    if sys.argv[1:] == ['--crypto-vectors']:
+        crypto_vectors()
+    else:
+        main()

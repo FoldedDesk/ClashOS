@@ -10,6 +10,7 @@ import { probeNetworkHttps } from './NetworkFixtureProbe';
 import { HttpIngressFixtureServer } from './HttpIngressFixtureServer';
 import { OsSsReference } from './OsSsReference';
 import { SubscriptionFixture } from './SubscriptionFixture';
+import { OsSs2022Server } from './OsSs2022Server';
 
 interface FixtureFile { text: string; revision: number; }
 
@@ -27,6 +28,7 @@ export default class EntryAbility extends UIAbility {
   private httpIngress: HttpIngressFixtureServer = new HttpIngressFixtureServer();
   private ssReference: OsSsReference = new OsSsReference();
   private subscription: SubscriptionFixture = new SubscriptionFixture();
+  private ss2022: OsSs2022Server = new OsSs2022Server();
 
   onCreate(): void {
     this.server.on('connect', (client: socket.TCPSocketConnection): void => this.accept(client));
@@ -39,6 +41,7 @@ export default class EntryAbility extends UIAbility {
     this.vless.stop();
     this.httpIngress.stop();
     this.ssReference.stop();
+    this.ss2022.stop();
     this.clients.forEach((client: socket.TCPSocketConnection) => client.close().catch(() => {}));
     this.server.close().catch(() => {}); this.files.clear();
   }
@@ -82,6 +85,9 @@ export default class EntryAbility extends UIAbility {
   }
 
   private handle(client: socket.TCPSocketConnection, method: string, path: string, headers: Record<string, string>, body: string): void {
+    if (path === '/test-admin/ss2022/start' && method === 'POST') { this.vless.start(this.context); this.ss2022.start(this.context).then(() => this.respond(client, 200, this.ss2022.state())).catch((error: Error) => this.respond(client, 500, JSON.stringify({ error: error.message }))); return; }
+    if (path === '/test-admin/ss2022/state') { this.respond(client, 200, this.ss2022.state()); return; }
+    if (path === '/test-admin/ss2022/stop' && method === 'POST') { this.ss2022.stop().then(() => this.respond(client, 200, this.ss2022.state())); return; }
     if (path === '/test-admin/subscription/state') { this.respond(client, 200, this.subscription.state()); return; }
     if (path.startsWith('/test-admin/subscription/mode/')) {
       const mode: string = path.substring('/test-admin/subscription/mode/'.length);

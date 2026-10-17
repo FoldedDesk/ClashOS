@@ -70,6 +70,7 @@ export class VlessFixtureServer {
       if (!state.header && !state.websocket && state.wire[0] === 71) {
         const request = this.decoder.decodeToString(state.wire); const end: number = request.indexOf('\r\n\r\n');
         if (end < 0) { if (state.wire.length > 16384) this.reject(client, state); return; }
+        if (tls && request.startsWith('GET /ss2022-probe HTTP/1.1\r\n')) { this.forward['ss2022-https'] = (this.forward['ss2022-https'] || 0) + 1; state.closing = true; await client.send(this.encoder.encodeInto('HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n')); await client.close(); return; }
         const lines = request.substring(0, end).split('\r\n'); const headers: Record<string, string> = {};
         lines.slice(1).forEach((line: string) => { const colon = line.indexOf(':'); if (colon > 0) headers[line.substring(0, colon).toLowerCase()] = line.substring(colon + 1).trim(); });
         if (lines[0] !== 'GET /vless-device HTTP/1.1' || headers['upgrade']?.toLowerCase() !== 'websocket' || !headers['sec-websocket-key']) { this.reject(client, state); return; }
