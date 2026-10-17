@@ -1,4 +1,5 @@
 import { AppearanceSettings } from '../theme/AppearanceTypes';
+import { GroupIconBackup } from './GroupIconBackup';
 
 export const BACKUP_LIMIT: number = 32 * 1024 * 1024;
 
@@ -10,6 +11,7 @@ export interface BackupRestoreSelection {
   appearance: boolean;
   expectedGlobals?: BackupGlobals;
   expectedAppearance?: AppearanceSettings;
+  expectedGroupIcons?: string;
   expectedNames?: string;
 }
 export interface BackupRestoreResult { count: number; globals: boolean; appearance: boolean; reloaded: boolean; }
@@ -42,6 +44,7 @@ export interface ProfileBackup {
   profiles: BackupProfile[];
   globals?: BackupGlobals;
   appearance?: AppearanceSettings;
+  groupIcons?: GroupIconBackup;
 }
 
 export interface BackupPreviewRow {

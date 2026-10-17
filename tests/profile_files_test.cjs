@@ -36,6 +36,9 @@ const load=name=>{
   if(name==='./ClashNativeCore')return{ClashNativeCore:NativeValidator};
   if(name==='./BackupTypes')return loadProduction('BackupTypes.ets');
   if(name==='./AppearanceStore')return loadProduction('AppearanceStore.ets');
+  if(name==='./GroupIconStore')return loadProduction('GroupIconStore.ets');
+  if(name==='./GroupIconTypes')return loadProduction('GroupIconTypes.ets');
+  if(name==='./GroupIconBackup')return loadProduction('GroupIconBackup.ets');
   if(name==='../theme/AppearanceTypes')return loadProduction('../theme/AppearanceTypes.ets');
   if(name==='./TextCodec')return loadProduction('TextCodec.ets');
   if(name==='./RuleEditsTypes')return loadProduction('RuleEditsTypes.ets');

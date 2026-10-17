@@ -1,6 +1,6 @@
 {
   "applicationName": "ClashOS",
-  "reviewedCoreVersion": "0.28",
+  "reviewedCoreVersion": "0.29",
   "objective": "实现 Clash Verge 的大部分功能，包括各类右键菜单，并提供可正常使用的 ClashOS。",
   "brandingDecision": "Follow the user's later explicit spelling correction: ClashOS.",
   "referenceInventory": [
@@ -83,11 +83,11 @@
         "Proxy-group configuration icon/hidden metadata with safe HTTP(S) rendering and fallback",
         "Right-click persistent per-group icon overrides: native presets, image URLs and local images normalized by ImageKit",
         "Private atomic preferences and owned PNG copies, stale revision guards, canceled import cleanup and shared-image reference retention",
-        "Actual system-picker import, offline restart after source deletion, configuration reload, shared card/navigation icons, dark and narrow layouts verified on the emulator"
+        "Actual system-picker import, offline restart after source deletion, configuration reload, shared card/navigation icons, dark and narrow layouts verified on the emulator",
+        "Appearance backups include icon preferences and shared private PNG resources; opt-in restoration replaces overrides while older archives preserve them"
       ],
       "remaining": [
-        "Native equivalent for custom styles",
-        "Local group-icon preferences and imported PNG resources are not yet included in appearance backups"
+        "Native equivalent for custom styles"
       ],
       "source": [
         "entry/src/main/ets/theme/VergeTheme.ets",
@@ -188,7 +188,10 @@
         "Application-managed controller keys excluded from archives; credentials already present in raw imported YAML remain part of that profile",
         "Local Stored/Deflate/data-descriptor ZIP import/export with CRC and bounded in-memory decoding",
         "Current upstream profile/index/extension/sequence/selection mapping; native lossless sidecar including caches and metadata",
-        "Actual system picker selective restoration, opt-in globals, live migrated groups/rules, subscription update and independent exported ZIP reimport verified"
+        "Actual system picker selective restoration, opt-in globals, live migrated groups/rules, subscription update and independent exported ZIP reimport verified",
+        "Optional appearance backup includes proxy-group presets, URLs and deduplicated owned PNG copies in JSON/ZIP/WebDAV archives",
+        "Canonical bounded image decoding and dimensions, reference/path validation, stale snapshots and atomic last-step icon commit with complete profile/global/appearance rollback on failures",
+        "Actual emulator appearance-only backup/restore and right-click ZIP export/picker import; independent PNG inspection and cold restart after deleting public sources verified"
       ],
       "remaining": [
         "Actual Clash Verge desktop restoration and older archive variants",
@@ -203,7 +206,9 @@
         "entry/src/main/ets/components/BackupManagerDialog.ets",
         "entry/src/main/ets/service/BackupZip.ets",
         "entry/src/main/ets/service/BackupArchiveCodec.ets",
-        "entry/src/main/cpp/backup_codec.inc"
+        "entry/src/main/cpp/backup_codec.inc",
+        "entry/src/main/ets/service/GroupIconBackup.ets",
+        "entry/src/main/ets/service/GroupIconStore.ets"
       ]
     },
     {
@@ -227,7 +232,7 @@
     {
       "feature": "Daily browser connectivity",
       "status": "verified_with_limits",
-      "latest": "Core 0.28 installed and restarted after actual custom icon rendering and offline local-image persistence checks. Original saved profile, rule mode, all 11 group selections, ports 7890/7891, system-following appearance and enabled system proxy restored. Explicit Google HTTPS through the device proxy returns 204 / CONNECT 200 / TLS verification 0. Core 0.27 independent sniffer and earlier authenticated LAN checks remain covered by production regressions.",
+      "latest": "Core 0.29 installed after actual appearance-only icon backup/restore, independent exported ZIP PNG inspection, system-picker ZIP reimport and offline cold restart. The final HAP also restores the exported image correctly. Original saved profile, rule mode, all 11 group selections, ports 7890/7891, system-following appearance and enabled system proxy restored. Explicit Google HTTPS through the device proxy returns 204 / CONNECT 200 / TLS verification 0. Test-created archives and public inputs removed; original backups preserved.",
       "limit": "Latest check is an explicit HTTP-proxy request. Earlier simulator browser screenshots prove system-proxy browser use. Closing the app with TUN is not proven on this simulator."
     },
     {
@@ -265,6 +270,6 @@
     "Additional appearance customization, full-schema/reference completion"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 08:42:18 UTC",
+  "reviewedAt": "2026-10-17 09:00:19 UTC",
   "verificationNotes": "Status summary only. Historical device screenshots and per-run records are archived outside the source repository. Reproduce host checks with tests/README.md; device and true VPN validation remain separate."
 }

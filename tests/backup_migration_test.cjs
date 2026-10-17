@@ -3,14 +3,15 @@ const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),vm=r
 const ts=require('./test_env.cjs')();
 const root=path.resolve(__dirname,'../entry/src/main/ets'),directory=fs.mkdtempSync(path.join(os.tmpdir(),'clashos-backup-v2-'));
 const descriptors=new Map(),modules=new Map(),storage=new Map();
-let checks=0,maxWrite=Infinity,failGlobalScript=false,failAppearanceWrite=false,failResource=false,failTokens=false,failPublishOnce=false,callback,appliedMode=-1,picked=[],lastBundle;
+let checks=0,maxWrite=Infinity,failGlobalScript=false,failAppearanceWrite=false,failResource=false,failTokens=false,failPublishOnce=false,failIconWrite=false,failIconRename=false,callback,appliedMode=-1,picked=[],lastBundle;
 const check=(value,label)=>{assert(value,label);checks++;};
 const fileIo={OpenMode:{READ_ONLY:0,CREATE:64,READ_WRITE:2,TRUNC:512},accessSync:p=>fs.existsSync(p),statSync:p=>typeof p==='number'?fs.fstatSync(p):fs.statSync(p),
  mkdirSync:(p,recursive)=>fs.mkdirSync(p,{recursive}),listFileSync:p=>fs.readdirSync(p),readTextSync:p=>fs.readFileSync(p,'utf8'),
+ mkdtempSync:p=>{assert(p.endsWith('XXXXXX'));return fs.mkdtempSync(p.slice(0,-6));},rmdirSync:p=>fs.rmdirSync(p),
  openSync:(p,flags)=>{const fd=fs.openSync(p,(flags&64)?'w+':'r');descriptors.set(fd,p);return{fd};},closeSync:f=>{const fd=typeof f==='number'?f:f.fd;fs.closeSync(fd);descriptors.delete(fd);},
  readSync:(fd,buffer)=>fs.readSync(fd,new Uint8Array(buffer),0,Math.min(buffer.byteLength,7),null),
- writeSync:(fd,buffer)=>{const p=descriptors.get(fd);if(failGlobalScript&&p.endsWith('/.global-script.js.tmp')||failAppearanceWrite&&p.endsWith('/appearance.json.tmp')||failResource&&p.includes('.provider-'))throw Error('injected file failure');return fs.writeSync(fd,Buffer.from(buffer).subarray(0,maxWrite));},
- fsyncSync:fd=>fs.fsyncSync(fd),renameSync:(a,b)=>fs.renameSync(a,b),unlinkSync:p=>fs.unlinkSync(p)};
+ writeSync:(fd,buffer)=>{const p=descriptors.get(fd);if(failGlobalScript&&p.endsWith('/.global-script.js.tmp')||failAppearanceWrite&&p.endsWith('/appearance.json.tmp')||failResource&&p.includes('.provider-')||failIconWrite&&p.includes('/group-icons/'))throw Error('injected file failure');return fs.writeSync(fd,Buffer.from(buffer).subarray(0,maxWrite));},
+ fsyncSync:fd=>fs.fsyncSync(fd),renameSync:(a,b)=>{if(failIconRename&&b.endsWith('/group-icons.json'))throw Error('injected icon rename failure');fs.renameSync(a,b);},unlinkSync:p=>fs.unlinkSync(p)};
 class Validator{
  protectFile(fd){fs.fchmodSync(fd,0o600);}
  validate(content){if(content.includes('INVALID_CONFIG'))throw Error('invalid config');}
@@ -46,6 +47,7 @@ const same=(a,b)=>a.merge===b.merge&&a.script===b.script;
 (async()=>{let appearance;try{
  const {ProfileStore}=load('service/ProfileStore.ets'),{BackupStore}=load('service/BackupStore.ets'),{AppearanceController}=load('service/AppearanceController.ets'),{BackupRestoreCoordinator}=load('service/BackupRestoreCoordinator.ets');
  const profiles=new ProfileStore(context),backups=new BackupStore(context,profiles),protector=new Validator();
+ const {GroupIconStore}=load('service/GroupIconStore.ets'),icons=new GroupIconStore(directory,fd=>protector.protectFile(fd));
  const active=profiles.create('active','rules: [MATCH,DIRECT]\n'),portable=profiles.create('portable','rules: [MATCH,DIRECT]\n');
  const excluded=profiles.create('excluded','rules: [MATCH,DIRECT]\n','https://example.invalid/private?token=SYNTHETIC-EXCLUDED');
  const current={merge:'# CURRENT\nrules: [MATCH,DIRECT]\n',script:'function main(c){return c;} // current'},archived={merge:'# ARCHIVE_GLOBAL\nrules: [MATCH,REJECT]\n',script:'function main(c){return c;} // archived'};
@@ -65,7 +67,7 @@ const same=(a,b)=>a.merge===b.merge&&a.script===b.script;
  const local=backups.importText(text);check(backups.read(local)===text&&(fs.statSync(path.join(directory,'backups',local.name)).mode&0o777)===0o600,'V2 archive storage is private and byte-exact');
  const corruptions=[a=>a.version=3,a=>{a.version=1;},a=>a.globals.merge=3,a=>a.globals.script='x'.repeat(262145),a=>a.appearance.mode='unknown',a=>a.appearance.accent='#GGGGGG',a=>{a.profiles=[];delete a.globals;delete a.appearance;},a=>a.globals=null];
  for(const mutate of corruptions){const a=JSON.parse(text);mutate(a);assert.throws(()=>profiles.inspectBackup(JSON.stringify(a)));checks++;}
- const old=JSON.parse(text);old.version=1;delete old.globals;delete old.appearance;check(profiles.inspectBackup(JSON.stringify(old)).rows[0].valid,'Old archives import without settings');
+ const old=JSON.parse(text);old.version=1;delete old.globals;delete old.appearance;delete old.groupIcons;check(profiles.inspectBackup(JSON.stringify(old)).rows[0].valid,'Old archives import without settings');
  assert.throws(()=>profiles.inspectBackup(JSON.stringify(old),true));checks++;
  profiles.replaceBackupGlobals(archived,current);appearance.save('light','#3478F6');
  const dependent=JSON.parse(text);dependent.profiles[0].content+='# REQUIRES_ARCHIVE_GLOBAL\n';
@@ -74,7 +76,7 @@ const same=(a,b)=>a.merge===b.merge&&a.script===b.script;
  const renamed=JSON.parse(text);renamed.profiles[0].script='ASSERT_RESTORE_NAME';const namePreview=profiles.inspectBackup(JSON.stringify(renamed),true);
  check(namePreview.rows[0].restoreName==='portable（恢复）'&&namePreview.rows[0].valid&&lastBundle.profileName==='portable（恢复）','Preview and script validation use the actual future copy name');
  const staged=profiles.restoreBackup(JSON.stringify(dependent),[0],true)[0];check(profiles.read(staged).includes('REQUIRES_ARCHIVE_GLOBAL')&&same(profiles.backupGlobals(),current),'Profile staging can use archive globals without changing live globals');profiles.remove(staged);
- const coordinator=new BackupRestoreCoordinator(profiles,appearance);
+ const coordinator=new BackupRestoreCoordinator(profiles,appearance,undefined,icons);
  const selection=(globals=true,looks=true)=>{const p=profiles.inspectBackup(text,globals);return{profiles:[0],globals,appearance:looks,expectedGlobals:p.currentGlobals,expectedAppearance:appearance.savedSettings(),expectedNames:p.namesSnapshot};};
  let calls=0,applied=current,failFirst=false,changeGlobal=false,changeAppearance=false;
  const runtime={validate:g=>profiles.validateBackupGlobals(active,g),reload:async()=>{calls++;applied=profiles.backupGlobals();if(calls===1&&changeGlobal)profiles.replaceBackupGlobals(applied,{merge:'# NEWER\n',script:''});if(calls===1&&changeAppearance)appearance.save('dark','#199A70');if(calls===1&&failFirst)throw Error('injected lost reload acknowledgement');}};
@@ -115,12 +117,45 @@ const same=(a,b)=>a.merge===b.merge&&a.script===b.script;
  const contextual=JSON.parse(text);contextual.globals.script+=' // REQUIRES_PORTABLE_CONTEXT';
  const contextualResult=await freshCoordinator.restore(JSON.stringify(contextual),{profiles:[0],globals:true,appearance:false});
  check(contextualResult.count===1&&lastBundle.profileName==='portable','Fresh profile-plus-settings restore validates scripts in the selected profile context');
- const offlineCoordinator=new BackupRestoreCoordinator(profiles,appearance,active);
+ const offlineCoordinator=new BackupRestoreCoordinator(profiles,appearance,active,icons);
  const offlineResult=await offlineCoordinator.restore(settingsOnly,{profiles:[],globals:true,appearance:false});
  check(offlineResult.globals&&!offlineResult.reloaded&&lastBundle.profileName===active.name,'Offline restores validate against the selected profile rather than the default');
  profiles.replaceBackupGlobals(archived,current);
  const empty=JSON.parse(settingsOnly);empty.globals={merge:' \n',script:' \t'};const emptyText=JSON.stringify(empty);const emptyPlan=profiles.inspectBackup(emptyText,true);await coordinator.restore(emptyText,{profiles:[],globals:true,appearance:false,expectedGlobals:emptyPlan.currentGlobals,expectedNames:emptyPlan.namesSnapshot},runtime);check(profiles.globalMergeText()===''&&profiles.globalScriptText()==='','Explicitly restoring empty global settings clears previous overrides');
  check(profiles.read(active)==='rules: [MATCH,DIRECT]\n'&&profiles.read(excluded)==='rules: [MATCH,DIRECT]\n','Migration never rewrites existing configuration source');
+ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=','base64');
+ const localIcon=icons.stageImage(Uint8Array.from(png).buffer);icons.save(icons.snapshot('portable icon'),localIcon);icons.save(icons.snapshot('shared icon'),localIcon);
+ appearance.save('dark','#8B5CF6');
+ const iconText=profiles.createBackup({profileIds:[portable.id],includeGlobals:true,includeAppearance:true}),iconArchive=JSON.parse(iconText);
+ check(iconArchive.groupIcons.assets.length===1&&iconArchive.groupIcons.entries.length===2,'The production profile backup includes deduplicated local PNG resources with appearance');
+ const excludedIcons=JSON.parse(profiles.createBackup({profileIds:[portable.id],includeGlobals:false,includeAppearance:false}));check(excludedIcons.groupIcons===undefined,'Excluding appearance also excludes icon preferences and assets');
+ icons.save(icons.snapshot('portable icon'),'https://newer.example.test/icon.svg');icons.save(icons.snapshot('shared icon'),'');appearance.save('light','#3478F6');
+ const expectedIcons=()=>({profiles:[],globals:false,appearance:true,expectedAppearance:appearance.savedSettings(),expectedGroupIcons:icons.revision()});
+ const unchangedIcons=icons.revision();await coordinator.restore(iconText,{profiles:[],globals:true,appearance:false});
+ check(icons.revision()===unchangedIcons,'Globals-only restoration leaves icon overrides byte-exact');
+ const oldV2=JSON.parse(iconText);delete oldV2.groupIcons;await coordinator.restore(JSON.stringify(oldV2),expectedIcons());
+ check(icons.revision()===unchangedIcons,'Older v2 appearance archives preserve current icon overrides');appearance.save('light','#3478F6');
+ await coordinator.restore(iconText,expectedIcons());
+ const importedIcon=icons.load().find(e=>e.name==='portable icon').source;
+ check(icons.load().length===2&&icons.load().every(e=>e.source===importedIcon)&&fs.readFileSync(icons.displaySource(importedIcon).replace('file://','')).equals(png),'Appearance-only migration restores portable image bytes and shared references');
+ appearance.save('light','#3478F6');
+ const staleIconSelection=expectedIcons();icons.save(icons.snapshot('newer icon'),'builtin:home');
+ await assert.rejects(()=>coordinator.restore(iconText,staleIconSelection),/图标设置已变化/);checks++;
+ check(appearance.savedSettings().mode==='light'&&icons.load().some(e=>e.name==='newer icon'),'A stale icon preview is rejected before changing appearance');
+ const iconNames=profiles.backupNamesSnapshot(),iconGlobals=profiles.backupGlobals(),iconRevision=icons.revision(),assetDirectory=path.join(directory,'group-icons');
+ const assetsBefore=JSON.stringify(fs.readdirSync(assetDirectory).sort());
+ for(const kind of ['image-write','index-rename']){
+  failIconWrite=kind==='image-write';failIconRename=kind==='index-rename';
+  await assert.rejects(()=>coordinator.restore(iconText,{...expectedIcons(),profiles:[0],globals:true},runtime));checks++;
+  failIconWrite=failIconRename=false;
+  check(icons.revision()===iconRevision&&JSON.stringify(fs.readdirSync(assetDirectory).sort())===assetsBefore&&profiles.backupNamesSnapshot()===iconNames&&same(profiles.backupGlobals(),iconGlobals)&&appearance.savedSettings().mode==='light','Icon import failure rolls back profiles, globals, palette and staged resources: '+kind);
+ }
+ let iconReloads=0;const racingRuntime={validate:g=>profiles.validateBackupGlobals(active,g),reload:async()=>{if(iconReloads++===0)icons.save(icons.snapshot('concurrent'),'builtin:balance');}};
+ await assert.rejects(()=>coordinator.restore(iconText,{...expectedIcons(),profiles:[0],globals:true},racingRuntime),/图标设置已变化/);checks++;
+ check(icons.load().some(e=>e.name==='concurrent')&&appearance.savedSettings().mode==='light'&&profiles.backupNamesSnapshot()===iconNames&&same(profiles.backupGlobals(),iconGlobals),'Concurrent icon changes during asynchronous reload survive rollback of the other restored settings');
+ for(const mutate of [a=>{delete a.appearance;},a=>a.groupIcons.assets=[],a=>a.groupIcons.entries[0].source='local:../escape.png']){
+  const bad=JSON.parse(iconText);mutate(bad);assert.throws(()=>profiles.inspectBackup(JSON.stringify(bad)));checks++;
+ }
  check(descriptors.size===0,'All migration descriptors are released');
  console.log(`Backup migration scenarios passed: ${checks} (production services; native/OS APIs shimmed, real temporary filesystem)`);
 }finally{appearance?.dispose();fs.rmSync(directory,{recursive:true,force:true});}})().catch(e=>{console.error(e);process.exitCode=1;});

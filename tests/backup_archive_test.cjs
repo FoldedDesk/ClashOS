@@ -35,6 +35,8 @@ const modules=new Map();function load(name){
  same(JSON.parse(codec.decode(encoded)),first,'ClashOS sidecar preserves a lossless native ZIP roundtrip');
  const cached=JSON.parse(JSON.stringify(first));cached.profiles[0].resources=[{suffix:'.provider-0011223344556677.cache',data:Buffer.from([0,128,255,10]).toString('base64')}];cached.profiles[0].pinned=true;
  same(JSON.parse(codec.decode(codec.encode(cached))),cached,'Native ZIP roundtrip retains opaque cache bytes and metadata independently of Verge members');
+ cached.groupIcons={version:1,entries:[{name:'public icon',source:'local:icon-AbC123/icon.png'}],assets:[{name:'icon-AbC123/icon.png',data:Buffer.from('public PNG bytes').toString('base64')}]};
+ same(JSON.parse(codec.decode(codec.encode(cached))).groupIcons,cached.groupIcons,'ZIP sidecar preserves icon preferences and image resources without inventing desktop settings');
  const noSidecar=writeZip(entries.filter(e=>e.name!=='clashos-backup.json')),vergeRoundtrip=JSON.parse(codec.decode(noSidecar));
  same(vergeRoundtrip.profiles.map(x=>[x.name,x.content,x.script,x.sourceUrl,x.sequence]),first.profiles.map(x=>[x.name,x.content,x.script,x.sourceUrl,x.sequence]),'Verge-compatible members work without relying on the native sidecar');
  cp.execFileSync('python3',['-c',`import zipfile,json,sys

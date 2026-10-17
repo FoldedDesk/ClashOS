@@ -5,7 +5,7 @@ const ts=require('./test_env.cjs')(),root=path.resolve(__dirname,'../entry/src/m
 const directory=fs.mkdtempSync(path.join(os.tmpdir(),'clashos-group-icons-')),descriptors=new Map(),cache=new Map();
 let checks=0,maxWrite=Infinity,failWrite=false,failSync=false,failRename=false,failProtect=false,race;
 let selected=[],failDecode=false,failPack=false,imageSize={width:128,height:64},sources=0,pixels=0,packers=0,decodedSize;
-const png=Buffer.from([137,80,78,71,13,10,26,10,1,2,3,4]);
+const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=','base64');
 const check=(v,t)=>{assert(v,t);checks++;};
 const flags={CREATE:64,READ_WRITE:2,TRUNC:512,EXCL:128,READ_ONLY:0};
 const fileIo={OpenMode:flags,accessSync:p=>fs.existsSync(p),statSync:p=>typeof p==='number'?fs.fstatSync(p):fs.statSync(p),readTextSync:p=>fs.readFileSync(p,'utf8'),
@@ -22,7 +22,7 @@ const image={createImageSource:()=>{sources++;return{getImageInfo:async()=>{if(f
 function load(name){const filename=path.join(root,name);if(cache.has(filename))return cache.get(filename).exports;const m={exports:{}};cache.set(filename,m);
  const requireShim=specifier=>{if(specifier==='@kit.CoreFileKit')return{fileIo,fileUri:{FileUri:class{constructor(uri){this.path=uri.replace('file://','');}}},picker:{DocumentSelectOptions:class{},DocumentViewPicker:class{async select(){return selected;}}}};
   if(specifier==='@kit.ImageKit')return{image};if(specifier==='@kit.AbilityKit')return{};
-  if(specifier==='@kit.ArkTS')return{util:{TextEncoder:class{encodeInto(t){return new TextEncoder().encode(t);}}}};
+  if(specifier==='@kit.ArkTS')return{util:{TextEncoder:class{encodeInto(t){return new TextEncoder().encode(t);}},Base64Helper:class{encodeToStringSync(b){return Buffer.from(b).toString('base64');}decodeSync(s){return Uint8Array.from(Buffer.from(s,'base64'));}}}};
   if(specifier.startsWith('.'))return load(path.relative(root,path.resolve(path.dirname(filename),specifier+'.ets')));throw Error('Unexpected import '+specifier);};
  const code=ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
  vm.runInNewContext(code,{module:m,exports:m.exports,require:requireShim,Uint8Array,ArrayBuffer,Set,JSON,Math:Object.assign(Object.create(Math),{random:()=>.5}),Date:{now:()=>1792225000000}});return m.exports;}
@@ -77,5 +77,47 @@ const protect=fd=>{if(failProtect)throw Error('protect failure');fs.fchmodSync(f
  }
  fs.writeFileSync(input,Buffer.alloc(2*1024*1024+1));await assert.rejects(()=>pickGroupIcon({},store),/2 MB/);checks++;
  check(descriptors.size===0,'Large input rejected before decode without leaking the picker descriptor');
+ const {validateGroupIconBackup,decodeIconAsset}=load('service/GroupIconBackup.ets');
+ const portable=store.stageImage(Uint8Array.from(png).buffer);
+ store.save(store.snapshot('组😀'),portable);store.save(store.snapshot('shared'),portable);
+ store.save(store.snapshot('preset'),'builtin:shield');store.save(store.snapshot('link'),'https://icons.example.test/a.svg');
+ const backup=store.exportBackup(),backupText=JSON.stringify(backup);
+ check(backup.entries.length===4&&backup.assets.length===1&&backup.assets[0].data===png.toString('base64'),'Portable archives deduplicate shared PNGs and preserve preset/URL choices');
+ check(!backupText.includes(directory)&&!backupText.includes('file://'),'Icon archives contain relative owned references and no device paths');
+ const target=path.join(directory,'fresh');fs.mkdirSync(target);const destination=new GroupIconStore(target,protect);
+ const previousImage=destination.stageImage(Uint8Array.from(png).buffer),previousPath=destination.displaySource(previousImage).replace('file://','');
+ destination.save(destination.snapshot('old-only'),previousImage);
+ const restored=destination.restoreBackup(backup,destination.revision()),restoredSource=restored.find(e=>e.name==='组😀').source;
+ check(restoredSource!==portable&&restoredSource===restored.find(e=>e.name==='shared').source,'Restoration allocates independent local resources while retaining shared references');
+ const restoredPath=destination.displaySource(restoredSource).replace('file://','');
+ check(fs.readFileSync(restoredPath).equals(png)&&(fs.statSync(restoredPath).mode&0o777)===0o600&&!fs.existsSync(previousPath),'Successful whole-table restore keeps exact private bytes and releases obsolete images');
+ const loaded=new GroupIconStore(target,protect);check(loaded.load().length===4&&loaded.load().find(e=>e.name==='组😀').source===restoredSource,'A fresh store reopens restored preferences without archive or original picker access');
+ destination.restoreBackup({version:1,entries:[],assets:[]},destination.revision());
+ check(destination.load().length===0&&!fs.existsSync(restoredPath),'Explicit empty icon backup clears local overrides and releases the final image');
+ const baseline=store.revision(),assetDirectory=path.join(directory,'group-icons'),assetNames=()=>JSON.stringify(fs.readdirSync(assetDirectory).sort()),beforeAssets=assetNames();
+ for(const kind of ['write','sync','rename','protect']){
+  failWrite=kind==='write';failSync=kind==='sync';failRename=kind==='rename';failProtect=kind==='protect';
+  assert.throws(()=>store.restoreBackup(backup,baseline));checks++;
+  failWrite=failSync=failRename=failProtect=false;
+  check(store.revision()===baseline&&assetNames()===beforeAssets&&descriptors.size===0,'Failed icon restoration retains original preferences/images and cleans staging: '+kind);
+ }
+ store.save(store.snapshot('newer'),'builtin:home');assert.throws(()=>store.restoreBackup(backup,baseline),/已变化/);checks++;
+ const newer=store.revision();check(assetNames()===beforeAssets,'A stale restore is rejected before allocating new images');
+ race=()=>fs.writeFileSync(index,JSON.stringify({version:1,entries:[...store.load(),{name:'during-restore',source:'builtin:balance'}]}));
+ assert.throws(()=>store.restoreBackup(backup,newer),/已变化/);checks++;
+ check(store.load().some(e=>e.name==='during-restore')&&assetNames()===beforeAssets,'A preference change during final writing is retained and imported staging is removed');
+ for(const mutate of [b=>b.version=2,b=>b.entries=null,b=>b.assets=null,b=>b.entries=Array(257).fill({name:'x',source:'builtin:home'}),
+  b=>b.assets=[],b=>b.assets.push(b.assets[0]),b=>b.assets[0].name='../settings.json',b=>b.assets[0].data='bad',
+  b=>b.assets[0].data+='\n',b=>b.entries[0].source='local:../settings.json',b=>b.assets[0].name='icon-AbC123/icon.png',
+  b=>b.assets[0].data=Buffer.alloc(512*1024+1).toString('base64')]){
+  const invalid=JSON.parse(backupText);mutate(invalid);assert.throws(()=>validateGroupIconBackup(invalid));checks++;
+ }
+ for(const width of [0,257,0xffffffff]){const bad=Buffer.from(png);bad.writeUInt32BE(width,16);assert.throws(()=>decodeIconAsset(bad.toString('base64')));checks++;}
+ const noncanonical=png.toString('base64').slice(0,-2)+'J=';assert.throws(()=>decodeIconAsset(noncanonical));checks++;
+ const largeAsset=Buffer.alloc(512*1024);png.copy(largeAsset);const tooMany={version:1,entries:[],assets:[]};
+ for(let i=0;i<25;i++){const name='icon-'+String(i).padStart(6,'0')+'/icon.png';tooMany.entries.push({name:'bounded-'+i,source:'local:'+name});tooMany.assets.push({name,data:largeAsset.toString('base64')});}
+ assert.throws(()=>validateGroupIconBackup(tooMany),/16 MB/);checks++;
+ const missing=store.displaySource(portable).replace('file://','');fs.unlinkSync(missing);assert.throws(()=>store.exportBackup());checks++;
+ check(descriptors.size===0,'Missing source assets fail export without leaking descriptors or fabricating a backup');
  console.log(`Group icon scenarios passed: ${checks} (production stores/picker; OS/image codecs modeled, temporary filesystem real)`);
 }finally{fs.rmSync(directory,{recursive:true,force:true});}})().catch(e=>{console.error(e);process.exitCode=1;});

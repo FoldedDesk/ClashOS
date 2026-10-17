@@ -741,6 +741,7 @@ struct Index {
       this.dialogController = new CustomDialogController({
         builder: BackupManagerDialog({ store: new BackupStore(context, this.profileStore), profiles: this.profileStore,
           readAppearance: () => this.appearanceController?.savedSettings(),
+          readGroupIconRevision: () => this.groupIconStore?.revision(),
           onRestore: (text: string, selection: BackupRestoreSelection): Promise<BackupRestoreResult> => this.restoreBackup(text, selection) }),
         autoCancel: false, customStyle: true
       });
@@ -763,9 +764,11 @@ struct Index {
     const locks: string[] = this.profiles.map((p: ClashProfile) => p.id);
     this.updatingProfiles = locks.length ? locks : ['.backup']; this.mutationVersion++;
     try {
-      const result: BackupRestoreResult = await new BackupRestoreCoordinator(store, this.appearanceController, active).restore(text, selection, runtime);
+      const result: BackupRestoreResult = await new BackupRestoreCoordinator(store, this.appearanceController, active, this.groupIconStore).restore(text, selection, runtime);
       if (result.appearance && this.appearanceController) {
         this.appearanceMode = this.appearanceController.settings.mode; this.accentInput = this.appearanceController.settings.accent; this.appearanceError = '';
+        try { this.groupIcons = this.groupIconStore?.load() ?? []; ++this.groupIconRevision; }
+        catch (_) { this.appearanceError = '外观已恢复，代理组图标暂时无法读取'; }
       }
       this.reloadProfiles();
       const restored: string[] = [];

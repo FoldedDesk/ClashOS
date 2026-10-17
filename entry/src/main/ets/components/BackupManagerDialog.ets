@@ -13,6 +13,7 @@ export struct BackupManagerDialog {
   store?: BackupStore;
   profiles?: ProfileStore;
   readAppearance: () => AppearanceSettings | undefined = (): AppearanceSettings | undefined => undefined;
+  readGroupIconRevision: () => string | undefined = (): string | undefined => undefined;
   onRestore: (text: string, selection: BackupRestoreSelection) => Promise<BackupRestoreResult> = async (_text: string, _selection: BackupRestoreSelection): Promise<BackupRestoreResult> => { throw new Error('恢复服务不可用'); };
   @State remoteMode: boolean = false;
   @State localEntries: BackupEntry[] = [];
@@ -45,6 +46,7 @@ export struct BackupManagerDialog {
   private pendingUpload: boolean = false;
   private expectedGlobals?: BackupGlobals;
   private expectedAppearance?: AppearanceSettings;
+  private expectedGroupIcons?: string;
   private expectedNames: string = '';
   private client?: WebDavClient;
   private clientKey: string = '';
@@ -144,8 +146,10 @@ export struct BackupManagerDialog {
     this.globalSummary = preview.archive.globals ? `YAML：${preview.archive.globals.merge ? `${utf8Bytes(preview.archive.globals.merge).length} 字节` : '空，将清除现有扩展'}；脚本：${preview.archive.globals.script ? `${utf8Bytes(preview.archive.globals.script).length} 字节` : '空，将清除现有脚本'}` : '';
     const appearance: AppearanceSettings | undefined = preview.archive.appearance;
     this.appearanceSummary = appearance ? `${appearance.mode === 'system' ? '跟随系统' : appearance.mode === 'dark' ? '深色' : '浅色'} · ${appearance.accent}` : '';
+    if (preview.archive.groupIcons) this.appearanceSummary += ` · ${preview.archive.groupIcons.entries.length} 个代理组图标（替换本机覆盖）`;
     this.expectedGlobals = preview.currentGlobals; this.expectedNames = preview.namesSnapshot;
     try { this.expectedAppearance = this.readAppearance(); } catch (_) { this.expectedAppearance = undefined; }
+    try { this.expectedGroupIcons = this.readGroupIconRevision(); } catch (_) { this.expectedGroupIcons = undefined; }
     this.selected = preview.rows.filter((row: BackupPreviewRow) => row.valid).map((row: BackupPreviewRow) => row.index);
     this.previewReady = true;
   }
@@ -165,7 +169,7 @@ export struct BackupManagerDialog {
     this.perform('正在恢复配置…', async (): Promise<void> => {
       if (this.profiles === undefined) throw new Error('配置目录不可用');
       const result: BackupRestoreResult = await this.onRestore(this.pendingText, { profiles: this.selected, globals: this.restoreGlobals, appearance: this.restoreAppearance,
-        expectedGlobals: this.expectedGlobals, expectedAppearance: this.expectedAppearance, expectedNames: this.expectedNames });
+        expectedGlobals: this.expectedGlobals, expectedAppearance: this.expectedAppearance, expectedGroupIcons: this.expectedGroupIcons, expectedNames: this.expectedNames });
       this.previewing = false; this.pendingText = ''; this.previewRows = []; this.selected = [];
       const parts: string[] = [];
       if (result.count > 0) parts.push(`${result.count} 份配置副本`);
@@ -295,7 +299,7 @@ export struct BackupManagerDialog {
       Row({ space: 10 }) {
         Checkbox({ name: 'backup-appearance' }).select(this.includeAppearance).selectedColor(this.theme.primary).enabled(this.busy.length === 0)
           .accessibilityText('备份外观').onChange((checked: boolean) => this.includeAppearance = checked);
-        Text('包含外观：颜色模式与主题色').fontSize(13).fontColor(this.theme.text).layoutWeight(1);
+        Text('包含外观：颜色模式、主题色与代理组图标（含本机图片）').fontSize(13).fontColor(this.theme.text).layoutWeight(1);
       }.width('100%');
       Row({ space: 10 }) {
         Blank(); this.action('返回备份列表', () => this.creating = false);

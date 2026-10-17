@@ -2,6 +2,7 @@ import { ProfileStore, ClashProfile } from './ProfileStore';
 import { AppearanceController } from './AppearanceController';
 import { AppearanceSettings } from '../theme/AppearanceTypes';
 import { BackupGlobals, BackupRestoreSelection, BackupRestoreResult } from './BackupTypes';
+import { GroupIconStore } from './GroupIconStore';
 
 export interface BackupRuntime {
   validate: (globals: BackupGlobals) => void;
@@ -12,8 +13,9 @@ export class BackupRestoreCoordinator {
   private profiles: ProfileStore;
   private appearance?: AppearanceController;
   private active?: ClashProfile;
-  constructor(profiles: ProfileStore, appearance?: AppearanceController, active?: ClashProfile) {
-    this.profiles = profiles; this.appearance = appearance; this.active = active;
+  private icons?: GroupIconStore;
+  constructor(profiles: ProfileStore, appearance?: AppearanceController, active?: ClashProfile, icons?: GroupIconStore) {
+    this.profiles = profiles; this.appearance = appearance; this.active = active; this.icons = icons;
   }
   private sameGlobals(a: BackupGlobals, b: BackupGlobals): boolean { return a.merge === b.merge && a.script === b.script; }
   private sameAppearance(a: AppearanceSettings, b: AppearanceSettings): boolean { return a.mode === b.mode && a.accent === b.accent; }
@@ -24,6 +26,10 @@ export class BackupRestoreCoordinator {
     if (selection.profiles.some((i: number) => !Number.isInteger(i) || i < 0 || i >= preview.rows.length || !preview.rows[i].valid) ||
       new Set(selection.profiles).size !== selection.profiles.length) throw new Error('请选择可以加载的配置');
     if (selection.appearance && (!preview.archive.appearance || !this.appearance)) throw new Error('此备份不包含外观，或当前外观服务不可用');
+    const restoreIcons: boolean = selection.appearance && preview.archive.groupIcons !== undefined;
+    if (restoreIcons && !this.icons) throw new Error('当前图标服务不可用，无法恢复备份中的代理组图标');
+    const previousIcons: string = restoreIcons ? this.icons!.revision() : '';
+    if (restoreIcons && selection.expectedGroupIcons !== undefined && previousIcons !== selection.expectedGroupIcons) throw new Error('图标设置已变化，请重新预览备份');
     if (selection.expectedGlobals && !this.sameGlobals(selection.expectedGlobals, preview.currentGlobals)) throw new Error('全局扩展已变化，请重新预览备份');
     if (selection.expectedNames !== undefined && selection.expectedNames !== preview.namesSnapshot) throw new Error('配置列表已变化，请重新预览备份');
     const previousGlobals: BackupGlobals = preview.currentGlobals;
@@ -51,6 +57,9 @@ export class BackupRestoreCoordinator {
         appearanceAttempted = true;
         this.appearance.save(preview.archive.appearance.mode, preview.archive.appearance.accent);
       }
+      // Last synchronous commit: a failed icon import leaves the old index/images
+      // intact, so earlier profile/global/appearance steps can still be rolled back.
+      if (restoreIcons) this.icons!.restoreBackup(preview.archive.groupIcons!, previousIcons);
       return { count: created.length, globals: selection.globals, appearance: selection.appearance, reloaded: runtimeAttempted };
     } catch (error) {
       const problems: string[] = [];

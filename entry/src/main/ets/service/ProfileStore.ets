@@ -11,6 +11,8 @@ import { BackupArchiveCodec } from './BackupArchiveCodec';
 import { BACKUP_LIMIT, BACKUP_RESOURCE_PATTERN, BackupProfile, BackupResource, BackupPreview, BackupPreviewRow, ProfileBackup, BackupGlobals, BackupCreateOptions } from './BackupTypes';
 import { AppearanceStore } from './AppearanceStore';
 import { appearanceSettings } from '../theme/AppearanceTypes';
+import { GroupIconStore } from './GroupIconStore';
+import { validateGroupIconBackup } from './GroupIconBackup';
 
 export interface ClashProfile {
   id: string;
@@ -472,7 +474,10 @@ export class ProfileStore {
     });
     const backup: ProfileBackup = { format: 'ClashOS.profile-backup', version: options ? 2 : 1, createdAt: new Date().toISOString(), profiles: entries };
     if (options?.includeGlobals) backup.globals = this.backupGlobals();
-    if (options?.includeAppearance) backup.appearance = new AppearanceStore(this.context.filesDir, (fd: number) => this.validator.protectFile(fd)).load();
+    if (options?.includeAppearance) {
+      backup.appearance = new AppearanceStore(this.context.filesDir, (fd: number) => this.validator.protectFile(fd)).load();
+      backup.groupIcons = new GroupIconStore(this.context.filesDir, (fd: number) => this.validator.protectFile(fd)).exportBackup();
+    }
     const text: string = JSON.stringify(backup);
     if (utf8Bytes(text).length > BACKUP_LIMIT) throw new Error('备份超过 32 MB');
     return text;
@@ -488,6 +493,10 @@ export class ProfileStore {
       !Array.isArray(archive.profiles) || archive.profiles.length > 500 ||
       (archive.profiles.length === 0 && (archive.version !== 2 || (archive.globals === undefined && archive.appearance === undefined)))) throw new Error('备份格式或版本不受支持');
     if (archive.version === 1 && (archive.globals !== undefined || archive.appearance !== undefined)) throw new Error('旧版备份不能包含全局设置');
+    if (archive.groupIcons !== undefined) {
+      if (archive.version !== 2 || archive.appearance === undefined) throw new Error('代理组图标必须随外观备份');
+      archive.groupIcons = validateGroupIconBackup(archive.groupIcons);
+    }
     if (archive.migrationNotes !== undefined && (!Array.isArray(archive.migrationNotes) || archive.migrationNotes.length > 16 ||
       archive.migrationNotes.some((note: string) => typeof note !== 'string' || utf8Bytes(note).length > 2048))) throw new Error('备份迁移说明无效');
     if (archive.globals !== undefined) {
