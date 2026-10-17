@@ -1,0 +1,8 @@
+{
+  "source": "https://publicsuffix.org/list/public_suffix_list.dat",
+  "version": "2026-10-16_09-29-46_UTC",
+  "commit": "91b4bd846240a84afb33695d5a51adcbc4cfd9ca",
+  "sha256": "b43e0e238914ff7c50f5f9356aca4996e763a77b129cdb059b27538ad1668ac8",
+  "license": "MPL-2.0",
+  "modifications": "Original data unchanged; rules.inc adds RFC 3492 A-label aliases."
+}

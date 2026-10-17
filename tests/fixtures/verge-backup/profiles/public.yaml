@@ -1,0 +1,11 @@
+# PUBLIC ZIP 😀
+port: 7890
+socks-port: 7891
+proxies:
+  - {name: Public old, type: direct}
+  - {name: Public kept, type: direct}
+proxy-groups:
+  - {name: Public group, type: select, proxies: [Public old, Public kept, DIRECT]}
+rules:
+  - DOMAIN,before.invalid,REJECT
+  - MATCH,DIRECT

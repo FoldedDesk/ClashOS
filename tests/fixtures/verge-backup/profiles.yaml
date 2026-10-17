@@ -1,0 +1,21 @@
+current: public-local
+items:
+  - {uid: Merge, type: merge, file: Merge.yaml}
+  - {uid: Script, type: script, file: Script.js}
+  - {uid: public-merge, type: merge, file: public-merge.yaml}
+  - {uid: public-script, type: script, file: public-script.js}
+  - {uid: public-rules, type: rules, file: public-rules.yaml}
+  - {uid: public-proxies, type: proxies, file: public-proxies.yaml}
+  - {uid: public-groups, type: groups, file: public-groups.yaml}
+  - uid: public-local
+    type: local
+    name: clashos-zip-public-local
+    file: public.yaml
+    selected: [{name: Public group, now: Public added}]
+    option: {merge: public-merge, script: public-script, rules: public-rules, proxies: public-proxies, groups: public-groups}
+  - uid: public-remote
+    type: remote
+    name: clashos-zip-public-remote
+    file: public-remote.yaml
+    url: https://example.invalid/public-subscription
+    option: {merge: public-merge, script: public-script, rules: public-rules, proxies: public-proxies, groups: public-groups, update_interval: 60, allow_auto_update: true}

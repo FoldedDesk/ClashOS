@@ -1,0 +1,1 @@
+{"payload": ["exact.test", "+.suffix.test", ".subonly.test", "*.single.test", "api.*.wild.test", "*.nested.*.test", "+.例子.测试", "*.例子.测试"]}

@@ -1,0 +1,12 @@
+{
+  "color": [
+    {
+      "name": "app_background",
+      "value": "#EFEFEF"
+    },
+    {
+      "name": "brand_primary",
+      "value": "#3478F6"
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+# Public parser fixture. All hosts, UUIDs and passwords below are synthetic.
+# This file is test input; the application does not import it on startup.
+port: 0
+socks-port: 0
+mixed-port: 0
+mode: rule
+log-level: info
+ipv6: true
+proxies:
+  - {name: 'SS AES128 示例', type: ss, server: ss.fixture.invalid, port: 443, cipher: aes-128-gcm, password: PUBLIC-TEST-ONLY, udp: true}
+  - {name: 'SS AES256 示例', type: ss, server: ss.fixture.invalid, port: 443, cipher: aes-256-gcm, password: 'PUBLIC,TEST:#', udp: true}
+  - {name: 'SS ChaCha 示例', type: ss, server: ss.fixture.invalid, port: 443, cipher: chacha20-ietf-poly1305, password: PUBLIC-TEST-ONLY, udp: true}
+  - name: 'VMess WS 示例'
+    type: vmess
+    server: vmess.fixture.invalid
+    port: 443
+    uuid: 00112233-4455-4677-8899-aabbccddeeff
+    alterId: 0
+    cipher: auto
+    network: ws
+    tls: true
+    servername: vmess.fixture.invalid
+    ws-opts: {path: /public-test, headers: {Host: vmess.fixture.invalid}}
+    udp: true
+  - {name: 'Trojan 示例', type: trojan, server: trojan.fixture.invalid, port: 443, password: PUBLIC-TEST-ONLY, sni: trojan.fixture.invalid, udp: true}
+proxy-providers:
+  public-inline:
+    type: inline
+    payload: [{name: '公开直连节点', type: direct}]
+proxy-groups:
+  - name: '🔰 公开选择'
+    type: select
+    proxies: ['SS AES128 示例', 'SS AES256 示例', 'SS ChaCha 示例', 'VMess WS 示例', 'Trojan 示例', '自动选择', '故障转移', '均衡', DIRECT, REJECT]
+    use: [public-inline]
+  - {name: 自动选择, type: url-test, proxies: ['SS AES128 示例', DIRECT], url: 'https://example.com/', interval: 300, tolerance: 50}
+  - {name: 故障转移, type: fallback, proxies: ['Trojan 示例', DIRECT], url: 'https://example.com/', interval: 300}
+  - {name: 均衡, type: load-balance, strategy: consistent-hashing, proxies: ['SS AES256 示例', DIRECT], url: 'https://example.com/', interval: 300}
+rule-providers:
+  public-domains: {type: inline, behavior: domain, payload: ['+.fixture.test']}
+rules:
+  - 'DOMAIN,blocked.fixture.test,REJECT'
+  - 'DOMAIN-SUFFIX,example.com,🔰 公开选择'
+  - 'RULE-SET,public-domains,DIRECT'
+  - 'IP-CIDR,192.0.2.0/24,DIRECT,no-resolve'
+  - 'IP-CIDR6,2001:db8::/32,DIRECT,no-resolve'
+  - 'MATCH,🔰 公开选择'
+dns:
+  enable: true
+  ipv6: true
+  nameserver: [192.0.2.53]
+hosts:
+  hosts.fixture.test: ['192.0.2.10', '2001:db8::10']

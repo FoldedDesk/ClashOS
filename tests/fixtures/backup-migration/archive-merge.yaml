@@ -1,0 +1,2 @@
+hosts:
+  backup.global.fixture.test: 192.0.2.60

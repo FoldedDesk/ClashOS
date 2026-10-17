@@ -1,0 +1,154 @@
+import { VergePalette } from '../theme/VergeTheme';
+import { ConfigCodeEditor } from './ConfigCodeEditor';
+import { ConfigEditorController } from '../service/ConfigEditorController';
+@CustomDialog
+export struct ProfileEditorDialog {
+  @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
+  controller?: CustomDialogController;
+  title: string = '编辑配置';
+  initialName: string = '';
+  initialContent: string = '';
+  onSave: (name: string, content: string) => Promise<void> = async (_name: string, _content: string): Promise<void> => {};
+  onValidate: (name: string, content: string) => void = (_name: string, _content: string): void => {};
+  @State name: string = '';
+  @State content: string = '';
+  @State error: string = '';
+  @State saving: boolean = false;
+  @State editorReady: boolean = false;
+  @State validation: string = '';
+  private editor: ConfigEditorController = new ConfigEditorController();
+
+  aboutToAppear(): void {
+    this.name = this.initialName;
+    this.content = this.initialContent;
+  }
+
+  private async save(): Promise<void> {
+    if (this.saving || !this.editorReady) return;
+    this.saving = true;
+    this.error = '';
+    try {
+      this.content = await this.editor.text();
+      await this.onSave(this.name, this.content);
+      this.controller?.close();
+    } catch (error) {
+      this.error = (error as Error).message || '无法保存配置';
+      this.editor.markError(this.error).catch(() => {});
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  private async validate(): Promise<void> {
+    if (this.saving || !this.editorReady) return;
+    this.saving = true; this.error = ''; this.validation = '';
+    try { this.content = await this.editor.text(); this.onValidate(this.name, this.content); this.validation = '原生配置校验通过'; }
+    catch (error) { this.error = (error as Error).message; this.editor.markError(this.error).catch(() => {}); }
+    finally { this.saving = false; }
+  }
+
+  build() {
+    Column({ space: 16 }) {
+      Row() {
+        Text(this.title).fontSize(19).fontWeight(FontWeight.Bold).fontColor(this.theme.text).layoutWeight(1);
+        Button('取消', { type: ButtonType.Normal }).fontSize(13).height(34).fontColor(this.theme.textSecondary)
+          .backgroundColor(Color.Transparent).enabled(!this.saving).onClick(() => this.controller?.close());
+      }.width('100%');
+      TextInput({ text: this.name, placeholder: '配置名称' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).fontSize(14).height(40)
+        .backgroundColor(this.theme.field).borderRadius(5).enabled(!this.saving).onChange((value: string) => this.name = value);
+      ConfigCodeEditor({ editor: this.editor, initialContent: this.initialContent, disabled: this.saving,
+        onReady: (ready: boolean): void => { this.editorReady = ready; },
+        onChange: (revision: number): void => { if (this.editor.changedSinceRead(revision)) { this.validation = ''; this.error = ''; } } });
+      if (this.error.length > 0) {
+        Text(this.error).fontSize(12).fontColor(this.theme.danger).width('100%').maxLines(3);
+      }
+      if (this.validation && !this.error) Text(this.validation).fontSize(12).fontColor(this.theme.success).width('100%');
+      Row() {
+        Text('Tab 缩进 · Ctrl+F 查找 · 原生校验后保存').fontSize(11).fontColor(this.theme.textMuted).layoutWeight(1).maxLines(2);
+        Button('校验配置', { type: ButtonType.Normal }).height(36).fontSize(13).fontColor(this.theme.primary)
+          .backgroundColor(this.theme.primarySoft).borderRadius(5).margin({ right: 10 }).enabled(this.editorReady && !this.saving)
+          .onClick(() => this.validate());
+        Button(this.saving ? '正在保存…' : '保存配置', { type: ButtonType.Normal })
+          .height(36).fontSize(13).fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary).borderRadius(5)
+          .padding({ left: 18, right: 18 }).enabled(this.editorReady && !this.saving)
+          .onClick(() => this.save());
+      }.width('100%');
+    }
+    .width('88%').height('82%').constraintSize({ maxWidth: 1100 }).padding(24)
+    .borderRadius(10).backgroundColor(this.theme.surface);
+  }
+}
+
+@CustomDialog
+export struct ProfileInfoDialog {
+  @StorageLink('clashosTheme') theme: VergePalette = new VergePalette();
+  controller?: CustomDialogController;
+  title: string = '编辑订阅信息';
+  initialName: string = '';
+  initialUrl: string = '';
+  initialInterval: number = 0;
+  requireUrl: boolean = false;
+  onSave: (name: string, url: string, interval: number) => Promise<void> =
+    async (_name: string, _url: string, _interval: number): Promise<void> => {};
+  @State name: string = '';
+  @State url: string = '';
+  @State interval: string = '0';
+  @State saving: boolean = false;
+  @State error: string = '';
+
+  aboutToAppear(): void {
+    this.name = this.initialName;
+    this.url = this.initialUrl;
+    this.interval = `${this.initialInterval}`;
+  }
+
+  private async save(): Promise<void> {
+    this.error = '';
+    if (this.requireUrl && this.url.trim().length === 0) {
+      this.error = '请输入订阅地址';
+      return;
+    }
+    const interval: number = Number(this.interval);
+    if (!Number.isInteger(interval) || interval < 0 || interval > 10080) {
+      this.error = '更新间隔应为 0 至 10080 分钟';
+      return;
+    }
+    this.saving = true;
+    try {
+      await this.onSave(this.name, this.url.trim(), interval);
+      this.controller?.close();
+    } catch (error) {
+      this.error = (error as Error).message || '无法保存订阅';
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  build() {
+    Column({ space: 14 }) {
+      Text(this.title).fontSize(19).fontWeight(FontWeight.Bold).fontColor(this.theme.text).width('100%');
+      Text('名称').fontSize(12).fontColor(this.theme.textSecondary).width('100%');
+      TextInput({ text: this.name, placeholder: '配置名称' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(40).fontSize(13)
+        .backgroundColor(this.theme.field).borderRadius(5).onChange((value: string) => this.name = value);
+      Text('订阅地址').fontSize(12).fontColor(this.theme.textSecondary).width('100%');
+      TextInput({ text: this.url, placeholder: this.requireUrl ? 'https://…' : '可选，填写后支持更新' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted)
+        .height(40).fontSize(13).backgroundColor(this.theme.field).borderRadius(5)
+        .onChange((value: string) => this.url = value);
+      Text('自动更新间隔（分钟，0 为关闭）').fontSize(12).fontColor(this.theme.textSecondary).width('100%');
+      TextInput({ text: this.interval }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).type(InputType.Number).height(40).fontSize(13)
+        .backgroundColor(this.theme.field).borderRadius(5).onChange((value: string) => this.interval = value);
+      if (this.error.length > 0) {
+        Text(this.error).fontSize(12).fontColor(this.theme.danger).width('100%');
+      }
+      Row({ space: 10 }) {
+        Blank();
+        Button('取消', { type: ButtonType.Normal }).height(36).fontSize(13).fontColor(this.theme.textSecondary)
+          .backgroundColor(this.theme.field).borderRadius(5).enabled(!this.saving)
+          .onClick(() => this.controller?.close());
+        Button(this.saving ? '处理中…' : this.requireUrl ? '导入订阅' : '保存', { type: ButtonType.Normal })
+          .height(36).fontSize(13).fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary).borderRadius(5)
+          .enabled(!this.saving).onClick(() => this.save());
+      }.width('100%').margin({ top: 8 });
+    }.width('86%').constraintSize({ maxWidth: 560 }).padding(24).borderRadius(10).backgroundColor(this.theme.surface);
+  }
+}

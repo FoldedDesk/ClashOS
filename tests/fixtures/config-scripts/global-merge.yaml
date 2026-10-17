@@ -1,0 +1,2 @@
+custom: {stage: 1}
+values: {enabled: true, count: 7, code: '00123'}

@@ -1,0 +1,5 @@
+theme_mode: dark
+# Public sentinels must never become ClashOS WebDAV/controller credentials.
+webdav_url: https://example.invalid/ignored
+webdav_username: PUBLIC-IGNORED
+webdav_password: PUBLIC-IGNORED

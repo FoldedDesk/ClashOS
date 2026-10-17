@@ -1,0 +1,4 @@
+# PUBLIC extension 😀
+ipv6: false
+hosts:
+  public-editor.invalid: 192.0.2.24

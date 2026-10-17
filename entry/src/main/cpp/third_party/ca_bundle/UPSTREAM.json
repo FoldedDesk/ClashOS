@@ -1,0 +1,10 @@
+{
+  "url": "https://curl.se/ca/cacert-2026-09-25.pem",
+  "date": "2026-09-25",
+  "sha256": "a41b5d356aea97a529fe27e0f7316d2f9d946d75927476cf9cf1b90637d00505",
+  "checksum_url": "https://curl.se/ca/cacert-2026-09-25.pem.sha256",
+  "license": "MPL-2.0",
+  "local_patches": [
+    "Unmodified PEM wrapped as a C++ string in trust_bundle.inc"
+  ]
+}

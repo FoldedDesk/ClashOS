@@ -1,0 +1,559 @@
+// Internal implementation, included in clash_core.cpp after the shared protocol helpers.
+constexpr size_t UDP_MAX_PACKET = 65507;
+#ifdef MSG_NOSIGNAL
+constexpr int UDP_SEND_FLAGS = MSG_NOSIGNAL;
+#else
+constexpr int UDP_SEND_FLAGS = 0;
+#endif
+using UdpClock = std::chrono::steady_clock;
+
+struct UdpEndpoint {
+    sockaddr_storage address{};
+    socklen_t length = 0;
+};
+
+std::string udpEndpointHost(const UdpEndpoint& endpoint)
+{
+    char text[INET6_ADDRSTRLEN] = {};
+    if (endpoint.address.ss_family == AF_INET) {
+        inet_ntop(AF_INET, &reinterpret_cast<const sockaddr_in*>(&endpoint.address)->sin_addr, text, sizeof(text));
+    } else if (endpoint.address.ss_family == AF_INET6) {
+        const auto* address = &reinterpret_cast<const sockaddr_in6*>(&endpoint.address)->sin6_addr;
+        if (IN6_IS_ADDR_V4MAPPED(address)) inet_ntop(AF_INET, address->s6_addr + 12, text, sizeof(text));
+        else inet_ntop(AF_INET6, address, text, sizeof(text));
+    }
+    return text;
+}
+
+int udpEndpointPort(const UdpEndpoint& endpoint)
+{
+    if (endpoint.address.ss_family == AF_INET) return ntohs(reinterpret_cast<const sockaddr_in*>(&endpoint.address)->sin_port);
+    if (endpoint.address.ss_family == AF_INET6) return ntohs(reinterpret_cast<const sockaddr_in6*>(&endpoint.address)->sin6_port);
+    return 0;
+}
+
+bool udpSameEndpoint(const UdpEndpoint& first, const UdpEndpoint& second)
+{
+    return !udpEndpointHost(first).empty() && udpEndpointHost(first) == udpEndpointHost(second) &&
+        udpEndpointPort(first) == udpEndpointPort(second);
+}
+
+struct UdpTarget {
+    std::string host;
+    int port = 0;
+    size_t headerSize = 0;
+};
+
+bool parseUdpAddress(const std::vector<unsigned char>& packet, size_t offset, UdpTarget& target)
+{
+    target = {};
+    if (offset >= packet.size()) return false;
+    size_t cursor = offset + 1;
+    const unsigned char type = packet[offset];
+    if (type == 1 || type == 4) {
+        const size_t length = type == 1 ? 4 : 16;
+        if (packet.size() - cursor < length + 2) return false;
+        char host[INET6_ADDRSTRLEN] = {};
+        if (inet_ntop(type == 1 ? AF_INET : AF_INET6, packet.data() + cursor, host, sizeof(host)) == nullptr) return false;
+        target.host = host;
+        cursor += length;
+    } else if (type == 3) {
+        if (cursor >= packet.size()) return false;
+        const size_t length = packet[cursor++];
+        if (length == 0 || packet.size() - cursor < length + 2) return false;
+        target.host.assign(packet.begin() + cursor, packet.begin() + cursor + length);
+        if (target.host.find('\0') != std::string::npos) return false;
+        cursor += length;
+    } else return false;
+    target.port = (static_cast<int>(packet[cursor]) << 8) | packet[cursor + 1];
+    target.headerSize = cursor + 2 - offset;
+    return target.port > 0;
+}
+
+bool parseSocksUdp(const std::vector<unsigned char>& packet, UdpTarget& target)
+{
+    return packet.size() <= UDP_MAX_PACKET && packet.size() >= 4 && packet[0] == 0 && packet[1] == 0 &&
+        packet[2] == 0 && parseUdpAddress(packet, 3, target);
+}
+
+bool encryptShadowsocksUdp(const std::vector<unsigned char>& master, const std::vector<unsigned char>& salt,
+    const std::vector<unsigned char>& plain, std::vector<unsigned char>& packet,SsCipher method=SsCipher::Aes256Gcm)
+{
+    packet.clear();
+    const size_t keySize=shadowsocksKeySize(method);
+    if (keySize==0||master.size() != keySize || salt.size() != keySize || plain.empty() || plain.size() > UDP_MAX_PACKET - keySize - 16) return false;
+    const auto key = hkdfSha1(salt, master, "ss-subkey", keySize);
+    std::vector<unsigned char> cipher, tag(16);
+    if (!shadowsocksAead(true,method,key,std::vector<unsigned char>(12,0),plain,cipher,tag)) return false;
+    packet = salt;
+    packet.insert(packet.end(), cipher.begin(), cipher.end());
+    packet.insert(packet.end(), tag.begin(), tag.end());
+    return true;
+}
+
+bool decryptShadowsocksUdp(const std::vector<unsigned char>& master, const std::vector<unsigned char>& packet,
+    std::vector<unsigned char>& plain,SsCipher method=SsCipher::Aes256Gcm)
+{
+    plain.clear();
+    const size_t keySize=shadowsocksKeySize(method);
+    if (keySize==0||master.size() != keySize || packet.size() < keySize+16+5 || packet.size() > UDP_MAX_PACKET) return false;
+    const std::vector<unsigned char> salt(packet.begin(), packet.begin() + keySize);
+    const auto key = hkdfSha1(salt, master, "ss-subkey", keySize);
+    std::vector<unsigned char> cipher(packet.begin() + keySize, packet.end() - 16), tag(packet.end() - 16, packet.end());
+    if (!shadowsocksAead(false,method,key,std::vector<unsigned char>(12,0),cipher,plain,tag)) { plain.clear(); return false; }
+    UdpTarget target;
+    if (!parseUdpAddress(plain, 0, target)) { plain.clear(); return false; }
+    return true;
+}
+
+// Bounded recent-salt cache shared across flows and associations; includes sent salts to reject reflections.
+std::mutex g_udpSaltMutex;
+std::set<std::string> g_udpSalts;
+std::deque<std::string> g_udpSaltOrder;
+bool rememberUdpSalt(const std::vector<unsigned char>& master, const std::vector<unsigned char>& packet,SsCipher method=SsCipher::Aes256Gcm)
+{
+    const size_t keySize=shadowsocksKeySize(method);
+    if (keySize==0||master.size() != keySize || packet.size() < keySize) return false;
+    std::string key(1,static_cast<char>(method));
+    key.append(master.begin(),master.end());key.append(packet.begin(), packet.begin() + keySize);
+    std::lock_guard<std::mutex> lock(g_udpSaltMutex);
+    if (!g_udpSalts.insert(key).second) return false;
+    g_udpSaltOrder.push_back(key);
+    if (g_udpSaltOrder.size() > 8192) { g_udpSalts.erase(g_udpSaltOrder.front()); g_udpSaltOrder.pop_front(); }
+    return true;
+}
+
+#ifdef CLAHSOS_HOST_TEST
+struct UdpTestHooks {
+    std::function<int(int, UdpEndpoint&, UdpEndpoint&)> relay;
+    std::function<int(const std::string&, int, UdpEndpoint&)> connect;
+    std::function<ssize_t(int, std::vector<unsigned char>&, UdpEndpoint&)> receive;
+    std::function<ssize_t(int, const std::vector<unsigned char>&, const UdpEndpoint&)> send;
+} g_udpTestHooks;
+#endif
+
+void prepareUdpSocket(int fd)
+{
+    trackSocket(fd);
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
+}
+
+int openUdpAssociation(int client, UdpEndpoint& bound, UdpEndpoint& peer)
+{
+#ifdef CLAHSOS_HOST_TEST
+    if (g_udpTestHooks.relay) {
+        const int fd = g_udpTestHooks.relay(client, bound, peer);
+        if (fd >= 0) prepareUdpSocket(fd);
+        return fd;
+    }
+#endif
+    peer.length = sizeof(peer.address);
+    bound.length = sizeof(bound.address);
+    if (getpeername(client, reinterpret_cast<sockaddr*>(&peer.address), &peer.length) != 0 ||
+        getsockname(client, reinterpret_cast<sockaddr*>(&bound.address), &bound.length) != 0 ||
+        udpEndpointHost(peer).empty()) return -1;
+    if (bound.address.ss_family == AF_INET) reinterpret_cast<sockaddr_in*>(&bound.address)->sin_port = 0;
+    else if (bound.address.ss_family == AF_INET6) reinterpret_cast<sockaddr_in6*>(&bound.address)->sin6_port = 0;
+    else return -1;
+    const int fd = socket(bound.address.ss_family, SOCK_DGRAM, 0);
+    if (fd < 0) return -1;
+    if (bind(fd, reinterpret_cast<sockaddr*>(&bound.address), bound.length) != 0 ||
+        getsockname(fd, reinterpret_cast<sockaddr*>(&bound.address), &bound.length) != 0) { closeSocket(fd); return -1; }
+    prepareUdpSocket(fd);
+    return fd;
+}
+
+int connectUdpOutbound(const std::string& host, int port, UdpEndpoint& endpoint,DnsPurpose purpose=DnsPurpose::Direct)
+{
+    if (!g_state.running.load()) return -1;
+#ifdef CLAHSOS_HOST_TEST
+    if (g_udpTestHooks.connect) {
+        const int fd = g_udpTestHooks.connect(host, port, endpoint);
+        if (fd >= 0) prepareUdpSocket(fd);
+        return fd;
+    }
+#endif
+    const auto addresses=resolveDnsAddresses(host,purpose,HealthClock::now()+std::chrono::milliseconds(6000));
+    int fd = -1;
+    for (const auto& ip:addresses) {
+        if (!g_state.running.load()) break;
+        sockaddr_storage address{};socklen_t length=0;
+        if(inet_pton(AF_INET,ip.c_str(),&reinterpret_cast<sockaddr_in*>(&address)->sin_addr)==1){auto* a=reinterpret_cast<sockaddr_in*>(&address);a->sin_family=AF_INET;a->sin_port=htons(port);length=sizeof(*a);}
+        else if(inet_pton(AF_INET6,ip.c_str(),&reinterpret_cast<sockaddr_in6*>(&address)->sin6_addr)==1){auto* a=reinterpret_cast<sockaddr_in6*>(&address);a->sin6_family=AF_INET6;a->sin6_port=htons(port);length=sizeof(*a);}
+        if(!length)continue;
+        fd = socket(address.ss_family, SOCK_DGRAM, 0);
+        if (fd < 0) continue;
+        prepareUdpSocket(fd);
+        if (connect(fd, reinterpret_cast<sockaddr*>(&address), length) == 0) {
+            endpoint.address=address;
+            endpoint.length = length;
+            break;
+        }
+        closeSocket(fd);
+        fd = -1;
+    }
+    return fd;
+}
+
+ssize_t receiveUdpRelay(int fd, std::vector<unsigned char>& packet, UdpEndpoint& sender)
+{
+#ifdef CLAHSOS_HOST_TEST
+    if (g_udpTestHooks.receive) return g_udpTestHooks.receive(fd, packet, sender);
+#endif
+    packet.resize(65536);
+    sender.length = sizeof(sender.address);
+    iovec buffer{packet.data(), packet.size()};
+    msghdr message{};
+    message.msg_name = &sender.address;
+    message.msg_namelen = sender.length;
+    message.msg_iov = &buffer;
+    message.msg_iovlen = 1;
+    const ssize_t count = recvmsg(fd, &message, 0);
+    sender.length = message.msg_namelen;
+    if (count < 0 || (message.msg_flags & MSG_TRUNC) || static_cast<size_t>(count) > UDP_MAX_PACKET) {
+        packet.clear(); return -1;
+    }
+    packet.resize(static_cast<size_t>(count));
+    return count;
+}
+
+bool sendUdpReply(int fd, const std::vector<unsigned char>& packet, const UdpEndpoint& endpoint)
+{
+    if (packet.size() > UDP_MAX_PACKET) return false;
+    ssize_t sent;
+    do {
+#ifdef CLAHSOS_HOST_TEST
+        if (g_udpTestHooks.send) sent = g_udpTestHooks.send(fd, packet, endpoint);
+        else
+#endif
+        sent = sendto(fd, packet.data(), packet.size(), UDP_SEND_FLAGS, reinterpret_cast<const sockaddr*>(&endpoint.address), endpoint.length);
+    } while (sent < 0 && errno == EINTR);
+    return sent >= 0 && static_cast<size_t>(sent) == packet.size();
+}
+
+struct UdpClientPin {
+    UdpEndpoint peer;
+    UdpEndpoint endpoint;
+    int requestedPort = 0;
+    bool pinned = false;
+    bool accepts(const UdpEndpoint& sender) {
+        if (udpEndpointHost(sender).empty() || udpEndpointHost(sender) != udpEndpointHost(peer) ||
+            (requestedPort > 0 && udpEndpointPort(sender) != requestedPort) ||
+            (pinned && !udpSameEndpoint(sender, endpoint))) return false;
+        endpoint = sender;
+        pinned = true;
+        return true;
+    }
+};
+
+bool udpConnectionCancelled(int fd)
+{
+    std::lock_guard<std::mutex> lock(g_state.sessionsMutex);
+    const auto found = g_state.connections.find(fd);
+    return found == g_state.connections.end() || found->second.cancelled;
+}
+
+struct UdpFlow {
+    int fd = -1;
+    ProxyNode node;
+    UdpEndpoint remote;
+    std::string host;
+    int port = 0;
+    std::vector<unsigned char> master;
+    UdpClock::time_point lastActivity = UdpClock::now();
+    bool failed = false;
+    std::unique_ptr<VmessSession> vmess;
+    std::unique_ptr<TrojanSession> trojan;
+    std::thread streamThread;
+    int notifyMain = -1, notifyWorker = -1;
+    std::mutex streamMutex;
+    std::deque<VmBytes> streamInput, streamOutput;
+    std::atomic<bool> streamStopping{false}, streamStopped{false};
+    std::atomic<int> streamError{0};
+    static void notify(int socket) {
+        const unsigned char byte = 1;
+        const ssize_t ignored = send(socket, &byte, 1, UDP_SEND_FLAGS); (void)ignored;
+    }
+    bool streamPending() {
+        std::lock_guard<std::mutex> lock(streamMutex); return !streamOutput.empty() || streamStopped.load();
+    }
+    bool streamed() const { return vmess != nullptr || trojan != nullptr; }
+    void runStream() {
+        bool ok = true;
+        while (ok && g_state.running.load() && !streamStopping.load()) {
+            const bool buffered = vmess ? vmess->pending() : trojan->pending();
+            bool queued;
+            { std::lock_guard<std::mutex> lock(streamMutex); queued = !streamInput.empty(); }
+            pollfd watches[2] = {{fd, POLLIN, 0}, {notifyWorker, POLLIN, 0}};
+            const int ready = poll(watches, 2, buffered || queued ? 0 : 1000);
+            if (ready < 0 && errno == EINTR) continue;
+            if (ready < 0) break;
+            if (watches[1].revents) { unsigned char drain[128]; while (recv(notifyWorker, drain, sizeof(drain), 0) > 0) {} }
+            for (int count = 0; count < 16; ++count) {
+                VmBytes packet;
+                { std::lock_guard<std::mutex> lock(streamMutex); if (streamInput.empty()) break; packet=std::move(streamInput.front()); streamInput.pop_front(); }
+                const bool written = vmess ? vmess->chunk(packet.data(), packet.size()) : trojan->writeDatagram(host, port, packet);
+                if (!written) { streamError.store(errno); ok=false; break; }
+                recordTransfer(fd, true, packet.size());
+            }
+            if (!ok || streamStopping.load()) break;
+            if (buffered || watches[0].revents) {
+                VmBytes packet;
+                const bool read = vmess ? vmess->read(packet) : trojan->readDatagram(packet, true);
+                if (!read) { if (trojan && (errno == EMSGSIZE || errno == EAGAIN || errno == EWOULDBLOCK)) continue; streamError.store(errno); break; }
+                if (packet.size() <= UDP_MAX_PACKET - (trojan ? 3 : 0)) {
+                    { std::lock_guard<std::mutex> lock(streamMutex); if (streamOutput.size() >= 64) streamOutput.pop_front(); streamOutput.push_back(std::move(packet)); }
+                    notify(notifyWorker);
+                }
+            }
+        }
+        streamStopped.store(true); notify(notifyWorker);
+    }
+    bool startStreamWorker() {
+        int pair[2]; if (socketpair(AF_UNIX, SOCK_STREAM, 0, pair) != 0) return false;
+        notifyMain=pair[0];notifyWorker=pair[1];
+        for (int socket : pair) fcntl(socket, F_SETFL, fcntl(socket, F_GETFL, 0) | O_NONBLOCK);
+        try { streamThread=std::thread([this]() { runStream(); }); } catch (...) { return false; }
+        return true;
+    }
+    ~UdpFlow() {
+        streamStopping.store(true);
+        if (streamThread.joinable()) { shutdown(fd, SHUT_RDWR); notify(notifyMain); streamThread.join(); }
+        if (notifyMain >= 0) close(notifyMain);
+        if (notifyWorker >= 0) close(notifyWorker);
+        if (fd >= 0) closeSocket(fd);
+    }
+};
+
+std::string udpFlowKey(const UdpTarget& target, const ProxyNode& node)
+{
+    return target.host + '\0' + std::to_string(target.port) + '\0' + node.name + '\0' +
+        std::to_string(node.revision) + '\0' + node.matchedRule;
+}
+
+std::unique_ptr<UdpFlow> openUdpFlow(int owner, const UdpTarget& target, const ProxyNode& node)
+{
+    if (!supportsUdp(node)) return nullptr;
+    auto flow = std::make_unique<UdpFlow>();
+    flow->node = node;
+    flow->host = target.host;
+    flow->port = target.port;
+    if (node.type == "ss") {
+        const size_t keySize=shadowsocksKeySize(shadowsocksCipher(node.cipher));
+        flow->master = evpBytesToKey(node.password,keySize);
+        if (keySize==0||flow->master.size()!=keySize) return nullptr;
+    }
+    if (node.type == "vmess" || node.type == "trojan") {
+        flow->fd = connectUpstream(node.server, node.port, 6000,DnsPurpose::Proxy);
+        if (flow->fd < 0) return nullptr;
+        socketTimeout(flow->fd, 6000);
+        std::string error;
+        bool opened;
+        if (node.type == "vmess") {
+            flow->vmess = std::make_unique<VmessSession>(flow->fd);
+            opened = flow->vmess->start(node, target.host, target.port, true, error);
+        } else {
+            flow->trojan = std::make_unique<TrojanSession>(flow->fd);
+            opened = flow->trojan->start(node, target.host, target.port, true, error);
+        }
+        if (!opened) {
+            coreLog("warning", node.type + " UDP startup failed: " + error); return nullptr;
+        }
+        // One worker owns both TLS directions; mbedtls_ssl_context is never shared concurrently.
+        socketTimeout(flow->fd, 60000);
+    } else flow->fd = connectUdpOutbound(node.type == "direct" ? target.host : node.server,
+        node.type == "direct" ? target.port : node.port, flow->remote,node.type=="direct"?DnsPurpose::Direct:DnsPurpose::Proxy);
+    if (flow->fd < 0 || !g_state.running.load() ||
+        !beginConnection(flow->fd, target.host, target.port, node.chain, node.matchedRule, "udp", owner)) return nullptr;
+    if (flow->streamed() && !flow->startStreamWorker()) return nullptr;
+    coreLog("info", "UDP " + target.host + ":" + std::to_string(target.port) + " via " + node.name);
+    return flow;
+}
+
+bool writeUdpFlow(UdpFlow& flow, const std::vector<unsigned char>& packet, const UdpTarget& target)
+{
+    if (!g_state.running.load() || udpConnectionCancelled(flow.fd)) return false;
+    const size_t payloadOffset = 3 + target.headerSize;
+    if (packet.size() < payloadOffset) return false;
+    std::vector<unsigned char> wire(packet.begin() + payloadOffset, packet.end());
+    if (flow.streamed()) {
+        if ((flow.vmess && (wire.empty() || wire.size() > 1966)) || wire.size() > 65535 || flow.streamStopped.load()) return false;
+        { std::lock_guard<std::mutex> lock(flow.streamMutex); if (flow.streamInput.size() >= 64) return false; flow.streamInput.push_back(std::move(wire)); }
+        UdpFlow::notify(flow.notifyMain); flow.lastActivity = UdpClock::now(); return true;
+    }
+    if (flow.node.type == "ss") {
+        const SsCipher method=shadowsocksCipher(flow.node.cipher);
+        std::vector<unsigned char> plain(packet.begin() + 3, packet.end()), salt(shadowsocksKeySize(method));
+        if (!randomBytes(salt) || !encryptShadowsocksUdp(flow.master,salt,plain,wire,method) || !rememberUdpSalt(flow.master,wire,method)) return false;
+    }
+    ssize_t sent;
+    do { sent = send(flow.fd, wire.data(), wire.size(), UDP_SEND_FLAGS); } while (sent < 0 && errno == EINTR);
+    if (sent < 0 || static_cast<size_t>(sent) != wire.size()) return false;
+    recordTransfer(flow.fd, true, packet.size() - payloadOffset);
+    flow.lastActivity = UdpClock::now();
+    return true;
+}
+
+bool readUdpFlow(UdpFlow& flow, std::vector<unsigned char>& reply, size_t& payloadSize)
+{
+    if (flow.streamed()) {
+        unsigned char drain[128]; while (recv(flow.notifyMain, drain, sizeof(drain), 0) > 0) {}
+        VmBytes packet;
+        { std::lock_guard<std::mutex> lock(flow.streamMutex);
+          if (flow.streamOutput.empty()) {
+              flow.failed=flow.streamStopped.load(); errno=flow.failed ? flow.streamError.load() : EAGAIN; return false;
+          }
+          packet=std::move(flow.streamOutput.front());flow.streamOutput.pop_front(); }
+        reply.assign(3,0);
+        if (flow.trojan) {
+            UdpTarget source;
+            if (!parseUdpAddress(packet, 0, source)) { errno = EPROTO; return false; }
+            payloadSize = packet.size() - source.headerSize;
+        } else {
+            const auto address=shadowsocksAddress(flow.host,flow.port);
+            reply.insert(reply.end(),address.begin(),address.end()); payloadSize=packet.size();
+        }
+        reply.insert(reply.end(),packet.begin(),packet.end());
+        if (reply.size()>UDP_MAX_PACKET) { errno=EMSGSIZE;return false; } return true;
+    }
+    std::vector<unsigned char> packet(65536);
+    iovec buffer{packet.data(), packet.size()};
+    msghdr message{};
+    message.msg_iov = &buffer; message.msg_iovlen = 1;
+    errno = 0;
+    const ssize_t count = recvmsg(flow.fd, &message, 0);
+    if (count < 0) return false;
+    if ((message.msg_flags & MSG_TRUNC) || static_cast<size_t>(count) > UDP_MAX_PACKET) { errno = EMSGSIZE; return false; }
+    packet.resize(static_cast<size_t>(count));
+    reply.assign(3, 0);
+    if (flow.node.type == "ss") {
+        std::vector<unsigned char> plain;
+        const SsCipher method=shadowsocksCipher(flow.node.cipher);
+        if (!decryptShadowsocksUdp(flow.master,packet,plain,method)) { errno = EBADMSG; return false; }
+        if (!rememberUdpSalt(flow.master,packet,method)) { errno = EALREADY; return false; }
+        UdpTarget source;
+        if (!parseUdpAddress(plain, 0, source)) return false;
+        payloadSize = plain.size() - source.headerSize;
+        reply.insert(reply.end(), plain.begin(), plain.end());
+    } else {
+        const auto address = shadowsocksAddress(udpEndpointHost(flow.remote), udpEndpointPort(flow.remote));
+        if (address.empty()) return false;
+        reply.insert(reply.end(), address.begin(), address.end());
+        reply.insert(reply.end(), packet.begin(), packet.end());
+        payloadSize = packet.size();
+    }
+    if (reply.size() > UDP_MAX_PACKET) { errno = EMSGSIZE; return false; }
+    return true;
+}
+
+struct UdpRelayOwner {
+    int fd;
+    ~UdpRelayOwner() { if (fd >= 0) closeSocket(fd); }
+};
+
+void handleUdpAssociate(int client, const std::string& requestedHost, int requestedPort)
+{
+    UdpEndpoint bound, peer;
+    UdpRelayOwner relay{openUdpAssociation(client, bound, peer)};
+    if (relay.fd < 0) { socksReply(client, 1); return; }
+    if (requestedHost != "0.0.0.0" && requestedHost != "::" && requestedHost != "localhost" && requestedHost != udpEndpointHost(peer)) {
+        socksReply(client, 2); return;
+    }
+    auto address = shadowsocksAddress(udpEndpointHost(bound), udpEndpointPort(bound));
+    std::vector<unsigned char> response{5, 0, 0};
+    response.insert(response.end(), address.begin(), address.end());
+    if (address.empty() || !sendAll(client, response)) return;
+    UdpClientPin pin;
+    pin.peer = peer; pin.requestedPort = requestedPort;
+    std::map<std::string, std::unique_ptr<UdpFlow>> flows;
+    auto lastActivity = UdpClock::now();
+    auto lastWarning = UdpClock::time_point::min();
+    auto warn = [&](const std::string& message) {
+        const auto now = UdpClock::now();
+        if (lastWarning == UdpClock::time_point::min() || now - lastWarning >= std::chrono::seconds(5)) {
+            coreLog("warning", message); lastWarning = now;
+        }
+    };
+    while (g_state.running.load()) {
+        const auto now = UdpClock::now();
+        for (auto item = flows.begin(); item != flows.end();) {
+            if (item->second->failed || udpConnectionCancelled(item->second->fd) || now - item->second->lastActivity > std::chrono::seconds(60)) item = flows.erase(item);
+            else ++item;
+        }
+        if (now - lastActivity > std::chrono::seconds(120)) break;
+        std::vector<pollfd> watches{{client, POLLIN, 0}, {relay.fd, POLLIN, 0}};
+        std::vector<UdpFlow*> active;
+        bool buffered=false;
+        for (auto& item : flows) {
+            active.push_back(item.second.get()); watches.push_back({item.second->streamed() ? item.second->notifyMain : item.second->fd, POLLIN, 0});
+            if (item.second->streamed() && item.second->streamPending()) buffered=true;
+        }
+        const int ready = poll(watches.data(), watches.size(), buffered ? 0 : 1000);
+        for (size_t i=0;i<active.size();++i) if (active[i]->streamed() && active[i]->streamPending()) watches[i+2].revents|=POLLIN;
+        if (ready < 0 && errno == EINTR) continue;
+        if (ready < 0 || !g_state.running.load()) break;
+        if (watches[0].revents != 0) break; // TCP control lifetime owns the UDP association.
+        // Read old flows before accepting packets that can add/evict their descriptors.
+        for (size_t i = 0; i < active.size(); ++i) {
+            UdpFlow& flow = *active[i];
+            if (watches[i + 2].revents == 0 || udpConnectionCancelled(flow.fd)) continue;
+            if (watches[i + 2].revents & (POLLHUP | POLLNVAL)) { flow.failed = true; continue; }
+            std::vector<unsigned char> reply;
+            size_t payloadSize = 0;
+            if (!readUdpFlow(flow, reply, payloadSize)) {
+                if (errno == EBADMSG) warn(flow.vmess ? "VMess UDP authentication failed" : "Invalid or unauthenticated Shadowsocks UDP packet dropped");
+                else if (errno == EALREADY) warn("Replayed Shadowsocks UDP packet dropped");
+                else if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR && errno != EMSGSIZE) flow.failed = true;
+                continue;
+            }
+            if (pin.pinned && sendUdpReply(relay.fd, reply, pin.endpoint)) {
+                recordTransfer(flow.fd, false, payloadSize);
+                flow.lastActivity = lastActivity = UdpClock::now();
+            }
+        }
+        if (watches[1].revents & (POLLHUP | POLLERR | POLLNVAL)) break;
+        if (!(watches[1].revents & POLLIN)) continue;
+        for (int burst = 0; burst < 16; ++burst) {
+            UdpEndpoint sender;
+            std::vector<unsigned char> packet;
+            if (receiveUdpRelay(relay.fd, packet, sender) < 0) break;
+            UdpTarget target;
+            if (!parseSocksUdp(packet, target) || !pin.accepts(sender)) continue;
+            ProxyNode node;bool retained=false;
+            // Select a load-balanced outbound once per target flow, not once per datagram.
+            // Reloads and explicit disconnects release the pin; established flows survive health sweeps.
+            for(const auto& entry:flows) {
+                const UdpFlow& flow=*entry.second;
+                if(!flow.node.loadBalanced||flow.failed||flow.host!=target.host||flow.port!=target.port||udpConnectionCancelled(flow.fd))continue;
+                {std::lock_guard<std::mutex> lock(g_state.mutex);if(flow.node.revision!=g_state.configRevision)continue;}
+                node=flow.node;retained=true;break;
+            }
+            if(!retained)node=activeProxyNode(target.host,target.port,"udp",udpEndpointHost(sender));
+            if (!supportsUdp(node)) {
+                warn("UDP " + target.host + ":" + std::to_string(target.port) + " is disabled or unsupported via " + node.name);
+                continue;
+            }
+            if (node.type == "ss" && packet.size() - 3 > UDP_MAX_PACKET - shadowsocksKeySize(shadowsocksCipher(node.cipher)) - 16) continue;
+            if (node.type == "vmess" && (packet.size() == 3 + target.headerSize || packet.size() - 3 - target.headerSize > 1966)) {
+                warn("VMess UDP payload must be between 1 and 1966 bytes"); continue;
+            }
+            const std::string key = udpFlowKey(target, node);
+            auto found = flows.find(key);
+            if (found != flows.end() && (found->second->failed || udpConnectionCancelled(found->second->fd))) {
+                flows.erase(found); found = flows.end();
+            }
+            if (found == flows.end()) {
+                if (flows.size() >= 64) {
+                    const auto oldest = std::min_element(flows.begin(), flows.end(), [](const auto& left, const auto& right) {
+                        return left.second->lastActivity < right.second->lastActivity;
+                    });
+                    flows.erase(oldest);
+                }
+                auto flow = openUdpFlow(client, target, node);
+                if (flow == nullptr) { warn("Cannot open UDP outbound via " + node.name); continue; }
+                found = flows.emplace(key, std::move(flow)).first;
+            }
+            if (writeUdpFlow(*found->second, packet, target)) lastActivity = UdpClock::now();
+        }
+    }
+}

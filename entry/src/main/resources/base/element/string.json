@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "vpn_label",
+      "value": "ClashOS"
+    },
+    {
+      "name": "vpn_description",
+      "value": "将应用网络请求交给当前 ClashOS 配置处理"
+    },
+    {
+      "name": "module_desc",
+      "value": "ClashOS controller"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "ClashOS controller shell"
+    },
+    {
+      "name": "clipboard_reason",
+      "value": "用于读取你主动选择导入的 Clash 配置或节点链接"
+    }
+  ]
+}

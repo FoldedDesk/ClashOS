@@ -1,0 +1,3 @@
+prepend: [{name: Public added, type: direct}]
+append: []
+delete: [Public old]

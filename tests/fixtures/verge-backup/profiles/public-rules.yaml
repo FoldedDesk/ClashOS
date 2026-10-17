@@ -1,0 +1,3 @@
+prepend: ["DOMAIN,zip-public.invalid,DIRECT"]
+append: []
+delete: ["DOMAIN,before.invalid,REJECT"]

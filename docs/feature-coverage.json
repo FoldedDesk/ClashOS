@@ -1,0 +1,219 @@
+{
+  "applicationName": "ClashOS",
+  "reviewedCoreVersion": "0.25",
+  "objective": "实现 Clash Verge 的大部分功能，包括各类右键菜单，并提供可正常使用的 ClashOS。",
+  "brandingDecision": "Follow the user's later explicit spelling correction: ClashOS.",
+  "referenceInventory": [
+    "https://github.com/clash-verge-rev/clash-verge-rev#features",
+    "https://www.clashverge.dev/guide/quickstart.html",
+    "https://www.clashverge.dev/guide/extend.html",
+    "https://www.clashverge.dev/guide/script.html",
+    "https://www.clashverge.dev/guide/css_injection.html"
+  ],
+  "interpretation": "Track the actual upstream feature categories and the user's top-navigation/branding requirements. Partial categories remain incomplete; this record is not a completion claim.",
+  "categories": [
+    {
+      "feature": "HarmonyOS PC application and top navigation",
+      "status": "verified",
+      "implemented": [
+        "Native ArkUI application named ClashOS",
+        "Eight pages in a fixed top navigation",
+        "Wide/narrow layouts and Ctrl+1..8 navigation"
+      ],
+      "source": [
+        "entry/src/main/ets/pages/Index.ets",
+        "AppScope/resources/base/element/string.json"
+      ]
+    },
+    {
+      "feature": "Built-in core and external core access",
+      "status": "partial",
+      "implemented": [
+        "Native HTTP/SOCKS5 TCP/UDP core",
+        "SS AEAD, VMess, Trojan, DNS, providers, rules, health groups, geodata",
+        "External Clash REST controller configuration",
+        "Proxy detail GET for built-ins, nodes, providers and groups; encoded names and JSON selection compatibility",
+        "Actual HTTP NDJSON and WebSocket traffic streams with bounded subscribers and shutdown cleanup",
+        "Optional managed controller authentication, private persistence, GUI key management and automatic owned-loopback client authentication",
+        "Bearer and WebSocket query-token checks before request bodies; key changes revoke old subscriptions while existing proxy data connections continue",
+        "HTTP/WebSocket live log subscriptions with thresholds and structured events",
+        "Actual process RSS HTTP/WebSocket streams, memory snapshots and dashboard card",
+        "Immediate/periodic connection WebSocket snapshots and standard no-content disconnect acknowledgements",
+        "Strict controller GET/PATCH/PUT configs: actual file/current-source reload and isolated payload configuration, standard empty 204 acknowledgements",
+        "Atomic runtime mode/log-level/IPv6/HTTP/SOCKS5/mixed-port edits, listener bind rollback and established TCP connection preservation",
+        "Runtime settings GUI with source-aware temporary profile display, stale-edit rejection and saved-profile context-menu recovery"
+      ],
+      "remaining": [
+        "Protocol and option breadth is below Mihomo",
+        "No bundled Mihomo/Alpha core download/switch workflow",
+        "REST compatibility remains partial: LAN listeners, sniffing, redir/TProxy and broader TUN/general configuration fields"
+      ],
+      "source": [
+        "entry/src/main/cpp/clash_core.cpp",
+        "entry/src/main/cpp/controller_stream.inc",
+        "entry/src/main/cpp/controller_auth.inc",
+        "entry/src/main/ets/service/ControllerAccessStore.ets",
+        "entry/src/main/ets/service/ControllerAccessController.ets",
+        "entry/src/main/ets/components/ControllerAccessDialog.ets",
+        "entry/src/main/ets/service/ClashApi.ets",
+        "entry/src/main/cpp/controller_state.inc",
+        "entry/src/main/cpp/controller_configs.inc",
+        "entry/src/main/cpp/controller_config_store.inc",
+        "entry/src/main/ets/components/RuntimeConfigDialog.ets"
+      ]
+    },
+    {
+      "feature": "Customizable appearance",
+      "status": "partial",
+      "implemented": [
+        "Shared light/dark semantic palette across all pages and dialogs",
+        "Dark/light/system switching including OS environment callbacks and cold startup",
+        "Six preset accents and #RRGGBB custom colors with persistence and failure rollback",
+        "Responsive native cards/dialogs/menus, dark SVG resources and live icon recoloring"
+      ],
+      "remaining": [
+        "User-custom proxy-group icons",
+        "Native equivalent for custom styles"
+      ],
+      "source": [
+        "entry/src/main/ets/theme/VergeTheme.ets",
+        "entry/src/main/ets/service/AppearanceController.ets",
+        "entry/src/main/ets/service/AppearanceStore.ets",
+        "entry/src/main/ets/entryability/EntryAbility.ets"
+      ]
+    },
+    {
+      "feature": "Profile management and enhancement",
+      "status": "partial",
+      "implemented": [
+        "File/subscription/clipboard import",
+        "Default activation, edit, copy, pin, update and export",
+        "Node share-link import",
+        "Global and per-subscription YAML extensions",
+        "Parser syntax locations and native semantic validation",
+        "Global and per-subscription JavaScript main(config, profileName) extensions",
+        "Script console/errors, bounded execution, rollback and independent merged YAML export",
+        "Offline YAML/JSON code editor with syntax highlighting, line numbers, folding, find/replace, history and wrapping",
+        "Contextual common Clash field/enum completion; native validation/error navigation and stale-source protection",
+        "Exact YAML/JSON save/reopen and system-picker export byte comparisons on simulator",
+        "Shared YAML/JavaScript code editor for global/per-profile extensions; entry template, language/config completions, retained preview history, scoped native error navigation and actual merged export verification",
+        "Clash Verge ZIP migration preserves separate preprocessing declarations before extensions; native reload and actual subscription update verified"
+      ],
+      "remaining": [
+        "Full Mihomo schema and node/provider-reference completion"
+      ],
+      "source": [
+        "entry/src/main/ets/service/ProfileStore.ets",
+        "entry/src/main/ets/components/MergeEditorDialog.ets",
+        "entry/src/main/ets/components/ScriptEditorDialog.ets",
+        "entry/src/main/cpp/config_scripts.inc",
+        "entry/src/main/ets/components/ConfigCodeEditor.ets",
+        "entry/src/main/ets/components/ProfileDialogs.ets",
+        "entry/src/main/ets/service/ConfigEditorController.ets",
+        "scripts/config-editor/editor.mjs",
+        "scripts/config-editor/completion.mjs",
+        "scripts/config-editor/language.mjs",
+        "scripts/config-editor/script-completion.mjs"
+      ]
+    },
+    {
+      "feature": "System proxy, protection and TUN",
+      "status": "partial",
+      "implemented": [
+        "Read actual system HTTP proxy state",
+        "System-settings guide using current listener ports",
+        "VPN extension, native TUN engine and lifecycle implementation",
+        "Browser Google access through system HTTP proxy",
+        "Visible enable/disable actions open the real system settings workflow; actual state refreshed on return/focus, with disabled/enabled GUI roundtrip verified",
+        "Direct HarmonyOS PC proxy-page URI verified from app after Settings cold start and from unrelated settings page"
+      ],
+      "remaining": [
+        "Automatic system proxy control and guard",
+        "Actual TUN authorization/forwarding/background survival on a device with the required VPN component"
+      ],
+      "blocker": "The available HarmonyOS PC simulator lacks its VPN authorization component. This blocks device TUN proof, not other feature work.",
+      "source": [
+        "entry/src/main/ets/service/VpnTunnelService.ets",
+        "entry/src/main/ets/service/CoreSessionCoordinator.ets",
+        "entry/src/main/ets/pages/Index.ets",
+        "entry/src/main/ets/entryability/EntryAbility.ets"
+      ],
+      "automaticControlLimit": "Global proxy setters require system-only CONNECTIVITY_INTERNAL. Ordinary-app UI guides the real OS setting; automatic global control/guard is not claimed."
+    },
+    {
+      "feature": "Visual nodes, groups and rules",
+      "status": "verified",
+      "implemented": [
+        "Protocol forms and advanced YAML",
+        "Group candidates/providers, ordering and health settings",
+        "Prepend/append/exclude/restore editors",
+        "Reference/dependency checks, rollback and independent YAML export"
+      ],
+      "source": [
+        "entry/src/main/ets/components/ObjectEditorDialog.ets",
+        "entry/src/main/ets/components/RuleEditorDialog.ets"
+      ]
+    },
+    {
+      "feature": "WebDAV backup and restoration",
+      "status": "partial",
+      "implemented": [
+        "Local archives, selective restore, copies and private files",
+        "WebDAV upload/read-back/download, version-aware deletion and failure handling",
+        "Archives preserve per-profile nodes/groups/rules/merge settings/scripts and selections",
+        "V2 archives select profiles, global YAML/JavaScript and appearance independently; settings-only archives supported",
+        "Global and appearance restores are opt-in; active-profile reload, native preflight, ownership guards and failure rollback",
+        "Settings-only restores validate even on a fresh installation; legacy v1 imports remain supported",
+        "Actual system picker JSON export/reimport and selective v2 WebDAV roundtrip verified on the simulator",
+        "Application-managed controller keys excluded from archives; credentials already present in raw imported YAML remain part of that profile",
+        "Local Stored/Deflate/data-descriptor ZIP import/export with CRC and bounded in-memory decoding",
+        "Current upstream profile/index/extension/sequence/selection mapping; native lossless sidecar including caches and metadata",
+        "Actual system picker selective restoration, opt-in globals, live migrated groups/rules, subscription update and independent exported ZIP reimport verified"
+      ],
+      "remaining": [
+        "Actual Clash Verge desktop restoration and older archive variants",
+        "Cross-client file-provider cache/resource migration and advanced subscription options"
+      ],
+      "source": [
+        "entry/src/main/ets/service/ProfileStore.ets",
+        "entry/src/main/ets/service/BackupTypes.ets",
+        "entry/src/main/ets/service/BackupRestoreCoordinator.ets",
+        "entry/src/main/ets/service/WebDavClient.ets",
+        "entry/src/main/ets/components/BackupManagerDialog.ets",
+        "entry/src/main/ets/service/BackupZip.ets",
+        "entry/src/main/ets/service/BackupArchiveCodec.ets",
+        "entry/src/main/cpp/backup_codec.inc"
+      ]
+    },
+    {
+      "feature": "Context menus and runtime operations",
+      "status": "verified",
+      "implemented": [
+        "Profile and page-area menus",
+        "Proxy group/node actions, health checks and disconnects",
+        "Connections/logs/rules/DNS/provider/geodata/backup menus",
+        "Editor entry actions and group-member actions",
+        "Backup right-click ZIP export with current upstream layout and lossless native data"
+      ],
+      "source": [
+        "entry/src/main/ets/pages/Index.ets",
+        "entry/src/main/ets/components/ObjectEditorDialog.ets",
+        "entry/src/main/ets/components/ProxyGroupDialog.ets"
+      ]
+    },
+    {
+      "feature": "Daily browser connectivity",
+      "status": "verified_with_limits",
+      "latest": "Core 0.25 with actual controller config reload, temporary payloads and runtime settings GUI installed. Public temporary configuration removed after saved-profile restoration; original clash-fixed/Rule/Japanese selection/7890-7891 and enabled system proxy retained. Explicit device-proxy Google HTTPS 204 / CONNECT 200 / TLS verification 0 succeeds.",
+      "limit": "Latest check is an explicit HTTP-proxy request. Earlier simulator browser screenshots prove system-proxy browser use. Closing the app with TUN is not proven on this simulator."
+    }
+  ],
+  "nextWork": [
+    "Broader general config support, including LAN access and sniffer/routing options",
+    "Supported-device TUN proof and broader archive interoperability",
+    "Additional appearance customization, full-schema/reference completion"
+  ],
+  "goalCompletionProven": false,
+  "reviewedAt": "2026-10-17 06:13:46 UTC",
+  "verificationNotes": "Status summary only. Historical device screenshots and per-run records are archived outside the source repository. Reproduce host checks with tests/README.md; device and true VPN validation remain separate."
+}

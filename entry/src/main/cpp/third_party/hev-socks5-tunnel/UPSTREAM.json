@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/heiher/hev-socks5-tunnel",
+  "revisions": {
+    ".": "873541b81f00f8fd462392fc622adbb8a8cd59b0",
+    "src/core": "9f1cf0bfca0c003dd0cf0fbdcf6912a2b46a8d05",
+    "third-part/hev-task-system": "b2f2250371c1bd436a42f3c380ee46d4ac3bada8",
+    "third-part/lwip": "7f51e51c72d088481af972c3a115cec41c043d49"
+  },
+  "localChanges": [
+    "Use a raw IP fd supplied by HarmonyOS VPN instead of platform TUN creation.",
+    "Notify the caller after tunnel initialization, before entering the event loop.",
+    "Preserve zero-length UDP payloads when returning SOCKS5 datagrams to the TUN device."
+  ]
+}

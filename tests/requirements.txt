@@ -1,0 +1,2 @@
+# Independent crypto protocol peers; the application itself does not use Python.
+cryptography==46.0.3

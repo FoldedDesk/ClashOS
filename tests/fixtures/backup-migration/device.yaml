@@ -1,0 +1,7 @@
+# Public backup migration fixture; no subscription or node credentials.
+port: 7890
+socks-port: 7891
+mode: rule
+proxies: [{name: Backup Direct, type: direct}]
+proxy-groups: [{name: Backup Policy, type: select, proxies: [Backup Direct]}]
+rules: ['MATCH,Backup Policy']

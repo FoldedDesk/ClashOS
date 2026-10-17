@@ -1,0 +1,12 @@
+# Public API fixture; contains no subscription address or node credentials.
+port: 7890
+socks-port: 7891
+mode: rule
+proxies:
+  - {name: '直连😀', type: direct}
+  - {name: '拒绝+ /?%', type: reject}
+proxy-groups:
+  - name: 'API+fixture /选择'
+    type: select
+    proxies: ['直连😀', '拒绝+ /?%']
+rules: ['MATCH,API+fixture /选择']

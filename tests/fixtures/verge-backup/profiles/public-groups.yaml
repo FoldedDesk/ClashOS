@@ -1,0 +1,3 @@
+prepend: []
+append: [{name: Public second group, type: select, proxies: [Public added, DIRECT]}]
+delete: []
