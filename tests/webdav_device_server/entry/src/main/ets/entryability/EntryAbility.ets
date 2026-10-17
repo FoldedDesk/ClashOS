@@ -4,6 +4,8 @@ import { socket } from '@kit.NetworkKit';
 import { util } from '@kit.ArkTS';
 import xml from '@ohos.xml';
 import { pasteboard } from '@kit.BasicServicesKit';
+import { VlessFixtureServer } from './VlessFixtureServer';
+import { probeVlessUdp } from './VlessFixtureProbe';
 
 interface FixtureFile { text: string; revision: number; }
 
@@ -17,6 +19,7 @@ export default class EntryAbility extends UIAbility {
   private methods: Record<string, number> = {};
   private clients: socket.TCPSocketConnection[] = [];
   private encoder: util.TextEncoder = new util.TextEncoder();
+  private vless: VlessFixtureServer = new VlessFixtureServer();
 
   onCreate(): void {
     this.server.on('connect', (client: socket.TCPSocketConnection): void => this.accept(client));
@@ -26,6 +29,7 @@ export default class EntryAbility extends UIAbility {
   onWindowStageCreate(stage: window.WindowStage): void { stage.loadContent('pages/Index'); }
 
   onDestroy(): void {
+    this.vless.stop();
     this.clients.forEach((client: socket.TCPSocketConnection) => client.close().catch(() => {}));
     this.server.close().catch(() => {}); this.files.clear();
   }
@@ -69,6 +73,9 @@ export default class EntryAbility extends UIAbility {
   }
 
   private handle(client: socket.TCPSocketConnection, method: string, path: string, headers: Record<string, string>, body: string): void {
+    if (path === '/test-admin/vless/start' && method === 'POST') { this.vless.start(this.context); this.respond(client, 200, '{}'); return; }
+    if (path === '/test-admin/vless/state') { this.respond(client, 200, this.vless.status()); return; }
+    if (path === '/test-admin/vless/probe' && method === 'POST') { probeVlessUdp().then((result: string) => this.respond(client, 200, result)).catch(() => this.respond(client, 500, '{}')); return; }
     if (path === '/test-admin/clipboard' && method === 'POST') {
       if (body.length > 256 * 1024) { this.respond(client, 413, ''); return; }
       // Fixture input only. This endpoint never reads or returns clipboard contents.

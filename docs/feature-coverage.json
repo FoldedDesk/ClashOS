@@ -1,6 +1,6 @@
 {
   "applicationName": "ClashOS",
-  "reviewedCoreVersion": "0.31",
+  "reviewedCoreVersion": "0.32",
   "objective": "实现 Clash Verge 的大部分功能，包括各类右键菜单，并提供可正常使用的 ClashOS。",
   "brandingDecision": "Follow the user's later explicit spelling correction: ClashOS.",
   "referenceInventory": [
@@ -54,10 +54,15 @@
         "Incremental VMess response parsing retains AEAD/legacy header, length, masking, nonce and payload state across EAGAIN; partial replies and TLS control messages do not block later client writes",
         "Independent OpenSSL/cryptography peers verify actual SS/VMess/Trojan TCP/UDP addresses, IPv6/aliases, TLS/WebSocket, HTTPS original Host/SNI, maximum SS datagrams and snapshot restoration",
         "60 deterministic VMess partial-response duplex cases cover plain TCP, TLS, WebSocket, WebSocket/TLS, legacy/AEAD headers and AES-GCM/ChaCha20-Poly1305/none",
-        "HarmonyOS PC simulator Core 0.30/0.31 comparison: same .invalid mapped destination fails on old core, passes verified HTTPS via new HTTP/SOCKS, fails with use-hosts false and passes again after re-enabling"
+        "HarmonyOS PC simulator Core 0.30/0.31 comparison: same .invalid mapped destination fails on old core, passes verified HTTPS via new HTTP/SOCKS, fails with use-hosts false and passes again after re-enabling",
+        "Native VLESS v0 TCP/TLS/WebSocket/WebSocket+TLS and standard length-prefixed UDP; UUID, address families, response addons, partial nonblocking reads, server-first and TCP half-close semantics",
+        "VLESS configuration/provider parsing, share-link and Base64 list import, visual node forms, protocol-aware editor completion, API capabilities and device protocol diagnostics",
+        "Unsupported VLESS Reality/Vision/XUDP/encryption/transports and malformed security flags fail explicitly, before dialing when applicable; no silent DIRECT fallback",
+        "Independent Python/OpenSSL VLESS peers exercise real HTTP/SOCKS ingress, hosts-mapped destinations, UDP empty/maximum/coalesced/truncated packets and independently verified HTTPS probes",
+        "Final Core 0.32 simulator HAP verifies all four VLESS transports through HTTP/SOCKS and actual SOCKS5 UDP (0/8/4096/65483 bytes); node latency, UUID/certificate/Vision negative controls, UI selection and persisted visual edits verified"
       ],
       "remaining": [
-        "Protocol and option breadth is below Mihomo",
+        "Protocol and option breadth is below Mihomo, including VLESS Reality/Vision/XUDP/extra encryption, other advanced transports and additional outbound protocols",
         "No bundled Mihomo/Alpha core download/switch workflow",
         "REST compatibility remains partial: redir/TProxy and broader TUN/general configuration fields"
       ],
@@ -81,7 +86,12 @@
         "entry/src/main/cpp/vmess_protocol.inc",
         "tests/dns_hosts_test.inc",
         "tests/hosts_reference_peer.py",
-        "tests/vmess_duplex_reference_peer.py"
+        "tests/vmess_duplex_reference_peer.py",
+        "entry/src/main/cpp/vless_protocol.inc",
+        "tests/vless_core_test.inc",
+        "tests/vless_reference_peer.py",
+        "tests/webdav_device_server/entry/src/main/ets/entryability/VlessFixtureServer.ets",
+        "tests/webdav_device_server/entry/src/main/cpp/tls_bridge.cpp"
       ]
     },
     {
@@ -261,8 +271,8 @@
     {
       "feature": "Daily browser connectivity",
       "status": "verified_with_limits",
-      "latest": "Core 0.31 installed. Actual old/new simulator hosts control uses a reserved .invalid CONNECT destination and preserves the real public website TLS name: HTTP/SOCKS success, disabled-mapping failure and re-enabled success. Original saved profile, rule mode, all 11 group selections, ports 7890/7891 and original window restored; private test payloads and owned forward removed. Explicit Google HTTPS via the restored device proxy returns 204 / CONNECT 200 / TLS verification 0.",
-      "limit": "Device hosts proof covers the selected SS node with HTTP and SOCKS TCP. VMess/Trojan/UDP and partial-response duplex use independent host-side peers with shipping crypto backends; device-specific validation remains separate. Ordinary api.github.com domain connections still fail intermittently; pinned-address controls passed but cause is not proven. Some host test wrappers cannot access HDC forwards. Full native suite cannot run here because host loopback binding is denied. Device TUN authorization/background survival remains unproven."
+      "latest": "Core 0.32 installed. The final HAP passes independent on-emulator VLESS TCP/TLS/WS/WSS HTTP and SOCKS 204 controls and actual SOCKS5 UDP echo across empty/small/large/maximum packets. Saved VLESS profile/selection reload on cold start and visual override persists. Original saved profile, rule mode, all 11 group selections and full meaningful runtime settings restored; owned fixture profile/app/clipboard/forwards removed and window restored. Explicit Google HTTPS through the restored device proxy returns 204 / CONNECT 200 / TLS verification 0.",
+      "limit": "VLESS device proof uses a fixed independent ArkTS responder with a native TLS bridge; TLS-positive device fixtures explicitly skip the public test CA, and required-verification negative controls fail. Host-side independent OpenSSL peers separately prove CA/hostname acceptance and rejection plus verified HTTPS destinations. Reality/Vision/XUDP/extra encryption remain unsupported. Ordinary api.github.com domain connections had intermittent TLS failures in earlier controls; cause is still unproven. Full native suite requires loopback binding unavailable in this host sandbox. True-device TUN authorization/background survival remains unproven."
     },
     {
       "feature": "Domain sniffing",
@@ -300,6 +310,6 @@
     "Advanced style assets and full Mihomo schema/alias/downloaded-provider completion"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 11:18:16 UTC",
+  "reviewedAt": "2026-10-17 12:06:25 UTC",
   "verificationNotes": "Status summary only. Historical device screenshots and per-run records are archived outside the source repository. Reproduce host checks with tests/README.md; device and true VPN validation remain separate."
 }

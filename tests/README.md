@@ -34,6 +34,20 @@ VMess 双向转发检查会先发送不完整的响应头、长度或负载，�
 也不阻塞后续客户端写入；覆盖 AEAD / 旧版响应头、AES-GCM、ChaCha20-Poly1305 和 none。
 专项不能替代真实设备的网络、VPN 授权和后台运行验证。
 
+VLESS 专项同样使用继承的 Unix socket，无需主机监听权限：
+
+```sh
+python3 tests/run_native_tests.py --suite vless --build-dir .host-build/native
+```
+
+独立 Python / OpenSSL 对端检查 VLESS v0 的 UUID、命令、域名 / IPv4 / IPv6、
+TCP / TLS / WebSocket / WebSocket + TLS、双向分片、服务器先发数据与 TCP 半关闭。
+包含实际 HTTP / SOCKS5 入站、空包和大 UDP 包、HTTPS 证书与状态检查、hosts 映射、
+分享链接和节点编辑；错误响应头、Vision / Reality / XUDP 等不支持的配置必须明确失败。
+模拟器专项使用 [独立设备测试应用](webdav_device_server/README.md#vless-device-verification)，
+验证实际数据面；TLS 参考证书属于公开测试 CA，设备正向控制显式跳过该测试证书校验，
+关闭跳过选项的负向控制必须失败。主机专项另验证受信任 CA 和主机名。
+
 ArkTS 服务测试通过 TypeScript 转译执行，不需要运行 ArkUI。
 可使用 DevEco Studio 随附的 TypeScript，或安装经过验证的标准版本：
 

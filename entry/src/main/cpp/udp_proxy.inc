@@ -269,6 +269,7 @@ struct UdpFlow {
     bool failed = false;
     std::unique_ptr<VmessSession> vmess;
     std::unique_ptr<TrojanSession> trojan;
+    std::unique_ptr<VlessSession> vless;
     std::thread streamThread;
     int notifyMain = -1, notifyWorker = -1;
     std::mutex streamMutex;
@@ -282,11 +283,11 @@ struct UdpFlow {
     bool streamPending() {
         std::lock_guard<std::mutex> lock(streamMutex); return !streamOutput.empty() || streamStopped.load();
     }
-    bool streamed() const { return vmess != nullptr || trojan != nullptr; }
+    bool streamed() const { return vmess != nullptr || trojan != nullptr || vless != nullptr; }
     void runStream() {
         bool ok = true;
         while (ok && g_state.running.load() && !streamStopping.load()) {
-            const bool buffered = vmess ? vmess->pending() : trojan->pending();
+            const bool buffered = vmess ? vmess->pending() : vless ? vless->pending() : trojan->pending();
             bool queued;
             { std::lock_guard<std::mutex> lock(streamMutex); queued = !streamInput.empty(); }
             pollfd watches[2] = {{fd, POLLIN, 0}, {notifyWorker, POLLIN, 0}};
@@ -297,14 +298,14 @@ struct UdpFlow {
             for (int count = 0; count < 16; ++count) {
                 VmBytes packet;
                 { std::lock_guard<std::mutex> lock(streamMutex); if (streamInput.empty()) break; packet=std::move(streamInput.front()); streamInput.pop_front(); }
-                const bool written = vmess ? vmess->chunk(packet.data(), packet.size()) : trojan->writeDatagram(host, port, packet);
+                const bool written = vmess ? vmess->chunk(packet.data(), packet.size()) : vless ? vless->writeDatagram(packet) : trojan->writeDatagram(host, port, packet);
                 if (!written) { streamError.store(errno); ok=false; break; }
                 recordTransfer(fd, true, packet.size());
             }
             if (!ok || streamStopping.load()) break;
             if (buffered || watches[0].revents) {
                 VmBytes packet;
-                const bool read = vmess ? vmess->read(packet, true) : trojan->readDatagram(packet, true);
+                const bool read = vmess ? vmess->read(packet, true) : vless ? vless->read(packet, true) : trojan->readDatagram(packet, true);
                 if (!read) { if (errno == EAGAIN || errno == EWOULDBLOCK || (trojan && errno == EMSGSIZE)) continue; streamError.store(errno); break; }
                 if (packet.size() <= UDP_MAX_PACKET - (trojan ? 3 : 0)) {
                     { std::lock_guard<std::mutex> lock(streamMutex); if (streamOutput.size() >= 64) streamOutput.pop_front(); streamOutput.push_back(std::move(packet)); }
@@ -352,7 +353,7 @@ std::unique_ptr<UdpFlow> openUdpFlow(int owner, const UdpTarget& target, const P
         flow->master = evpBytesToKey(node.password,keySize);
         if (keySize==0||flow->master.size()!=keySize) return nullptr;
     }
-    if (node.type == "vmess" || node.type == "trojan") {
+    if (node.type == "vmess" || node.type == "trojan" || node.type == "vless") {
         flow->fd = connectUpstream(node.server, node.port, 6000,DnsPurpose::Proxy);
         if (flow->fd < 0) return nullptr;
         socketTimeout(flow->fd, 6000);
@@ -361,6 +362,9 @@ std::unique_ptr<UdpFlow> openUdpFlow(int owner, const UdpTarget& target, const P
         if (node.type == "vmess") {
             flow->vmess = std::make_unique<VmessSession>(flow->fd);
             opened = flow->vmess->start(node, flow->host, target.port, true, error);
+        } else if (node.type == "vless") {
+            flow->vless = std::make_unique<VlessSession>(flow->fd);
+            opened = flow->vless->start(node, flow->host, target.port, true, error);
         } else {
             flow->trojan = std::make_unique<TrojanSession>(flow->fd);
             opened = flow->trojan->start(node, flow->host, target.port, true, error);

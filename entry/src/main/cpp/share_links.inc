@@ -158,6 +158,45 @@ bool shareTrojan(std::string body, ShareLinkNode& node, std::string& error)
     return true;
 }
 
+bool shareVless(std::string body, ShareLinkNode& node, std::string& error)
+{
+    node.type = "vless";
+    const size_t query = body.find('?'); std::map<std::string, std::string> params;
+    if (query != std::string::npos) {
+        if (!shareParams(body.substr(query + 1), {"sni", "peer", "allowInsecure", "insecure", "type", "security", "host", "path", "alpn", "encryption", "flow", "packetEncoding", "packet-encoding", "headerType"}, params)) {
+            error = "VLESS 链接含有重复或尚不支持的参数"; return false;
+        }
+        body.resize(query);
+    }
+    const size_t at = body.rfind('@'); std::string uuid, endpoint;
+    if (at != std::string::npos) endpoint = body.substr(at + 1);
+    if (!endpoint.empty() && endpoint.back() == '/') endpoint.pop_back();
+    if (at == std::string::npos || !sharePercent(body.substr(0, at), uuid) || uuid.empty() || !shareEndpoint(endpoint, node)) {
+        error = "VLESS UUID、服务器或端口无效"; return false;
+    }
+    const std::string network = params["type"].empty() ? "tcp" : params["type"];
+    const std::string security = params["security"].empty() ? "none" : params["security"];
+    if ((network != "tcp" && network != "ws") || (security != "none" && security != "tls")) { error = "VLESS 当前支持 TCP、TLS、WebSocket 和 WebSocket + TLS；尚不支持 Reality"; return false; }
+    if (!params["flow"].empty() || !params["packetEncoding"].empty() || !params["packet-encoding"].empty() ||
+        (!params["encryption"].empty() && params["encryption"] != "none") || (!params["headerType"].empty() && params["headerType"] != "none")) {
+        error = "VLESS 尚不支持 Vision、XUDP、额外加密或 TCP 伪装"; return false;
+    }
+    if ((!params["sni"].empty() && !params["peer"].empty() && params["sni"] != params["peer"]) ||
+        (params.count("insecure") && params.count("allowInsecure") && params["insecure"] != params["allowInsecure"])) { error = "VLESS 链接参数互相冲突"; return false; }
+    bool insecure = false;
+    if (!shareBoolean(params.count("allowInsecure") ? params["allowInsecure"] : params["insecure"], insecure)) { error = "VLESS 证书校验参数无效"; return false; }
+    if (network != "ws" && (!params["path"].empty() || !params["host"].empty())) { error = "WebSocket Host 和路径需要 type=ws"; return false; }
+    node.fields["uuid"] = shareQuoted(uuid); node.fields["encryption"] = "\"none\"";
+    node.fields["network"] = shareQuoted(network); node.fields["tls"] = security == "tls" ? "true" : "false";
+    node.fields["servername"] = shareQuoted(params["sni"].empty() ? params["peer"] : params["sni"]);
+    node.fields["skip-cert-verify"] = insecure ? "true" : "false";
+    if (network == "ws") node.fields["ws-opts"] = "{\"path\":" + shareQuoted(params["path"].empty() ? "/" : params["path"]) + ",\"headers\":" + (params["host"].empty() ? "{}" : "{\"Host\":" + shareQuoted(params["host"]) + "}") + "}";
+    std::string alpn;
+    if (!shareAlpn(params["alpn"], network, alpn)) { error = "TLS ALPN 无效，WebSocket 需要 http/1.1"; return false; }
+    if (!alpn.empty()) node.fields["alpn"] = alpn;
+    return true;
+}
+
 bool shareVmess(const std::string& body, ShareLinkNode& node, std::string& error)
 {
     node.type = "vmess"; std::string decoded;
@@ -207,7 +246,7 @@ std::string shareLinksJson(std::string text, const std::string& occupiedJson = "
     if (text.compare(0, 3, "\xef\xbb\xbf") == 0) text.erase(0, 3);
     if (text.find("://") == std::string::npos) {
         std::string compact, decoded; for (unsigned char ch : text) if (!std::isspace(ch)) compact += ch;
-        if (!shareBase64(compact, decoded)) return fail("请输入 ss://、vmess:// 或 trojan:// 节点链接，也可粘贴 Base64 节点列表"); text = decoded;
+        if (!shareBase64(compact, decoded)) return fail("请输入 ss://、vmess://、vless:// 或 trojan:// 节点链接，也可粘贴 Base64 节点列表"); text = decoded;
     }
     std::istringstream lines(text); std::string line, nodes = "[", views = "["; std::vector<std::string> members; size_t number = 0;
     while (std::getline(lines, line)) {
@@ -226,7 +265,8 @@ std::string shareLinksJson(std::string text, const std::string& occupiedJson = "
             if (protocol == "ss") ok = shareSs(body, node, error);
             else if (protocol == "trojan") ok = shareTrojan(body, node, error);
             else if (protocol == "vmess") ok = shareVmess(body, node, error);
-            else { error = "内置内核支持导入 SS、VMess 和 Trojan 链接；此协议尚不支持"; ok = false; }
+            else if (protocol == "vless") ok = shareVless(body, node, error);
+            else { error = "内置内核支持导入 SS、VMess、VLESS 和 Trojan 链接；此协议尚不支持"; ok = false; }
         }
         if (!ok) return fail("第 " + std::to_string(number) + " 行：" + (error.empty() ? "链接格式或百分号转义无效" : error));
         if (!fragment.empty()) node.name = fragment;

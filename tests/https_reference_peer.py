@@ -7,6 +7,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
 from vmess_reference_peer import Wire, decode_header, Mask, kdf
 from trojan_reference_peer import read_header, address as socks_address
+from vless_reference_peer import read_header as read_vless_header
 
 class Tunnel:
     def __init__(self, wire, kind, alter, fault):
@@ -32,8 +33,10 @@ class Tunnel:
             self.writer=AESGCM(self.key);self.mask=Mask(self.iv);self.alter=alter
         elif kind.startswith('trojan'):
             read_header(wire,target_host,password='probe-password')
+        elif kind.startswith('vless'):
+            read_vless_header(wire,target_host)
     def receive(self):
-        if self.kind=='direct' or self.kind.startswith('trojan'):
+        if self.kind=='direct' or self.kind.startswith(('trojan', 'vless')):
             if self.wire.buffer:
                 data,self.wire.buffer=self.wire.buffer,b''
                 return data
@@ -55,6 +58,9 @@ class Tunnel:
         nonce=self.read_count.to_bytes(2,'big')+self.read_iv[2:12];self.read_count+=1
         return self.reader.decrypt(nonce,data,None)
     def send(self,data):
+        if self.kind.startswith('vless'):
+            if not self.response_header:self.wire.send(b'\0\0');self.response_header=True
+            self.wire.send(data);return
         if self.kind=='direct' or self.kind.startswith('trojan'):self.wire.send(data);return
         if self.kind.startswith('ss'):
             if not self.response_header:self.wire.send(self.salt);self.response_header=True
@@ -89,7 +95,7 @@ def main():
     conn=socket.socket(fileno=fd);conn.settimeout(5)
     if kind.endswith('-tls'):conn=context().wrap_socket(conn,server_side=True)
     wire=Wire(conn)
-    if '-ws' in kind:wire.upgrade(path='/trojan?test=1' if kind.startswith('trojan') else '/vmess?test=1')
+    if '-ws' in kind:wire.upgrade(path='/vless?test=1' if kind.startswith('vless') else '/trojan?test=1' if kind.startswith('trojan') else '/vmess?test=1')
     tunnel=Tunnel(wire,kind,alter,fault)
     incoming,outgoing=ssl.MemoryBIO(),ssl.MemoryBIO();ctx=context();names=[]
     ctx.sni_callback=lambda connection,name,selected:names.append(name)

@@ -121,6 +121,7 @@ export interface CoreDiagnostics {
   shadowsocks?: boolean;
   vmess?: boolean;
   trojan?: boolean;
+  vless?: boolean;
   certificateStore?: boolean;
   listeners: boolean;
   httpPort: number;

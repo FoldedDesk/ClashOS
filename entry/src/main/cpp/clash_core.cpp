@@ -731,7 +731,7 @@ bool parseProxyNode(yaml_document_t& document,yaml_node_t* source,ProxyNode& nod
             if (node.serverName.empty()) node.serverName = value(source, "sni");
             node.skipCertVerify = lower(value(source, "skip-cert-verify")) == "true";
             yaml_node_t* alpn = yamlValue(document, source, "alpn");
-            if (alpn != nullptr && (node.type == "trojan" || node.type == "vmess")) {
+            if (alpn != nullptr && (node.type == "trojan" || node.type == "vmess" || node.type == "vless")) {
                 if (alpn->type != YAML_SEQUENCE_NODE || alpn->data.sequence.items.top - alpn->data.sequence.items.start > 16) {
                     valid = false; error = "TLS ALPN must be a list of at most 16 protocol names"; break;
                 }
@@ -768,14 +768,38 @@ bool parseProxyNode(yaml_document_t& document,yaml_node_t* source,ProxyNode& nod
                         node.transportError = std::string("Unsupported Trojan option: ") + option;
                 }
             }
-            if (node.type == "vmess") {
+            if (node.type == "vless") {
+                for (const char* option : {"tls", "udp", "skip-cert-verify"}) {
+                    auto* configured = yamlValue(document, source, option);
+                    const std::string flag = lower(yamlText(configured));
+                    if (configured && (configured->type != YAML_SCALAR_NODE || (flag != "true" && flag != "false"))) {
+                        valid = false; error = std::string("VLESS ") + option + " must be true or false"; break;
+                    }
+                }
+                if (!valid) break;
+                for (const char* option : {"reality-opts", "flow", "packet-encoding", "fingerprint", "name-cert-verify", "client-fingerprint", "dialer-proxy", "http-opts", "h2-opts", "grpc-opts", "xhttp-opts"}) {
+                    yaml_node_t* configured = yamlValue(document, source, option);
+                    if (configured != nullptr && (configured->type != YAML_SCALAR_NODE || !yamlText(configured).empty()))
+                        node.transportError = std::string("Unsupported VLESS option: ") + option;
+                }
+                const std::string encryption = lower(value(source, "encryption"));
+                const auto* encryptionOption = yamlValue(document, source, "encryption");
+                if ((encryptionOption && encryptionOption->type != YAML_SCALAR_NODE) || (!encryption.empty() && encryption != "none") || (!node.cipher.empty() && node.cipher != "none"))
+                    node.transportError = "VLESS encryption must be none; encrypted VLESS is not implemented";
+                if (lower(value(yamlValue(document, source, "smux"), "enabled")) == "true") node.transportError = "Unsupported VLESS option: smux";
+                for (const char* option : {"max-early-data", "early-data-header-name"}) {
+                    const std::string configured = value(ws, option);
+                    if (!configured.empty() && configured != "0") node.transportError = std::string("Unsupported VLESS WebSocket option: ") + option;
+                }
+            }
+            if (node.type == "vmess" || node.type == "vless") {
                 std::string id;
                 for (char ch : node.uuid) { if (ch != '-') id += ch; }
                 if (id.size() != 32 || !std::all_of(id.begin(), id.end(), [](unsigned char ch) { return std::isxdigit(ch); })) {
-                    valid = false; error = "VMess requires a valid 16-byte UUID"; break;
+                    valid = false; error = node.type == "vless" ? "VLESS requires a valid 16-byte UUID" : "VMess requires a valid 16-byte UUID"; break;
                 }
             }
-            if (node.type == "vmess" || node.type == "trojan") {
+            if (node.type == "vmess" || node.type == "trojan" || node.type == "vless") {
                 if (node.wsPath.empty() || node.wsPath.front() != '/' || node.wsPath.find_first_of("\r\n ") != std::string::npos ||
                     node.serverName.find_first_of("\r\n") != std::string::npos) {
                     valid = false; error = "Invalid proxy transport path or server name"; break;
@@ -1225,15 +1249,20 @@ bool supportsTrojan(const ProxyNode& node)
         node.transportError.empty() && (node.network != "ws" || node.alpn.empty() ||
         std::find(node.alpn.begin(), node.alpn.end(), "http/1.1") != node.alpn.end());
 }
+bool supportsVless(const ProxyNode& node)
+{
+    return node.type == "vless" && (node.network == "tcp" || node.network == "ws") && node.transportError.empty() &&
+        (node.network != "ws" || node.alpn.empty() || std::find(node.alpn.begin(), node.alpn.end(), "http/1.1") != node.alpn.end());
+}
 bool supportsUdp(const ProxyNode& node)
 {
-    return (node.type == "direct"&&(!node.udpConfigured||node.udp)) || (node.udp && ((node.type == "ss" && shadowsocksCipher(node.cipher)!=SsCipher::Unsupported) || supportsVmess(node) || supportsTrojan(node)));
+    return (node.type == "direct"&&(!node.udpConfigured||node.udp)) || (node.udp && ((node.type == "ss" && shadowsocksCipher(node.cipher)!=SsCipher::Unsupported) || supportsVmess(node) || supportsTrojan(node) || supportsVless(node)));
 }
 
 std::string proxyNodeJsonLocked(const ProxyNode& node)
 {
     const std::string type = node.type == "ss" ? "Shadowsocks" : node.type == "vmess" ? "VMess" :
-        node.type == "trojan" ? "Trojan" : node.type == "direct" ? "DIRECT" : node.type == "reject" ? "REJECT" : node.type;
+        node.type == "trojan" ? "Trojan" : node.type == "vless" ? "VLESS" : node.type == "direct" ? "DIRECT" : node.type == "reject" ? "REJECT" : node.type;
     std::ostringstream output;
     output << "{\"name\":\"" << jsonEscape(node.name) << "\",\"type\":\"" << jsonEscape(type)
         << "\",\"udp\":" << (supportsUdp(node) ? "true" : "false");
@@ -1437,8 +1466,8 @@ std::string responseFor(const std::string& method, const std::string& path, cons
     if (path.substr(0, path.find('?')) == "/clashos/ports") return proxyPortsControlLocked(method, path, body);
     if (path.substr(0, path.find('?')) == "/clashos/inbound") return inboundControlLocked(method, path, body);
     if (method == "GET" && path == "/version") {
-        return "{\"version\":\"ClashOS Core 0.31 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
-            "\",\"premium\":false,\"meta\":true,\"features\":[\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"trojan\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
+        return "{\"version\":\"ClashOS Core 0.32 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
+            "\",\"premium\":false,\"meta\":true,\"features\":[\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"vless\",\"trojan\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
     }
     if (method == "GET" && path == "/clahsos/diagnostics") return diagnosticsJson();
     const std::string resource=path.substr(0,path.find('?'));
@@ -1899,6 +1928,7 @@ bool shadowsocksCryptoSelfTest()
 bool vmessCryptoSelfTest();
 bool vmessTrustStoreSelfTest();
 bool trojanCryptoSelfTest();
+bool vlessProtocolSelfTest();
 
 std::string diagnosticsJson()
 {
@@ -1918,13 +1948,14 @@ std::string diagnosticsJson()
     const bool vmessOk = vmessCryptoSelfTest();
     const bool shadowsocksOk=shadowsocksCryptoSelfTest();
     const bool trojanOk=trojanCryptoSelfTest();
+    const bool vlessOk=vlessProtocolSelfTest();
     const bool rootsOk = vmessTrustStoreSelfTest();
     const bool listenersOk = g_state.httpProxyFd >= 0 && (g_state.httpPort == g_state.socksPort || g_state.socksProxyFd >= 0);
     const auto boolean = [](bool value) { return value ? "true" : "false"; };
-    return std::string("{\"passed\":") + boolean(randomOk && md5Ok && encryptOk && decryptOk && authenticationOk && listenersOk && vmessOk && rootsOk&&shadowsocksOk&&trojanOk) +
+    return std::string("{\"passed\":") + boolean(randomOk && md5Ok && encryptOk && decryptOk && authenticationOk && listenersOk && vmessOk && rootsOk&&shadowsocksOk&&trojanOk&&vlessOk) +
         ",\"random\":" + boolean(randomOk) + ",\"md5\":" + boolean(md5Ok) + ",\"aesEncrypt\":" + boolean(encryptOk) +
         ",\"aesDecrypt\":" + boolean(decryptOk) + ",\"authentication\":" + boolean(authenticationOk) +
-        ",\"shadowsocks\":"+boolean(shadowsocksOk)+",\"vmess\":" + boolean(vmessOk) + ",\"trojan\":" + boolean(trojanOk) + ",\"certificateStore\":" + boolean(rootsOk) +
+        ",\"shadowsocks\":"+boolean(shadowsocksOk)+",\"vmess\":" + boolean(vmessOk) + ",\"trojan\":" + boolean(trojanOk) + ",\"vless\":" + boolean(vlessOk) + ",\"certificateStore\":" + boolean(rootsOk) +
         ",\"listeners\":" + boolean(listenersOk) + ",\"httpPort\":" + std::to_string(g_state.httpPort) +
         ",\"socksPort\":" + std::to_string(g_state.socksPort) + "}";
 }
@@ -2273,11 +2304,13 @@ bool connectShadowsocks(const ProxyNode& node, const std::string& host, int port
 #include "vmess_transport.inc"
 #include "vmess_protocol.inc"
 #include "trojan_protocol.inc"
+#include "vless_protocol.inc"
 
 struct ProxyStream {
     int fd = -1;
     std::unique_ptr<VmessSession> vmess;
     std::unique_ptr<TrojanSession> trojan;
+    std::unique_ptr<VlessSession> vless;
     bool encrypted = false;
     SsCipher ssCipher=SsCipher::Aes256Gcm;
     bool receivedSalt = false;
@@ -2308,6 +2341,13 @@ bool openProxyStream(const ProxyNode& node, const std::string& host, int port, P
             error = "Shadowsocks connection or handshake failed";
             return false;
         }
+    } else if (node.type == "vless") {
+        if (!VlessSession::validate(node, error)) return false;
+        stream.fd = connectUpstream(node.server, node.port, timeoutMs,DnsPurpose::Proxy);
+        if (stream.fd < 0) { error = "Cannot connect to VLESS server"; return false; }
+        socketTimeout(stream.fd, timeoutMs);
+        stream.vless = std::make_unique<VlessSession>(stream.fd);
+        if (!stream.vless->start(node, destination, port, false, error)) return false;
     } else if (node.type == "trojan") {
         if (!TrojanSession::validate(node, error)) return false;
         stream.fd = connectUpstream(node.server, node.port, timeoutMs,DnsPurpose::Proxy);
@@ -2334,6 +2374,7 @@ bool streamWrite(ProxyStream& stream, const char* data, size_t size)
 {
     if (stream.vmess) return stream.vmess->write(reinterpret_cast<const unsigned char*>(data), size);
     if (stream.trojan) return stream.trojan->write(reinterpret_cast<const unsigned char*>(data), size);
+    if (stream.vless) return stream.vless->write(reinterpret_cast<const unsigned char*>(data), size);
     if (!stream.encrypted) return sendAll(stream.fd, data, size);
     for (size_t offset = 0; offset < size;) {
         const size_t length = std::min<size_t>(0x3fff, size - offset);
@@ -2349,6 +2390,7 @@ bool streamRead(ProxyStream& stream, std::vector<unsigned char>& output, bool no
     output.clear();
     if (stream.vmess) return stream.vmess->read(output, nonblocking);
     if (stream.trojan) return stream.trojan->read(output, nonblocking);
+    if (stream.vless) return stream.vless->read(output, nonblocking);
     if (stream.encrypted) return shadowsocksReceive(stream.fd, stream.masterKey, stream.receivedSalt,
         stream.receiveKey, stream.receiveNonce, output,stream.ssCipher);
     if (!prepareSocketIo(stream.fd)) return false;
@@ -2375,7 +2417,7 @@ void relayStream(int client, ProxyStream& stream)
     std::vector<unsigned char> buffer(16384);
     while (clientOpen || remoteOpen) {
         pollfd reads[2] = {{clientOpen ? client : -1, POLLIN, 0}, {remoteOpen ? stream.fd : -1, POLLIN, 0}};
-        const bool buffered = remoteOpen && ((stream.vmess && stream.vmess->pending()) || (stream.trojan && stream.trojan->pending()));
+        const bool buffered = remoteOpen && ((stream.vmess && stream.vmess->pending()) || (stream.trojan && stream.trojan->pending()) || (stream.vless && stream.vless->pending()));
         const int ready = poll(reads, 2, buffered ? 0 : 300000);
         if (ready < 0 && errno == EINTR) continue;
         if (ready < 0 || (ready == 0 && !buffered)) break;
@@ -2386,6 +2428,7 @@ void relayStream(int client, ProxyStream& stream)
                 clientOpen = false;
                 if (stream.vmess) { if (!stream.vmess->finish()) break; }
                 else if (stream.trojan) { if (!stream.trojan->finish()) break; }
+                else if (stream.vless) { if (!stream.vless->finish()) break; }
                 else shutdown(stream.fd, SHUT_WR);
             } else if (count < 0) {
                 if (errno == EINTR) continue;
@@ -2398,11 +2441,12 @@ void relayStream(int client, ProxyStream& stream)
         if (remoteOpen && reads[1].revents != 0) {
             std::vector<unsigned char> plain;
             if (!streamRead(stream, plain, true)) {
-                if ((stream.vmess || stream.trojan) && (errno == EAGAIN || errno == EWOULDBLOCK)) continue;
+                if ((stream.vmess || stream.trojan || stream.vless) && (errno == EAGAIN || errno == EWOULDBLOCK)) continue;
                 if (errno != 0) {
                     if (stream.vmess) coreLog("warning", errno == EBADMSG ? "VMess response authentication failed" :
                         errno == EOVERFLOW ? "VMess connection reached its nonce limit" : "VMess transport interrupted or timed out");
                     else if (stream.trojan) coreLog("warning", "Trojan TLS or WebSocket transport interrupted or timed out");
+                    else if (stream.vless) coreLog("warning", "Invalid VLESS response or interrupted TLS/WebSocket transport");
                     else if (stream.encrypted) coreLog("warning", errno == EBADMSG ? "Shadowsocks authentication failed" : "Encrypted connection interrupted or timed out");
                     break;
                 }
@@ -2524,7 +2568,7 @@ void handleHttpProxyClient(int client)
     std::string error;
     if (!openProxyStream(node, plan.destination, port, stream, error)) {
         coreLog("error", host + ":" + std::to_string(port) + " via " + node.name + ": " + error);
-        const std::string status = node.type == "reject" ? "403 Forbidden" : node.type != "ss" && node.type != "direct" && node.type != "vmess" && node.type != "trojan" ? "501 Not Implemented" : "502 Bad Gateway";
+        const std::string status = node.type == "reject" ? "403 Forbidden" : node.type != "ss" && node.type != "direct" && node.type != "vmess" && node.type != "trojan" && node.type != "vless" ? "501 Not Implemented" : "502 Bad Gateway";
         if (!acknowledged) sendAll(client, "HTTP/1.1 " + status + "\r\nConnection: close\r\n\r\n");
         closeSocket(client);
         return;
@@ -2594,7 +2638,7 @@ void handleSocksClient(int client)
     std::string error;
     if (!openProxyStream(node, plan.destination, port, stream, error)) {
         coreLog("error", host + ":" + std::to_string(port) + " via " + node.name + ": " + error);
-        if (!acknowledged) socksReply(client, node.type == "reject" ? 2 : node.type != "ss" && node.type != "direct" && node.type != "vmess" && node.type != "trojan" ? 7 : 5);
+        if (!acknowledged) socksReply(client, node.type == "reject" ? 2 : node.type != "ss" && node.type != "direct" && node.type != "vmess" && node.type != "trojan" && node.type != "vless" ? 7 : 5);
         closeSocket(client);
         return;
     }

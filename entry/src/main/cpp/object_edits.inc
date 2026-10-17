@@ -123,7 +123,7 @@ bool editorObjectValid(const ObjectEditItem& item, bool group, std::string& erro
     }
     ProxyNode node;
     if (!parseProxyNode(data.document, root, node, error)) return false;
-    if (type != "ss" && type != "vmess" && type != "trojan" && type != "direct" && type != "reject") {
+    if (type != "ss" && type != "vmess" && type != "trojan" && type != "vless" && type != "direct" && type != "reject") {
         error = "This proxy protocol is not implemented by the built-in core"; return false;
     }
     if (type != "direct" && type != "reject") {
@@ -131,10 +131,13 @@ bool editorObjectValid(const ObjectEditItem& item, bool group, std::string& erro
         const long number = std::strtol(port.c_str(), &end, 10);
         if (end == port.c_str() || *end || number < 1 || number > 65535) { error = "Proxy port must be an integer from 1 to 65535"; return false; }
     }
-    if ((type == "vmess" || type == "trojan") && (node.network != "tcp" && node.network != "ws")) {
+    if ((type == "vmess" || type == "trojan" || type == "vless") && (node.network != "tcp" && node.network != "ws")) {
         error = "This proxy transport is not implemented by the built-in core"; return false;
     }
     if (!node.transportError.empty()) { error = node.transportError; return false; }
+    if (type == "vless" && node.network == "ws" && !node.alpn.empty() && std::find(node.alpn.begin(), node.alpn.end(), "http/1.1") == node.alpn.end()) {
+        error = "VLESS WebSocket requires HTTP/1.1 ALPN"; return false;
+    }
     if (type == "ss" && (!yamlText(yamlValue(data.document, root, "plugin")).empty() || node.tls ||
         lower(yamlText(yamlValue(data.document, root, "udp-over-tcp"))) == "true")) {
         error = "Shadowsocks plugins, TLS and UDP-over-TCP are not implemented"; return false;

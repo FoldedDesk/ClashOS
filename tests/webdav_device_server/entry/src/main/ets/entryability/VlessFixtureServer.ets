@@ -1,0 +1,126 @@
+import { socket } from '@kit.NetworkKit';
+import { util } from '@kit.ArkTS';
+import { cryptoFramework } from '@kit.CryptoArchitectureKit';
+import { common } from '@kit.AbilityKit';
+import tlsBridge from 'libvlessfixture.so';
+
+interface FixtureTransport { send: (bytes: Uint8Array) => Promise<void>; close: () => Promise<void>; }
+interface FixtureState { wire: Uint8Array; data: Uint8Array; websocket: boolean; header: boolean; udp: boolean; responded: boolean; closing: boolean; queue: Promise<void>; }
+
+// Independent, loopback-only VLESS server. It never dials a network destination:
+// vless.device.test:80 receives fixed HTTP 204; :443 UDP receives byte echoes.
+// Fixed public credentials and certificate are exclusively for this removable app.
+export class VlessFixtureServer {
+  private tcp: socket.TCPSocketServer = socket.constructTCPSocketServerInstance();
+  private decrypted: socket.TCPSocketServer = socket.constructTCPSocketServerInstance();
+  private clients: FixtureTransport[] = [];
+  private encoder: util.TextEncoder = new util.TextEncoder();
+  private decoder: util.TextDecoder = util.TextDecoder.create('utf-8');
+  private active: boolean = false;
+  private requests: number[] = [0, 0, 0, 0];
+  private packets: number = 0;
+  private rejected: number = 0;
+  private ready: string[] = [];
+  private failures: string[] = [];
+
+  start(context: common.UIAbilityContext): void {
+    if (this.active) return;
+    this.active = true;
+    this.tcp.on('connect', (client: socket.TCPSocketConnection): void => this.accept(client, false));
+    this.decrypted.on('connect', (client: socket.TCPSocketConnection): void => this.accept(client, true));
+    this.tcp.listen({ address: '127.0.0.1', port: 18097, family: 1 }).then(() => this.ready.push('tcp')).catch(() => this.failures.push('tcp-listen'));
+    this.decrypted.listen({ address: '127.0.0.1', port: 18099, family: 1 }).then(async (): Promise<void> => {
+      const files = await Promise.all([context.resourceManager.getRawFileContent('vless/server.pem'), context.resourceManager.getRawFileContent('vless/server-key.pem')]);
+      if (!tlsBridge.start(this.decoder.decodeToString(files[0]), this.decoder.decodeToString(files[1]))) throw new Error('TLS fixture unavailable');
+      this.ready.push('tls');
+    }).catch(() => this.failures.push('tls-listen'));
+  }
+  private accept(client: socket.TCPSocketConnection, tls: boolean): void {
+    const transport: FixtureTransport = { send: (bytes: Uint8Array): Promise<void> => client.send({ data: bytes.buffer as ArrayBuffer }), close: (): Promise<void> => client.close() };
+    const state = this.state(transport);
+    client.on('message', (message: socket.SocketMessageInfo): void => this.receive(transport, state, new Uint8Array(message.message), tls));
+    client.on('close', (): void => this.remove(transport));
+  }
+  stop(): void {
+    if (!this.active) return;
+    this.active = false; this.clients.forEach((client: FixtureTransport) => client.close().catch(() => {})); this.clients = [];
+    tlsBridge.stop(); this.tcp.close().catch(() => {}); this.decrypted.close().catch(() => {});
+  }
+  status(): string { return JSON.stringify({ ready: this.ready, failures: this.failures, requests: this.requests, packets: this.packets, rejected: this.rejected }); }
+  private state(client: FixtureTransport): FixtureState {
+    this.clients.push(client);
+    return { wire: new Uint8Array(0), data: new Uint8Array(0), websocket: false, header: false, udp: false, responded: false, closing: false, queue: Promise.resolve() };
+  }
+  private remove(client: FixtureTransport): void { this.clients = this.clients.filter((item: FixtureTransport) => item !== client); }
+  private join(first: Uint8Array, second: Uint8Array): Uint8Array { const result = new Uint8Array(first.length + second.length); result.set(first); result.set(second, first.length); return result; }
+  private reject(client: FixtureTransport, state: FixtureState): void { if (!state.closing) { this.rejected++; state.closing = true; client.close().catch(() => {}); } }
+  private receive(client: FixtureTransport, state: FixtureState, bytes: Uint8Array, tls: boolean): void {
+    state.queue = state.queue.then(async (): Promise<void> => {
+      if (state.closing) return;
+      if (state.wire.length + state.data.length + bytes.length > 192 * 1024) { this.reject(client, state); return; }
+      state.wire = this.join(state.wire, bytes);
+      if (!state.header && !state.websocket && state.wire[0] === 71) {
+        const request = this.decoder.decodeToString(state.wire); const end: number = request.indexOf('\r\n\r\n');
+        if (end < 0) { if (state.wire.length > 16384) this.reject(client, state); return; }
+        const lines = request.substring(0, end).split('\r\n'); const headers: Record<string, string> = {};
+        lines.slice(1).forEach((line: string) => { const colon = line.indexOf(':'); if (colon > 0) headers[line.substring(0, colon).toLowerCase()] = line.substring(colon + 1).trim(); });
+        if (lines[0] !== 'GET /vless-device HTTP/1.1' || headers['upgrade']?.toLowerCase() !== 'websocket' || !headers['sec-websocket-key']) { this.reject(client, state); return; }
+        const hash = cryptoFramework.createMd('SHA1');
+        await hash.update({ data: this.encoder.encodeInto(headers['sec-websocket-key'] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11') });
+        const digest = await hash.digest();
+        const accept = new util.Base64Helper().encodeToStringSync(digest.data);
+        await client.send(this.encoder.encodeInto(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`));
+        state.websocket = true; state.wire = state.wire.slice(end + 4);
+      }
+      if (!state.websocket) { state.data = this.join(state.data, state.wire); state.wire = new Uint8Array(0); }
+      else {
+        while (state.wire.length >= 2) {
+          const first = state.wire[0], second = state.wire[1]; let size: number = second & 127; let prefix: number = 2;
+          if (!(second & 128) || (first & 112) || !(first & 128)) { this.reject(client, state); return; }
+          if (size === 126) { if (state.wire.length < 4) return; size = state.wire[2] * 256 + state.wire[3]; prefix = 4; }
+          else if (size === 127) { if (state.wire.length < 10) return; if (state.wire.slice(2, 6).some((value: number) => value !== 0)) { this.reject(client, state); return; } size = state.wire[6] * 16777216 + state.wire[7] * 65536 + state.wire[8] * 256 + state.wire[9]; prefix = 10; }
+          if (size > 65537) { this.reject(client, state); return; }
+          if (state.wire.length < prefix + 4 + size) break;
+          const mask = state.wire.slice(prefix, prefix + 4), payload = state.wire.slice(prefix + 4, prefix + 4 + size);
+          for (let i: number = 0; i < payload.length; i++) payload[i] ^= mask[i % 4];
+          state.wire = state.wire.slice(prefix + 4 + size);
+          if ((first & 15) === 8) { state.closing = true; await client.close(); return; }
+          if ((first & 15) === 10) continue;
+          if ((first & 15) !== 2) { this.reject(client, state); return; }
+          state.data = this.join(state.data, payload);
+        }
+      }
+      if (!state.header) {
+        if (state.data.length < 23) return;
+        const id: number[] = [17,17,17,17,34,34,67,51,132,68,85,85,85,85,85,85];
+        if (state.data[0] !== 0 || !id.every((value: number, i: number) => state.data[i + 1] === value) || state.data[17] !== 0 || ![1,2].includes(state.data[18]) || state.data[21] !== 2) { this.reject(client, state); return; }
+        const length: number = state.data[22]; if (state.data.length < 23 + length) return;
+        const host = this.decoder.decodeToString(state.data.slice(23, 23 + length)), port = state.data[19] * 256 + state.data[20];
+        state.udp = state.data[18] === 2;
+        if (host !== 'vless.device.test' || port !== (state.udp ? 443 : 80)) { this.reject(client, state); return; }
+        state.header = true; state.data = state.data.slice(23 + length); this.requests[(tls ? 1 : 0) + (state.websocket ? 2 : 0)]++;
+        // Fragment the response header across native socket sends.
+        await this.send(client, state, new Uint8Array([0])); await this.send(client, state, new Uint8Array([0]));
+      }
+      if (state.udp) {
+        while (state.data.length >= 2) {
+          const size: number = state.data[0] * 256 + state.data[1]; if (state.data.length < 2 + size) return;
+          const packet = state.data.slice(0, size + 2); state.data = state.data.slice(size + 2); this.packets++;
+          await this.send(client, state, packet);
+        }
+      } else if (!state.responded) {
+        const request = this.decoder.decodeToString(state.data);
+        if (!request.includes('\r\n\r\n')) return;
+        if (!request.startsWith('GET /verify HTTP/1.1\r\n') || !/\r\nhost: vless\.device\.test(?::80)?\r\n/i.test(request)) { this.reject(client, state); return; }
+        state.responded = true;
+        await this.send(client, state, this.encoder.encodeInto('HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'));
+        state.closing = true; await client.close();
+      }
+    }).catch(() => this.reject(client, state));
+  }
+  private send(client: FixtureTransport, state: FixtureState, bytes: Uint8Array): Promise<void> {
+    if (!state.websocket) return client.send(bytes);
+    const prefix = bytes.length < 126 ? new Uint8Array([130, bytes.length]) : new Uint8Array([130, 126, bytes.length >> 8, bytes.length & 255]);
+    return client.send(this.join(prefix, bytes));
+  }
+}

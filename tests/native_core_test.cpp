@@ -418,6 +418,7 @@ void latencyAndRuleTests() {
 #include "inbound_test.inc"
 #include "sniffer_forward_test.inc"
 #include "sniffer_test.inc"
+#include "vless_core_test.inc"
 
 int main(int argc, char** argv) {
     std::signal(SIGPIPE, SIG_IGN);
@@ -428,6 +429,7 @@ int main(int argc, char** argv) {
             std::cout << output; return 0;
         }
         if (argc == 4 && std::string(argv[3]) == "archive") { backupCodecTests(argv[2]); std::cout << "PASS " << checks << " archive assertions\n"; return 0; }
+        if (argc == 4 && std::string(argv[3]) == "vless") { vlessTests(argv[2]); shareLinkTests(); objectEditsTests(argv[2]); std::cout << "PASS " << checks << " VLESS assertions (independent OpenSSL protocol peer, ingress, UDP, HTTPS, imports and editing)\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "hosts") { dnsHostsTests(argv[2]); vmessDuplexTests(argv[2]); vmessTests(argv[2]); dnsTests(argv[2]); ssAeadTests(); std::cout << "PASS " << checks << " hosts assertions (independent SS/VMess/Trojan peers)\n"; return 0; }
         require(argc == 3 || (argc == 4 && (std::string(argv[3]) == "api"||std::string(argv[3]) == "rules"||std::string(argv[3])=="dns"||std::string(argv[3])=="geo"||std::string(argv[3])=="ports"||std::string(argv[3])=="rule-edits"||std::string(argv[3])=="object-edits"||std::string(argv[3])=="share-links"||std::string(argv[3])=="merges"||std::string(argv[3])=="scripts"||std::string(argv[3])=="configs"||std::string(argv[3])=="inbound"||std::string(argv[3])=="sniffer")), "Expected configuration and temp directory, optionally api/rules/dns/geo/ports/rule-edits/object-edits/share-links/merges/scripts suite");
         if (argc == 4 && std::string(argv[3]) == "sniffer") { snifferTests(argv[2]); std::cout << "PASS " << checks << " sniffer assertions\n"; return 0; }
@@ -438,7 +440,7 @@ int main(int argc, char** argv) {
             return 0;
         }
         snifferTests(argv[2]); inboundTests(argv[2]); controllerConfigTests(argv[2]); backupCodecTests(argv[2]); controllerApiTests(argv[2]); controllerAuthTests(argv[2]);controllerStateTests(argv[2]); configScriptTests(argv[2]); configMergeTests(argv[2]); shareLinkTests(); objectEditsTests(argv[2]); ruleEditsTests(argv[2]); protocolTests(); configurationTests(argv[1], argv[2]); forwardingTests(); latencyAndRuleTests();
-        udpProtocolTests(); udpForwardingTests();
+        udpProtocolTests(); udpForwardingTests(); vlessTests(argv[2]);
         vmessTests(argv[2]);httpsProbeTests();groupHealthTests(argv[2]);providerTests(argv[2]);loadBalanceTests(argv[2]);ssAeadTests();trojanTests(argv[2]);ruleProviderTests(argv[2]);dnsHostsTests(argv[2]);vmessDuplexTests(argv[2]);dnsTests(argv[2]);dnsListenerTests(argv[2]);geoTests(argv[2]);proxyPortTests(argv[2]);
         std::cout << "PASS " << checks << " assertions (shipping Mbed TLS backend; Harmony networking still requires device verification)\n";
         return 0;

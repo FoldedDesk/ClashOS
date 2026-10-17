@@ -9,7 +9,7 @@ interface NodeFormPatch {
   server?: string; port?: number; password?: string; uuid?: string; cipher?: string; alterId?: number;
   tls?: boolean; 'skip-cert-verify'?: boolean; servername?: string | null; sni?: string | null; network?: string; 'ws-opts'?: WsNodePatch;
 }
-const NODE_TYPES: string[] = ['ss', 'vmess', 'trojan', 'direct', 'reject'];
+const NODE_TYPES: string[] = ['ss', 'vmess', 'vless', 'trojan', 'direct', 'reject'];
 const SS_CIPHERS: string[] = ['aes-128-gcm', 'aes-256-gcm', 'chacha20-ietf-poly1305', 'chacha20-poly1305', 'aead_aes_128_gcm', 'aead_aes_256_gcm', 'aead_chacha20_poly1305'];
 const VMESS_CIPHERS: string[] = ['auto', 'aes-128-gcm', 'chacha20-poly1305', 'none', 'zero'];
 export const NEW_NODE_CONTENT: string = '{"name":"","type":"ss","server":"","port":443,"cipher":"aes-128-gcm","password":"","udp":true}';
@@ -53,7 +53,7 @@ export struct ProxyNodeDialog {
     return Number(text);
   }
   private patch(): string {
-    const transport: boolean = this.form.type === 'vmess' || this.form.type === 'trojan';
+    const transport: boolean = this.form.type === 'vmess' || this.form.type === 'vless' || this.form.type === 'trojan';
     const patch: NodeFormPatch = { name: this.lockName ? this.identity : this.form.name.trim(), type: this.form.type, udp: this.form.udp,
       'skip-cert-verify': transport ? this.form.skipCertVerify : undefined,
       'ws-opts': transport && this.form.network === 'ws' ? { path: this.form.wsPath || '/', headers: { Host: this.form.wsHost.trim() || null } } : undefined };
@@ -61,10 +61,11 @@ export struct ProxyNodeDialog {
       patch.server = this.form.server.trim(); patch.port = this.integer(this.form.port, 65535, 1);
       if (this.form.type === 'ss' || this.form.type === 'trojan') patch.password = this.form.password;
       if (this.form.type === 'ss' || this.form.type === 'vmess') patch.cipher = this.form.cipher;
-      if (this.form.type === 'vmess') { patch.uuid = this.form.uuid.trim(); patch.alterId = this.integer(this.form.alterId || '0', 65535); }
-      if (this.form.type === 'vmess' || this.form.type === 'trojan') {
+      if (this.form.type === 'vmess' || this.form.type === 'vless') patch.uuid = this.form.uuid.trim();
+      if (this.form.type === 'vmess') { patch.alterId = this.integer(this.form.alterId || '0', 65535); }
+      if (this.form.type === 'vmess' || this.form.type === 'vless' || this.form.type === 'trojan') {
         patch.tls = this.form.type === 'trojan' || this.form.tls;
-        patch.servername = this.form.type === 'vmess' ? this.form.serverName.trim() : null;
+        patch.servername = this.form.type !== 'trojan' ? this.form.serverName.trim() : null;
         patch.sni = this.form.type === 'trojan' ? this.form.serverName.trim() : null; patch.network = this.form.network;
       }
     }
@@ -139,16 +140,18 @@ export struct ProxyNodeDialog {
                   .value(this.form.cipher).selected((this.form.type === 'ss' ? SS_CIPHERS : VMESS_CIPHERS).indexOf(this.form.cipher)).height(38).width('100%').font({ size: this.theme.font(13), family: this.theme.fontFamily })
                   .onSelect((index: number) => this.form.cipher = (this.form.type === 'ss' ? SS_CIPHERS : VMESS_CIPHERS)[index]); }.width('100%');
               }
-              if (this.form.type === 'vmess') {
+              if (this.form.type === 'vmess' || this.form.type === 'vless') {
                 Column() { this.label('UUID'); TextInput({ text: this.form.uuid, placeholder: '节点 UUID' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).backgroundColor(this.theme.field)
                   .onChange((value: string) => this.form.uuid = value); }.width('100%');
+              }
+              if (this.form.type === 'vmess') {
                 Column() { this.label('alterId（0 为 AEAD）'); TextInput({ text: this.form.alterId }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).type(InputType.Number).backgroundColor(this.theme.field)
                   .onChange((value: string) => this.form.alterId = value); }.width('100%');
               }
-              if (this.form.type === 'vmess' || this.form.type === 'trojan') {
+              if (this.form.type === 'vmess' || this.form.type === 'vless' || this.form.type === 'trojan') {
                 Column() { this.label('传输方式'); Select([{ value: 'tcp' }, { value: 'ws' }]).value(this.form.network).selected(this.form.network === 'ws' ? 1 : 0)
                   .height(38).width('100%').font({ size: this.theme.font(13), family: this.theme.fontFamily }).onSelect((index: number) => this.form.network = index === 1 ? 'ws' : 'tcp'); }.width('100%');
-                if (this.form.type === 'vmess') {
+                if (this.form.type === 'vmess' || this.form.type === 'vless') {
                   Row() { Text('TLS').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.tls }).selectedColor(this.theme.primary)
                     .onChange((value: boolean) => this.form.tls = value); }.width('100%');
                 }
@@ -166,6 +169,7 @@ export struct ProxyNodeDialog {
                 }
               }
             }
+            if (this.form.type === 'vless') Text('支持标准 VLESS TCP / TLS / WebSocket 和 UDP；Reality、Vision、XUDP 及额外加密尚不支持。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
             if (this.form.type !== 'reject') Row() {
               Text('UDP').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1); Toggle({ type: ToggleType.Switch, isOn: this.form.udp }).selectedColor(this.theme.primary)
                 .onChange((value: boolean) => this.form.udp = value);

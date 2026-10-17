@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.5.0)
+project(vlessfixture)
+get_filename_component(CLASHOS_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../../../.." ABSOLUTE)
+add_subdirectory("${CLASHOS_ROOT}/entry/src/main/cpp/crypto" "${CMAKE_CURRENT_BINARY_DIR}/crypto")
+add_library(vlessfixture SHARED tls_bridge.cpp)
+target_compile_features(vlessfixture PRIVATE cxx_std_17)
+target_link_libraries(vlessfixture PRIVATE clahsos_crypto libace_napi.z.so)

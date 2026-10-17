@@ -7,7 +7,7 @@ node_modules/
 .DS_Store
 clash.yaml
 clash.yaml.*
-entry/.cxx/
+.cxx/
 __pycache__/
 *.py[cod]
 local.properties

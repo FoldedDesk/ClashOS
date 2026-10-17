@@ -3,7 +3,7 @@
 HarmonyOS PC 代理客户端，使用 ArkUI 和 C++ 内置内核，采用顶部导航。
 
 支持配置文件及订阅导入、节点切换与测速、规则分流、连接与日志查看、备份恢复，
-也可连接兼容 Clash REST API 的外部内核。内置协议包括 Shadowsocks AEAD、VMess、
+也可连接兼容 Clash REST API 的外部内核。内置协议包括 Shadowsocks AEAD、VMess、VLESS、
 Trojan、HTTP 和 SOCKS5；支持代理/规则集合、地理数据库、DNS、YAML 扩展与 JavaScript 脚本。
 配置编辑器离线打包，提供语法高亮、查找替换、撤销重做与常用字段补全。
 
@@ -14,6 +14,11 @@ Trojan、HTTP 和 SOCKS5；支持代理/规则集合、地理数据库、DNS、Y
 
 这是独立实现的内核，配置兼容范围尚未覆盖 Mihomo 的全部协议和选项。
 功能范围及待完成事项见 [功能状态](docs/feature-coverage.json)。
+
+VLESS 支持标准 TCP、TLS、WebSocket、WebSocket + TLS 和长度分帧 UDP，
+可从 `vless://` 链接、本地配置或订阅导入，并使用节点表单编辑、切换及测速。
+Reality、Vision、XUDP、额外 VLESS 加密、gRPC / XHTTP 等传输尚不支持；
+配置这些选项时会明确报错，不会自动改为直连。TLS 默认校验证书和服务器名称。
 
 ## 构建与运行
 
@@ -106,7 +111,7 @@ sniffer:
 
 ## hosts 映射
 
-配置中的 `hosts` 同时用于 DNS 查询、直连和 SS / VMess / Trojan 的 TCP / UDP 目标。
+配置中的 `hosts` 同时用于 DNS 查询、直连和 SS / VMess / VLESS / Trojan 的 TCP / UDP 目标。
 支持域名别名链、通配域名和多个 IPv4 / IPv6 地址，具体域名优先于较宽的匹配。
 例如以下测试地址需替换为实际服务地址：
 

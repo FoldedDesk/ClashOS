@@ -1,0 +1,4 @@
+vless://11111111-2222-4333-8444-555555555555@127.0.0.1:18097?encryption=none&type=tcp&security=none#VLESS-device-TCP
+vless://11111111-2222-4333-8444-555555555555@127.0.0.1:18098?encryption=none&type=tcp&security=tls&sni=vmess.test&allowInsecure=1#VLESS-device-TLS
+vless://11111111-2222-4333-8444-555555555555@127.0.0.1:18097?encryption=none&type=ws&security=none&host=cdn.test&path=%2Fvless-device#VLESS-device-WS
+vless://11111111-2222-4333-8444-555555555555@127.0.0.1:18098?encryption=none&type=ws&security=tls&sni=vmess.test&allowInsecure=1&host=cdn.test&path=%2Fvless-device#VLESS-device-WS-TLS

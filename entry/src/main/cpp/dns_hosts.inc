@@ -58,7 +58,7 @@ DnsHostOverride dnsHostOverride(const DnsConfig& config,const std::string& input
 bool proxyDestination(const ProxyNode& node,const std::string& host,std::string& destination,std::string& error)
 {
     destination=host;
-    if(node.type!="ss"&&node.type!="vmess"&&node.type!="trojan")return true;
+    if(node.type!="ss"&&node.type!="vmess"&&node.type!="trojan"&&node.type!="vless")return true;
     auto config=node.destinationDns?node.destinationDns:g_dnsTransportConfig;
     if(!config){std::lock_guard<std::mutex> lock(g_state.mutex);config=g_state.dns;}
     if(!config)return true;

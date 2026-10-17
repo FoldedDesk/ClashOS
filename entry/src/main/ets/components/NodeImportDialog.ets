@@ -42,7 +42,7 @@ export struct NodeImportDialog {
         Text('导入节点链接').fontSize(this.theme.font(20)).fontFamily(this.theme.fontFamily).fontWeight(FontWeight.Bold).fontColor(this.theme.text).layoutWeight(1);
         Text('本地解析').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
       }.width('100%');
-      Text(this.createProfile ? '粘贴 SS、VMess 或 Trojan 链接，每行一个；也支持 Base64 节点列表。导入后创建独立配置并启用。' :
+      Text(this.createProfile ? '粘贴 SS、VMess、VLESS 或 Trojan 链接，每行一个；也支持 Base64 节点列表。导入后创建独立配置并启用。' :
         `添加到「${this.targetName}」的节点草稿。添加后可在“代理组”中选择这些节点，最后点击“保存并应用”。重名自动添加序号。`)
         .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
       Scroll() {
@@ -52,7 +52,7 @@ export struct NodeImportDialog {
               .height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5)).backgroundColor(this.theme.field).enabled(!this.saving)
               .onChange((value: string) => this.name = value);
           }
-          TextArea({ text: this.text, placeholder: 'ss://…\nvmess://…\ntrojan://…' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).accessibilityText('节点分享链接')
+          TextArea({ text: this.text, placeholder: 'ss://…\nvmess://…\nvless://…\ntrojan://…' }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).accessibilityText('节点分享链接')
             .height(190).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontFamily('monospace').borderRadius(this.theme.radius(5)).backgroundColor(this.theme.field).enabled(!this.saving)
             .onChange((value: string) => { if (value !== this.text) { this.text = value; this.result = emptyNodeLinkImport(); this.error = ''; } });
           Row() {
