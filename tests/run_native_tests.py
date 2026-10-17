@@ -4,7 +4,7 @@ from pathlib import Path
 import argparse, os, shutil, subprocess, tempfile
 from native_test_env import find_cmake
 parser = argparse.ArgumentParser()
-parser.add_argument('--suite', choices=['http', 'tls', 'dialer', 'groups', 'all', 'api', 'configs', 'inbound', 'sniffer', 'rules', 'dns', 'hosts', 'vless', 'forward', 'providers', 'yaml', 'ss-duplex', 'geo', 'ports', 'rule-edits', 'object-edits', 'share-links', 'merges', 'scripts', 'archive', 'network-backup', 'editor-providers'], default='all')
+parser.add_argument('--suite', choices=['http', 'tls', 'dialer', 'groups', 'all', 'api', 'configs', 'inbound', 'sniffer', 'rules', 'dns', 'hosts', 'vless', 'forward', 'providers', 'yaml', 'ss-duplex', 'ss2022', 'geo', 'ports', 'rule-edits', 'object-edits', 'share-links', 'merges', 'scripts', 'archive', 'network-backup', 'editor-providers'], default='all')
 parser.add_argument('--build-dir', type=Path, help='Optional reusable CMake build directory')
 parser.add_argument('--config', type=Path, help='Optional local configuration compatibility check; defaults to the public fixture')
 options = parser.parse_args()
@@ -19,6 +19,8 @@ for candidate in python_candidates:
         break
 else:
     raise SystemExit('Set CLAHSOS_REFERENCE_PYTHON to Python with cryptography for the independent VMess peer.')
+if options.suite in ('ss2022', 'all') and subprocess.run([os.environ['CLAHSOS_REFERENCE_PYTHON'], '-c', 'import blake3; from Crypto.Cipher import AES, ChaCha20_Poly1305'], capture_output=True).returncode:
+    raise SystemExit('SS2022 reference tests require blake3==1.0.8 and pycryptodome in CLAHSOS_REFERENCE_PYTHON (or its PYTHONPATH).')
 cmake = find_cmake()
 def run(command, timeout=180):
     result = subprocess.run([str(p) for p in command], cwd=root, text=True, capture_output=True, timeout=timeout)

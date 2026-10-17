@@ -274,6 +274,7 @@ struct UdpFlow {
     std::string host, originalHost, routeHost;
     int port = 0;
     std::vector<unsigned char> master;
+    std::unique_ptr<Ss2022Datagram> ss2022;
     UdpClock::time_point lastActivity = UdpClock::now();
     bool failed = false;
     bool internal = false;
@@ -296,7 +297,7 @@ struct UdpFlow {
     size_t payloadLimit() const {
         if(vmess)return 1966;
         if(vless||trojan)return UDP_MAX_PACKET;
-        const size_t overhead=node.type=="ss"?shadowsocksKeySize(shadowsocksCipher(node.cipher))+16+shadowsocksAddress(host,port).size():socksControl?3+shadowsocksAddress(host,port).size():0;
+        const size_t overhead=node.type=="ss"?(ss2022?ss2022->overhead():shadowsocksKeySize(shadowsocksCipher(node.cipher))+16)+shadowsocksAddress(host,port).size():socksControl?3+shadowsocksAddress(host,port).size():0;
         return carrierLimit>=overhead?carrierLimit-overhead:0;
     }
     static void notify(int socket) {
@@ -426,9 +427,14 @@ std::unique_ptr<UdpFlow> openUdpFlow(int owner, const UdpTarget& target, const P
             connectUdpOutbound(host,port,flow->remote,purpose);
     };
     if (node.type == "ss") {
-        const size_t keySize=shadowsocksKeySize(shadowsocksCipher(node.cipher));
+        const auto method=shadowsocksCipher(node.cipher);const size_t keySize=shadowsocksKeySize(method);
+        if(isSs2022(method)) {
+            const auto keys=ss2022Keys(method,node.password);if(keys.empty())return nullptr;
+            flow->ss2022=std::make_unique<Ss2022Datagram>(method,keys);if(flow->ss2022->clientId.empty())return nullptr;
+        } else {
         flow->master = evpBytesToKey(node.password,keySize);
         if (keySize==0||flow->master.size()!=keySize) return nullptr;
+        }
     }
     if (node.type == "socks5") {
         flow->socksControlFd = tcp();
@@ -485,7 +491,10 @@ bool writeUdpFlow(UdpFlow& flow, const std::vector<unsigned char>& packet, const
         const SsCipher method=shadowsocksCipher(flow.node.cipher);
         std::vector<unsigned char> plain = shadowsocksAddress(flow.host, flow.port), salt(shadowsocksKeySize(method));
         plain.insert(plain.end(), packet.begin() + payloadOffset, packet.end());
+        if(flow.ss2022) { if(!flow.ss2022->encode(plain,wire)||wire.size()>flow.carrierLimit)return false; }
+        else {
         if (!randomBytes(salt) || !encryptShadowsocksUdp(flow.master,salt,plain,wire,method) || wire.size()>flow.carrierLimit || !rememberUdpSalt(flow.master,wire,method)) return false;
+        }
     }
     ssize_t sent;
     do { sent = send(flow.fd, wire.data(), wire.size(), UDP_SEND_FLAGS); } while (sent < 0 && errno == EINTR);
@@ -537,8 +546,11 @@ bool readUdpFlow(UdpFlow& flow, std::vector<unsigned char>& reply, size_t& paylo
     if (flow.node.type == "ss") {
         std::vector<unsigned char> plain;
         const SsCipher method=shadowsocksCipher(flow.node.cipher);
+        if(flow.ss2022) { if(!flow.ss2022->decode(packet,plain))return false; }
+        else {
         if (!decryptShadowsocksUdp(flow.master,packet,plain,method)) { errno = EBADMSG; return false; }
         if (!rememberUdpSalt(flow.master,packet,method)) { errno = EALREADY; return false; }
+        }
         UdpTarget source;
         if (!parseUdpAddress(plain, 0, source)) return false;
         payloadSize = plain.size() - source.headerSize;
@@ -629,7 +641,7 @@ void handleUdpAssociate(int client, const std::string& requestedHost, int reques
         }
         std::string destination,error;
         if(!proxyDestination(node,udpDestinationHost(target),destination,error)){warn("UDP hosts mapping failed: "+error);return;}
-        if (node.type == "ss" && packet.size() - 3 - target.headerSize + shadowsocksAddress(destination, target.port).size() > UDP_MAX_PACKET - shadowsocksKeySize(shadowsocksCipher(node.cipher)) - 16) return;
+        if (node.type == "ss" && packet.size() - 3 - target.headerSize + shadowsocksAddress(destination, target.port).size() > UDP_MAX_PACKET - ss2022UdpOverhead(node)) return;
         if (node.type == "socks5" && packet.size() - target.headerSize + shadowsocksAddress(destination, target.port).size() > UDP_MAX_PACKET) return;
         if (node.type == "vmess" && (packet.size() == 3 + target.headerSize || packet.size() - 3 - target.headerSize > 1966)) {
             warn("VMess UDP payload must be between 1 and 1966 bytes"); return;

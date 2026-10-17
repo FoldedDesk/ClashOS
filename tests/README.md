@@ -182,6 +182,7 @@ node tests/controller_access_test.cjs
 node tests/session_lifecycle_test.cjs
 node tests/profile_files_test.cjs
 node tests/subscription_import_test.cjs
+CLAHSOS_REFERENCE_PYTHON=python3 python3 tests/run_native_tests.py --suite ss2022
 CLASHOS_NATIVE_TESTS="$PWD/.host-build/native/native_tests" node tests/subscription_test.cjs
 node tests/appearance_test.cjs
 node tests/backup_migration_test.cjs

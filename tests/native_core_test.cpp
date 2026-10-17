@@ -426,12 +426,21 @@ void latencyAndRuleTests() {
 #include "yaml_merges_test.inc"
 #include "http_ingress_test.inc"
 #include "ss_duplex_test.inc"
+#include "ss2022_core_test.inc"
 #include "dialer_proxy_test.inc"
 #include "tls_failure_test.inc"
+volatile std::sig_atomic_t serveStopped=0;
 
 int main(int argc, char** argv) {
     std::signal(SIGPIPE, SIG_IGN);
     try {
+        if(argc==4&&std::string(argv[1])=="serve") {
+            const int port=std::atoi(argv[3]);
+            std::signal(SIGTERM,[](int){serveStopped=1;});std::signal(SIGINT,[](int){serveStopped=1;});
+            require(startCore(argv[2],port),"Production core could not start its real loopback listeners");
+            while(!serveStopped)std::this_thread::sleep_for(std::chrono::milliseconds(25));
+            stopCore();return 0;
+        }
         if (argc == 3 && std::string(argv[1]) == "editor-provider-request") {
             std::ifstream input(argv[2], std::ios::binary); std::string source((std::istreambuf_iterator<char>(input)), {});
             std::cout << editorProviderTestRequest(source); return 0;
@@ -461,6 +470,7 @@ int main(int argc, char** argv) {
         if (argc == 4 && std::string(argv[3]) == "groups") { groupHealthTests(argv[2]); loadBalanceTests(argv[2]); std::cout << "PASS " << checks << " health/load-balance assertions\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "yaml") { yamlMergeTests(argv[2]); std::cout << "PASS " << checks << " YAML template assertions (configuration, scripts, providers, editing, export and independent protocol peers)\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "ss-duplex") { ssIncrementalTests(); ssDuplexTests(argv[2]); ssAeadTests(); std::cout << "PASS " << checks << " SS duplex assertions (independent AEAD peers, every vector split/EOF, actual ingress, UDP and HTTPS)\n"; return 0; }
+        if (argc == 4 && std::string(argv[3]) == "ss2022") { ss2022Tests(argv[2]); std::cout << "PASS " << checks << " SS2022 assertions (independent Rust/PyCryptodome peer, real ingress, TCP/UDP, identity chains, replay and duplex)\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "hosts") { dnsHostsTests(argv[2]); vmessDuplexTests(argv[2]); vmessTests(argv[2]); dnsTests(argv[2]); ssAeadTests(); std::cout << "PASS " << checks << " hosts assertions (independent SS/VMess/Trojan peers)\n"; return 0; }
         require(argc == 3 || (argc == 4 && (std::string(argv[3]) == "api"||std::string(argv[3]) == "rules"||std::string(argv[3])=="dns"||std::string(argv[3])=="geo"||std::string(argv[3])=="ports"||std::string(argv[3])=="rule-edits"||std::string(argv[3])=="object-edits"||std::string(argv[3])=="share-links"||std::string(argv[3])=="merges"||std::string(argv[3])=="scripts"||std::string(argv[3])=="configs"||std::string(argv[3])=="inbound"||std::string(argv[3])=="sniffer")), "Expected configuration and temp directory, optionally api/rules/dns/geo/ports/rule-edits/object-edits/share-links/merges/scripts suite");
         if (argc == 4 && std::string(argv[3]) == "sniffer") { snifferTests(argv[2]); std::cout << "PASS " << checks << " sniffer assertions\n"; return 0; }
@@ -470,7 +480,7 @@ int main(int argc, char** argv) {
             std::cout << "PASS " << checks << " " << argv[3] << " assertions (shipping YAML/Zstandard/Mbed TLS backends)\n";
             return 0;
         }
-        ssIncrementalTests(); ssDuplexTests(argv[2]); yamlMergeTests(argv[2]); snifferTests(argv[2]); inboundTests(argv[2]); controllerConfigTests(argv[2]); backupCodecTests(argv[2]); controllerApiTests(argv[2]); controllerAuthTests(argv[2]);controllerStateTests(argv[2]); configScriptTests(argv[2]); configMergeTests(argv[2]); shareLinkTests(); objectEditsTests(argv[2]); ruleEditsTests(argv[2]); protocolTests(); configurationTests(argv[1], argv[2]); httpIngressTests(argv[2]); latencyAndRuleTests();
+        ssIncrementalTests(); ssDuplexTests(argv[2]); ss2022Tests(argv[2]); yamlMergeTests(argv[2]); snifferTests(argv[2]); inboundTests(argv[2]); controllerConfigTests(argv[2]); backupCodecTests(argv[2]); controllerApiTests(argv[2]); controllerAuthTests(argv[2]);controllerStateTests(argv[2]); configScriptTests(argv[2]); configMergeTests(argv[2]); shareLinkTests(); objectEditsTests(argv[2]); ruleEditsTests(argv[2]); protocolTests(); configurationTests(argv[1], argv[2]); httpIngressTests(argv[2]); latencyAndRuleTests();
         udpProtocolTests(); udpForwardingTests(); vlessTests(argv[2]); forwardProxyTests(argv[2]); dialerProxyTests(argv[2]); tlsFailureTests();
         vmessTests(argv[2]);httpsProbeTests();groupHealthTests(argv[2]);providerTests(argv[2]);loadBalanceTests(argv[2]);ssAeadTests();trojanTests(argv[2]);ruleProviderTests(argv[2]);dnsHostsTests(argv[2]);vmessDuplexTests(argv[2]);dnsTests(argv[2]);dnsListenerTests(argv[2]);geoTests(argv[2]);proxyPortTests(argv[2]);
         networkBackupTests(std::string(argv[2]) + "/network-backup");

@@ -1,0 +1,56 @@
+{
+  "external-controller": "127.0.0.1:19094",
+  "external-controller-tls": "127.0.0.1:19095",
+  "tls": {
+    "certificate": "server.pem",
+    "private-key": "server-key.pem"
+  },
+  "mode": "rule",
+  "log-level": "warning",
+  "find-process-mode": "off",
+  "hosts": {
+    "udp-fixture.test": "192.0.2.44"
+  },
+  "dns": {
+    "enable": true,
+    "listen": "127.0.0.1:18553",
+    "ipv6": false,
+    "use-hosts": true,
+    "use-system-hosts": false,
+    "nameserver": [
+      "udp://127.0.0.1:1"
+    ]
+  },
+  "listeners": [
+    {
+      "name": "public-0",
+      "type": "shadowsocks",
+      "listen": "127.0.0.1",
+      "port": 18894,
+      "cipher": "2022-blake3-aes-128-gcm",
+      "password": "AAECAwQFBgcICQoLDA0ODw==",
+      "udp": true
+    },
+    {
+      "name": "public-1",
+      "type": "shadowsocks",
+      "listen": "127.0.0.1",
+      "port": 18895,
+      "cipher": "2022-blake3-aes-256-gcm",
+      "password": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "udp": true
+    },
+    {
+      "name": "public-2",
+      "type": "shadowsocks",
+      "listen": "127.0.0.1",
+      "port": 18896,
+      "cipher": "2022-blake3-chacha20-poly1305",
+      "password": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "udp": true
+    }
+  ],
+  "rules": [
+    "MATCH,DIRECT"
+  ]
+}

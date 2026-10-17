@@ -15,7 +15,10 @@ class Tunnel:
         self.wire,self.kind,self.send_count,self.read_count=wire,kind,0,0
         self.response_header=False
         target_host='192.0.2.9' if fault=='hosts' else 'wrong.test' if fault=='wronghost' else 'vmess.test'
-        if kind.startswith('ss'):
+        if kind.startswith('ss2022-'):
+            from ss2022_reference_peer import Ss2022Tunnel
+            self.ss2022 = Ss2022Tunnel(wire, kind[len('ss2022-'):], alter, target_host)
+        elif kind.startswith('ss'):
             size=16 if kind=='ss-aes128' else 32
             algorithm=ChaCha20Poly1305 if kind=='ss-chacha' else AESGCM
             master=b''; previous=b''
@@ -39,6 +42,7 @@ class Tunnel:
         elif kind.startswith('forward-'):
             assert read_forward_header(wire,kind.split('-')[1],target_host)
     def receive(self):
+        if self.kind.startswith('ss2022-'):return self.ss2022.receive()
         if self.kind=='direct' or self.kind.startswith(('trojan', 'vless', 'forward-')):
             if self.wire.buffer:
                 data,self.wire.buffer=self.wire.buffer,b''
@@ -61,6 +65,7 @@ class Tunnel:
         nonce=self.read_count.to_bytes(2,'big')+self.read_iv[2:12];self.read_count+=1
         return self.reader.decrypt(nonce,data,None)
     def send(self,data):
+        if self.kind.startswith('ss2022-'):self.ss2022.send(data);return
         if self.kind.startswith('vless'):
             if not self.response_header:self.wire.send(b'\0\0');self.response_header=True
             self.wire.send(data);return

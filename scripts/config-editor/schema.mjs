@@ -47,7 +47,7 @@ export function valuesFor(path,nodeType) {
   }
   if(key==='cipher'&&nodePath(parent)&&['http','socks5','trojan','direct','reject'].includes(nodeType?.toLowerCase()))return [];
   if(key==='cipher'&&nodePath(parent)&&nodeType?.toLowerCase()==='vless')return ['none'];
-  if(key==='cipher'&&nodePath(parent))return nodeType?.toLowerCase()==='vmess'?['auto','aes-128-gcm','chacha20-poly1305','none','zero']:['aes-128-gcm','aes-256-gcm','chacha20-ietf-poly1305'];
+  if(key==='cipher'&&nodePath(parent))return nodeType?.toLowerCase()==='vmess'?['auto','aes-128-gcm','chacha20-poly1305','none','zero']:['aes-128-gcm','aes-256-gcm','chacha20-ietf-poly1305','2022-blake3-aes-128-gcm','2022-blake3-aes-256-gcm','2022-blake3-chacha20-poly1305'];
   if(key==='network'&&nodePath(parent))return ['http','socks5'].includes(nodeType?.toLowerCase())?['tcp']:['tcp','ws'];
   if(key==='behavior')return ['domain','ipcidr','classical'];
   if(key==='format')return ['yaml','text','mrs'];

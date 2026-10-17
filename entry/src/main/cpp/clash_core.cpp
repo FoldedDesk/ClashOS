@@ -12,6 +12,7 @@
 #include <mbedtls/entropy.h>
 #include <mbedtls/x509_crt.h>
 #include <mbedtls/base64.h>
+#include <blake3.h>
 #include <psa/crypto.h>
 extern "C" {
 #include "sha3.h"
@@ -26,6 +27,7 @@ extern "C" {
 
 #include <algorithm>
 #include <array>
+#include <bitset>
 #include <atomic>
 #include <cctype>
 #include <cmath>
@@ -76,18 +78,23 @@ struct RouteContext {
     bool advance=true;
     std::set<std::string> ancestors;
 };
-enum class SsCipher { Unsupported,Aes128Gcm,Aes256Gcm,ChaCha20Poly1305 };
+enum class SsCipher { Unsupported,Aes128Gcm,Aes256Gcm,ChaCha20Poly1305,Aes1282022,Aes2562022,ChaCha2022 };
 SsCipher shadowsocksCipher(const std::string& name)
 {
     if(name=="aes-128-gcm"||name=="aead_aes_128_gcm")return SsCipher::Aes128Gcm;
     if(name=="aes-256-gcm"||name=="aead_aes_256_gcm")return SsCipher::Aes256Gcm;
     if(name=="chacha20-ietf-poly1305"||name=="chacha20-poly1305"||name=="aead_chacha20_poly1305")return SsCipher::ChaCha20Poly1305;
+    if(name=="2022-blake3-aes-128-gcm")return SsCipher::Aes1282022;
+    if(name=="2022-blake3-aes-256-gcm")return SsCipher::Aes2562022;
+    if(name=="2022-blake3-chacha20-poly1305")return SsCipher::ChaCha2022;
     return SsCipher::Unsupported;
 }
 size_t shadowsocksKeySize(SsCipher cipher)
 {
-    return cipher==SsCipher::Aes128Gcm?16:cipher==SsCipher::Unsupported?0:32;
+    return cipher==SsCipher::Aes128Gcm||cipher==SsCipher::Aes1282022?16:cipher==SsCipher::Unsupported?0:32;
 }
+bool isSs2022(SsCipher method) { return method==SsCipher::Aes1282022||method==SsCipher::Aes2562022||method==SsCipher::ChaCha2022; }
+#include "ss2022_keys.inc"
 bool validProbeUrl(const std::string& url);
 bool validProbeStatus(const std::string& text);
 void wakeHealthChecks();
@@ -739,6 +746,9 @@ bool parseProxyNode(yaml_document_t& document,yaml_node_t* source,ProxyNode& nod
             node.port = std::atoi(value(source, "port").c_str());
             node.cipher = lower(value(source, "cipher"));
             node.password = value(source, "password");
+            if(node.type=="ss"&&isSs2022(shadowsocksCipher(node.cipher))&&ss2022Keys(shadowsocksCipher(node.cipher),node.password).empty()) {
+                valid=false;error="Shadowsocks 2022 requires valid Base64 keys of the selected cipher's size (AES supports up to 8 identity keys)";break;
+            }
             node.username = value(source, "username");
             if (auto* dialer = yamlValue(document, source, "dialer-proxy")) {
                 node.dialerProxy = yamlText(dialer);
@@ -761,6 +771,8 @@ bool parseProxyNode(yaml_document_t& document,yaml_node_t* source,ProxyNode& nod
             node.udpConfigured=yamlValue(document,source,"udp")!=nullptr;
             const std::string network = lower(value(source, "network"));
             if (!network.empty()) node.network = network;
+            if(node.type=="ss"&&isSs2022(shadowsocksCipher(node.cipher))&&(node.network!="tcp"||node.tls||!value(source,"plugin").empty()||lower(value(source,"udp-over-tcp"))=="true"))
+                node.transportError="Shadowsocks 2022 plugins, TLS wrapping and UDP-over-TCP are not implemented";
             node.serverName = value(source, "servername");
             if (node.serverName.empty()) node.serverName = value(source, "sni");
             node.skipCertVerify = lower(value(source, "skip-cert-verify")) == "true";
@@ -1340,7 +1352,7 @@ bool supportsDialerTcp(const ProxyNode& node,int depth=0)
 
 bool supportsUdp(const ProxyNode& node,int depth=0)
 {
-    if ((depth>=8&&!(node.name=="DIRECT"&&node.type=="direct"&&node.dialerProxy.empty()))||node.routeUdpDisabled) return false;
+    if ((depth>=8&&!(node.name=="DIRECT"&&node.type=="direct"&&node.dialerProxy.empty()))||node.routeUdpDisabled||!node.transportError.empty()) return false;
     const bool base=(node.type == "direct"&&(!node.udpConfigured||node.udp)) || (node.udp && ((node.type == "ss" && shadowsocksCipher(node.cipher)!=SsCipher::Unsupported) || supportsVmess(node) || supportsTrojan(node) || supportsVless(node) || (node.type == "socks5" && forwardProxyError(node).empty())));
     if(!base||node.dialerProxy.empty()||node.dialerProxy=="DIRECT")return base;
     if(!node.dialerNode)return false;
@@ -1555,8 +1567,8 @@ std::string responseFor(const std::string& method, const std::string& path, cons
     if (path.substr(0, path.find('?')) == "/clashos/ports") return proxyPortsControlLocked(method, path, body);
     if (path.substr(0, path.find('?')) == "/clashos/inbound") return inboundControlLocked(method, path, body);
     if (method == "GET" && path == "/version") {
-        return "{\"version\":\"ClashOS Core 0.42 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
-            "\",\"premium\":false,\"meta\":true,\"features\":[\"http-message-framing\",\"http-upgrade\",\"yaml-merge-keys\",\"dialer-proxy\",\"dialer-proxy-udp\",\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"vmess\",\"vless\",\"trojan\",\"http-outbound\",\"socks5-outbound\",\"socks5-udp\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
+        return "{\"version\":\"ClashOS Core 0.43 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
+            "\",\"premium\":false,\"meta\":true,\"features\":[\"http-message-framing\",\"http-upgrade\",\"yaml-merge-keys\",\"dialer-proxy\",\"dialer-proxy-udp\",\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"shadowsocks-2022\",\"ss2022-identity-headers\",\"vmess\",\"vless\",\"trojan\",\"http-outbound\",\"socks5-outbound\",\"socks5-udp\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
     }
     if (method == "GET" && path == "/clahsos/diagnostics") return diagnosticsJson();
     const std::string resource=path.substr(0,path.find('?'));
@@ -1967,7 +1979,7 @@ bool shadowsocksAead(bool encrypt,SsCipher method,const std::vector<unsigned cha
 {
     output.clear();
     if(method==SsCipher::Unsupported||key.size()!=shadowsocksKeySize(method)||nonce.size()!=12||tag.size()!=16)return false;
-    if(method!=SsCipher::ChaCha20Poly1305)return aesGcm(encrypt,key,nonce,{},input,output,tag);
+    if(method!=SsCipher::ChaCha20Poly1305&&method!=SsCipher::ChaCha2022)return aesGcm(encrypt,key,nonce,{},input,output,tag);
     output.resize(input.size()+16);
     mbedtls_chachapoly_context context;mbedtls_chachapoly_init(&context);
     int result=mbedtls_chachapoly_setkey(&context,key.data());
@@ -2019,6 +2031,7 @@ bool vmessTrustStoreSelfTest();
 bool trojanCryptoSelfTest();
 bool vlessProtocolSelfTest();
 bool shadowsocksTcpSelfTest();
+bool ss2022CryptoSelfTest();
 
 std::string diagnosticsJson()
 {
@@ -2038,15 +2051,16 @@ std::string diagnosticsJson()
     const bool vmessOk = vmessCryptoSelfTest();
     const bool shadowsocksOk=shadowsocksCryptoSelfTest();
     const bool shadowsocksTcpOk=shadowsocksTcpSelfTest();
+    const bool ss2022Ok=ss2022CryptoSelfTest();
     const bool trojanOk=trojanCryptoSelfTest();
     const bool vlessOk=vlessProtocolSelfTest();
     const bool rootsOk = vmessTrustStoreSelfTest();
     const bool listenersOk = g_state.httpProxyFd >= 0 && (g_state.httpPort == g_state.socksPort || g_state.socksProxyFd >= 0);
     const auto boolean = [](bool value) { return value ? "true" : "false"; };
-    return std::string("{\"passed\":") + boolean(randomOk && md5Ok && encryptOk && decryptOk && authenticationOk && listenersOk && vmessOk && rootsOk&&shadowsocksOk&&shadowsocksTcpOk&&trojanOk&&vlessOk) +
+    return std::string("{\"passed\":") + boolean(randomOk && md5Ok && encryptOk && decryptOk && authenticationOk && listenersOk && vmessOk && rootsOk&&shadowsocksOk&&shadowsocksTcpOk&&ss2022Ok&&trojanOk&&vlessOk) +
         ",\"random\":" + boolean(randomOk) + ",\"md5\":" + boolean(md5Ok) + ",\"aesEncrypt\":" + boolean(encryptOk) +
         ",\"aesDecrypt\":" + boolean(decryptOk) + ",\"authentication\":" + boolean(authenticationOk) +
-        ",\"shadowsocks\":"+boolean(shadowsocksOk)+",\"shadowsocksTcp\":"+boolean(shadowsocksTcpOk)+",\"vmess\":" + boolean(vmessOk) + ",\"trojan\":" + boolean(trojanOk) + ",\"vless\":" + boolean(vlessOk) + ",\"certificateStore\":" + boolean(rootsOk) +
+        ",\"shadowsocks\":"+boolean(shadowsocksOk)+",\"shadowsocksTcp\":"+boolean(shadowsocksTcpOk)+",\"shadowsocks2022\":"+boolean(ss2022Ok)+",\"vmess\":" + boolean(vmessOk) + ",\"trojan\":" + boolean(trojanOk) + ",\"vless\":" + boolean(vlessOk) + ",\"certificateStore\":" + boolean(rootsOk) +
         ",\"listeners\":" + boolean(listenersOk) + ",\"httpPort\":" + std::to_string(g_state.httpPort) +
         ",\"socksPort\":" + std::to_string(g_state.socksPort) + "}";
 }
@@ -2413,6 +2427,7 @@ bool connectShadowsocks(const ProxyNode& node, const std::string& host, int port
 
 #include "ss_tcp_reader.inc"
 #include "ss_tcp_selftest.inc"
+#include "ss2022_protocol.inc"
 #include "vmess_transport.inc"
 #include "vmess_protocol.inc"
 #include "trojan_protocol.inc"
@@ -2437,6 +2452,7 @@ struct ProxyStream {
     std::unique_ptr<VlessSession> vless;
     std::unique_ptr<ForwardProxySession> forward;
     std::unique_ptr<ShadowsocksReader> shadowsocks;
+    std::unique_ptr<Ss2022Session> ss2022;
     std::shared_ptr<DialerBridge> dialerBridge;
     bool encrypted = false;
     SsCipher ssCipher=SsCipher::Aes256Gcm;
@@ -2460,6 +2476,7 @@ bool openProxyStream(const ProxyNode& node, const std::string& host, int port, P
     if(node.type=="vless"&&!VlessSession::validate(node,error))return false;
     if(node.type=="trojan"&&!TrojanSession::validate(node,error))return false;
     if(node.type=="ss"&&shadowsocksCipher(node.cipher)==SsCipher::Unsupported){error="Unsupported Shadowsocks cipher";return false;}
+    if(node.type=="ss"&&isSs2022(shadowsocksCipher(node.cipher))&&ss2022Keys(shadowsocksCipher(node.cipher),node.password).empty()){error="Invalid Shadowsocks 2022 Base64 key or identity chain";return false;}
     if(!node.dialerProxy.empty()&&node.dialerProxy!="DIRECT") {
         if(!node.dialerNode){error="dialer-proxy route is not available";return false;}
         if(node.type!="direct"&&node.type!="ss"&&node.type!="vmess"&&node.type!="trojan"&&node.type!="vless"&&node.type!="http"&&node.type!="socks5") {
@@ -2474,12 +2491,20 @@ bool openProxyStream(const ProxyNode& node, const std::string& host, int port, P
     } else if (node.type == "ss" && shadowsocksCipher(node.cipher)!=SsCipher::Unsupported) {
         stream.encrypted = true;
         stream.ssCipher=shadowsocksCipher(node.cipher);
+        if(isSs2022(stream.ssCipher)) {
+            if(stream.fd<0)stream.fd=connectUpstream(node.server,node.port,timeoutMs,DnsPurpose::Proxy);
+            if(stream.fd<0){error="Cannot connect to Shadowsocks 2022 server";return false;}
+            socketTimeout(stream.fd,timeoutMs);
+            stream.ss2022=std::make_unique<Ss2022Session>(stream.fd,stream.ssCipher,ss2022Keys(stream.ssCipher,node.password));
+            if(!stream.ss2022->start(destination,port)){error="Shadowsocks 2022 handshake failed";return false;}
+        } else {
         if (!connectShadowsocks(node, destination, port, stream.fd, stream.sendKey, stream.sendNonce, timeoutMs)) {
             error = "Shadowsocks connection or handshake failed";
             return false;
         }
         stream.shadowsocks = std::make_unique<ShadowsocksReader>(stream.fd, stream.ssCipher,
             evpBytesToKey(node.password, shadowsocksKeySize(stream.ssCipher)));
+        }
     } else if (node.type == "http" || node.type == "socks5") {
         error = forwardProxyError(node); if (!error.empty()) return false;
         if(stream.fd<0)stream.fd = connectUpstream(node.server, node.port, timeoutMs, DnsPurpose::Proxy);
@@ -2518,6 +2543,7 @@ bool openProxyStream(const ProxyNode& node, const std::string& host, int port, P
 
 bool streamWrite(ProxyStream& stream, const char* data, size_t size)
 {
+    if (stream.ss2022) return stream.ss2022->write(data,size);
     if (stream.vmess) return stream.vmess->write(reinterpret_cast<const unsigned char*>(data), size);
     if (stream.trojan) return stream.trojan->write(reinterpret_cast<const unsigned char*>(data), size);
     if (stream.vless) return stream.vless->write(reinterpret_cast<const unsigned char*>(data), size);
@@ -2535,6 +2561,7 @@ bool streamWrite(ProxyStream& stream, const char* data, size_t size)
 bool streamRead(ProxyStream& stream, std::vector<unsigned char>& output, bool nonblocking = false)
 {
     output.clear();
+    if (stream.ss2022) return stream.ss2022->read(output,nonblocking);
     if (stream.vmess) return stream.vmess->read(output, nonblocking);
     if (stream.trojan) return stream.trojan->read(output, nonblocking);
     if (stream.vless) return stream.vless->read(output, nonblocking);
@@ -2605,7 +2632,7 @@ void relayStream(int client, ProxyStream& stream, bool clientOpen = true)
         if (remoteOpen && reads[1].revents != 0) {
             std::vector<unsigned char> plain;
             if (!streamRead(stream, plain, true)) {
-                if ((stream.shadowsocks || stream.vmess || stream.trojan || stream.vless || stream.forward) && (errno == EAGAIN || errno == EWOULDBLOCK)) continue;
+                if ((stream.ss2022 || stream.shadowsocks || stream.vmess || stream.trojan || stream.vless || stream.forward) && (errno == EAGAIN || errno == EWOULDBLOCK)) continue;
                 if (errno != 0) {
                     if (stream.vmess) coreLog("warning", errno == EBADMSG ? "VMess response authentication failed" :
                         errno == EOVERFLOW ? "VMess connection reached its nonce limit" : "VMess transport interrupted or timed out");

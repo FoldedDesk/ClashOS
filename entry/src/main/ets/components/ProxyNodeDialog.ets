@@ -10,7 +10,7 @@ interface NodeFormPatch {
   tls?: boolean; 'skip-cert-verify'?: boolean; servername?: string | null; sni?: string | null; network?: string; 'ws-opts'?: WsNodePatch;
 }
 const NODE_TYPES: string[] = ['ss', 'vmess', 'vless', 'trojan', 'http', 'socks5', 'direct', 'reject'];
-const SS_CIPHERS: string[] = ['aes-128-gcm', 'aes-256-gcm', 'chacha20-ietf-poly1305', 'chacha20-poly1305', 'aead_aes_128_gcm', 'aead_aes_256_gcm', 'aead_chacha20_poly1305'];
+const SS_CIPHERS: string[] = ['aes-128-gcm', 'aes-256-gcm', 'chacha20-ietf-poly1305', 'chacha20-poly1305', 'aead_aes_128_gcm', 'aead_aes_256_gcm', 'aead_chacha20_poly1305', '2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm', '2022-blake3-chacha20-poly1305'];
 const VMESS_CIPHERS: string[] = ['auto', 'aes-128-gcm', 'chacha20-poly1305', 'none', 'zero'];
 export const NEW_NODE_CONTENT: string = '{"name":"","type":"ss","server":"","port":443,"cipher":"aes-128-gcm","password":"","udp":true}';
 
@@ -191,6 +191,7 @@ export struct ProxyNodeDialog {
               }
             }
             if (this.form.type === 'vless') Text('支持标准 VLESS TCP / TLS / WebSocket 和 UDP；Reality、Vision、XUDP 及额外加密尚不支持。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
+            if (this.form.type === 'ss' && this.form.cipher.startsWith('2022-')) Text(this.form.cipher === '2022-blake3-aes-128-gcm' ? '密码需为 16 字节密钥的 Base64；AES 多用户密钥按“身份密钥:用户密钥”填写。' : this.form.cipher === '2022-blake3-aes-256-gcm' ? '密码需为 32 字节密钥的 Base64；AES 多用户密钥按“身份密钥:用户密钥”填写。' : '密码需为 32 字节密钥的 Base64。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
             if (this.form.type === 'http') Text('HTTP / HTTPS 出站使用 CONNECT 隧道，仅支持 TCP。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
             if (this.form.type === 'socks5') Text('UDP 需要服务器支持 UDP ASSOCIATE；TLS 保护 TCP 控制连接，UDP 使用原生 SOCKS5 数据报。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
             if (this.form.type !== 'reject' && this.form.type !== 'http') Row() {

@@ -3,7 +3,7 @@
 HarmonyOS PC 代理客户端，使用 ArkUI 和 C++ 内置内核，采用顶部导航。
 
 支持配置文件及订阅导入、节点切换与测速、规则分流、连接与日志查看、备份恢复，
-也可连接兼容 Clash REST API 的外部内核。内置协议包括 Shadowsocks AEAD、VMess、VLESS、
+也可连接兼容 Clash REST API 的外部内核。内置协议包括 Shadowsocks AEAD / 2022、VMess、VLESS、
 Trojan、HTTP/HTTPS 与 SOCKS5 出站，并提供 HTTP / SOCKS5 入站；
 支持代理/规则集合、地理数据库、DNS、YAML 扩展与 JavaScript 脚本。
 配置编辑器离线打包，提供语法高亮、查找替换、撤销重做与常用字段补全。
@@ -44,6 +44,12 @@ Trojan、HTTP/HTTPS 与 SOCKS5 出站，并提供 HTTP / SOCKS5 入站；
 
 这是独立实现的内核，配置兼容范围尚未覆盖 Mihomo 的全部协议和选项。
 功能范围及待完成事项见 [功能状态](docs/feature-coverage.json)。
+
+Shadowsocks 2022 支持 `2022-blake3-aes-128-gcm`、`2022-blake3-aes-256-gcm` 和
+`2022-blake3-chacha20-poly1305` 的 TCP / UDP；密码直接使用对应 16 / 32 字节密钥的 Base64。
+AES 同时支持 SIP023 多用户与中继密钥链，以 `身份密钥:用户密钥` 或多层身份密钥形式填写，最多 8 层身份。
+节点表单、编辑器补全及 `ss://` 导入使用同一原生校验；错误密钥不会降级为直连。
+TCP 校验响应时间与请求盐绑定，UDP 校验会话、时间和滑动重放窗口；不支持该协议的插件和额外传输封装。
 
 VLESS 支持标准 TCP、TLS、WebSocket、WebSocket + TLS 和长度分帧 UDP，
 可从 `vless://` 链接、本地配置或订阅导入，并使用节点表单编辑、切换及测速。

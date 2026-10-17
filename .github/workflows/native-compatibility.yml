@@ -1,0 +1,42 @@
+name: Native protocol compatibility
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: native-protocol-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ss2022:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Independent reference dependencies
+        run: python -m pip install cryptography pycryptodome blake3==1.0.8
+      - name: Build and verify production SS2022 implementation
+        env:
+          CLAHSOS_REFERENCE_PYTHON: python
+        run: |
+          export CLAHSOS_REFERENCE_PYTHON="$(command -v python)"
+          python tests/run_native_tests.py --suite ss2022 --build-dir "$RUNNER_TEMP/native"
+      - name: Legacy Shadowsocks regression
+        env:
+          CLAHSOS_REFERENCE_PYTHON: python
+        run: |
+          export CLAHSOS_REFERENCE_PYTHON="$(command -v python)"
+          python tests/run_native_tests.py --suite ss-duplex --build-dir "$RUNNER_TEMP/native"
+      - name: Fetch pinned independent Mihomo server
+        run: |
+          curl --fail --location --silent --show-error --max-time 120 https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-linux-amd64-compatible-v1.19.32.gz -o "$RUNNER_TEMP/mihomo.gz"
+          printf '%s  %s\n' ba3ce607747a07f948fc35780e108a4a7c7f552a38b9bd4d115f313ebcb89c20 "$RUNNER_TEMP/mihomo.gz" | sha256sum -c -
+          gzip -d "$RUNNER_TEMP/mihomo.gz"
+          chmod 700 "$RUNNER_TEMP/mihomo"
+      - name: Actual official-server interoperability
+        run: python tests/ss2022_network_test.py --native "$RUNNER_TEMP/native/native_tests" --mihomo "$RUNNER_TEMP/mihomo"
