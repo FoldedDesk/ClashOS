@@ -1,6 +1,6 @@
 {
   "applicationName": "ClashOS",
-  "reviewedCoreVersion": "0.36",
+  "reviewedCoreVersion": "0.37",
   "objective": "实现 Clash Verge 的大部分功能，包括各类右键菜单，并提供可正常使用的 ClashOS。",
   "brandingDecision": "Follow the user's later explicit spelling correction: ClashOS.",
   "referenceInventory": [
@@ -78,7 +78,9 @@
         "Visual node dialer input/selection, native form serialization and offline YAML/JSON reference completion with cycle filtering; saved form edits survive cold startup and forward actual TCP/UDP traffic",
         "1041 independent host chain assertions verify 24 HTTPS entry/exit pairs, three-hop HTTP/SOCKS ingress, partial replies and half-close, streamed/native UDP, provider member probes/cache lifecycle, health snapshots, worker limits and cleanup",
         "Core 0.36 simulator verifies 16 HTTP/HTTPS/SOCKS/SOCKS-TLS entry and VLESS TCP/TLS/WS/WSS exit pairs through both ingress types, node delay and actual UDP lengths 0/8/4096/65483; wrong entry authentication and required fixture-CA validation fail, restored positive control passes",
-        "An independent VLESS carrier with a DIRECT alias and SS exit reproduces maximum-datagram loss before the internal-envelope correction; full physical packets and their internal source envelopes now have separate bounds and pass the nested maximum/empty/cancellation checks"
+        "An independent VLESS carrier with a DIRECT alias and SS exit reproduces maximum-datagram loss before the internal-envelope correction; full physical packets and their internal source envelopes now have separate bounds and pass the nested maximum/empty/cancellation checks",
+        "TLS handshake diagnostics distinguish peer EOF/reset, timeout, fatal alerts, proxy response authentication and actual certificate trust/hostname/time failures; not-yet-run certificate verification is never treated as evidence of a bad certificate",
+        "63 independent OpenSSL/Unix-socket assertions verify early close, timeout, plaintext, TLS rejection, wrong CA/hostname and trusted application traffic; simulator controls independently verify the matching errors without weakening certificate checks"
       ],
       "remaining": [
         "Protocol and option breadth is below Mihomo, including VLESS Reality/Vision/XUDP/extra encryption, other advanced transports and additional outbound protocols",
@@ -130,7 +132,10 @@
         "tests/chain_relay_reference_peer.py",
         "tests/chain_udp_reference_peer.py",
         "tests/fixtures/dialer/device.yaml",
-        "scripts/config-editor/references.mjs"
+        "scripts/config-editor/references.mjs",
+        "entry/src/main/cpp/vmess_transport.inc",
+        "tests/tls_failure_test.inc",
+        "tests/tls_failure_reference_peer.py"
       ]
     },
     {
@@ -308,7 +313,8 @@
         "Backup right-click ZIP export with current upstream layout and lossless native data",
         "LAN sharing row context menu for configuration and current local proxy address",
         "Proxy-group custom icon and restore-config-icon menu actions",
-        "Appearance card custom-style editor and restore-default-style menu actions"
+        "Appearance card custom-style editor and restore-default-style menu actions",
+        "Node/provider-node continuous-check entries and dialog right-click copy-report/stop actions; actual mouse right-click entry, enabled states and stop/copy behavior verified on the simulator"
       ],
       "source": [
         "entry/src/main/ets/pages/Index.ets",
@@ -317,10 +323,35 @@
       ]
     },
     {
+      "feature": "Repeated connection checks and diagnostics",
+      "status": "verified_with_limits",
+      "implemented": [
+        "Tests page and node/provider context-menu entry with editable HTTP(S) target and three/five/ten sequential attempts",
+        "Per-attempt results, success/failure counts, successful minimum/median/maximum delay and copyable report retaining original backend error text",
+        "Readable TLS/HTTP failure categories, stopping further probes, disposed-dialog isolation and native configuration path/revision plus session guards",
+        "26 production-service checks cover mixed outcomes, invalid delays/inputs, report content, immutable progress, stop/restart, disposed views and stale sessions",
+        "Simulator verifies alternating HTTP 204/503 as 3/2 and 2/3 across five attempts, three classified EOF failures, ten successful attempts with exactly ten independent requests, copied-report feedback and actual node/dialog right-click actions",
+        "Pending stop, right-click stop and close each issue only one target request; a runtime change during a slow probe marks the series stale and disables restart until reopened"
+      ],
+      "limitations": [
+        "Stopping prevents following attempts; the pending attempt finishes or times out",
+        "Remote-controller configuration changes use the local session guard; native-core checks additionally validate actual path/revision",
+        "A short successful sample does not prove long-term node reliability"
+      ],
+      "source": [
+        "entry/src/main/ets/service/ProbeSeriesController.ets",
+        "entry/src/main/ets/components/ProbeSeriesDialog.ets",
+        "entry/src/main/ets/pages/Index.ets",
+        "tests/probe_series_test.cjs",
+        "tests/fixtures/probes/device.yaml",
+        "tests/webdav_device_server/entry/src/main/ets/entryability/NetworkFixtureProbe.ets"
+      ]
+    },
+    {
       "feature": "Daily browser connectivity",
       "status": "verified_with_limits",
-      "latest": "Core 0.36 final ARM64/x86_64 HAP built and installed on the simulator. Sixteen real two-hop entry/exit combinations pass HTTP/SOCKS ingress, delay and on-device UDP, with wrong-auth/required-CA negative controls. The visual dialer edit persists after cold startup and forwards actual traffic. Original saved profile, complete meaningful runtime, all 11 group selections and original window are restored; the owned fixture profile, public file, application and extra forwards are removed. A first restored Google attempt returned TLS 35; following Google/Gstatic/GitHub requests returned verified 204/204/200 with CONNECT 200 and TLS verification 0.",
-      "limit": "Device positive fixtures return fixed HTTP/UDP data on loopback and explicitly skip the public test CA; required-verification controls fail. Independent host OpenSSL peers separately verify valid CA/hostname and HTTPS destination checks. SOCKS5 TLS protects its control channel, not native UDP datagrams. Advanced VLESS and additional outbound protocols remain incomplete; chain verification is limited to the documented matrix. Intermittent HTTPS TLS failures remain unexplained: api.github.com was affected earlier, and one restored Google attempt returned TLS 35 before subsequent verified Google/Gstatic requests succeeded. The SS partial-response stall is independently proven and fixed; it is not established as the cause of the earlier intermittent HTTPS TLS failures. Independent host TLS clients could not reach the HDC-forwarded proxy, so a broader upstream control is still needed. Full native suite requires host loopback binding unavailable here. True-device TUN authorization/background survival remains unproven."
+      "latest": "Core 0.37 final ARM64/x86_64 HAP installed. Independent device TLS/HTTP controls and visible continuous-check behavior pass. Original saved profile, full meaningful runtime, all 11 selections and original window placement are restored. The HarmonyOS OS HTTP/TLS client using the system proxy returns Google/Gstatic/GitHub 204/204/200; each request increases actual core upload/download counters. Owned fixture app, added forwarding and raw private control files are removed.",
+      "limit": "Intermittent early TLS closure remains a real unresolved reliability limit. Core 0.36 comparisons reproduced failures in both the native Mbed TLS probe and host HTTP/SOCKS clients. The independent HarmonyOS HTTP/1.1 client with explicit close succeeded in 19 of 24 requests and reported five failures. A separately encoded Python/cryptography SS first-flight control with raw curl transport, bypassing ClashOS, received authenticated TLS bytes in 23 of 24 trials and one clean zero-byte remote EOF. This isolates one occurrence beyond the core codec; it is not a full independent HTTPS exchange and does not establish a single cause for all failures. Target/node TLS certificate checks remain enabled according to their existing policies. Native failure controls and repeated-check UI improve diagnosis; they do not eliminate the observed upstream-path failure. Full native suite still needs host loopback binding, which returns EPERM here. True-device TUN authorization and background survival, advanced protocols and wider interoperability remain unproven."
     },
     {
       "feature": "Domain sniffing",
@@ -352,12 +383,12 @@
     }
   ],
   "nextWork": [
-    "Isolate intermittent HTTPS TLS failures (Google/api.github.com) with an available independent network control",
+    "Improve intermittent route reliability; independent first-flight and OS client controls reproduce failure beyond one core/client path, while end-to-end root cause remains incomplete",
     "Broader routing and ingress configuration, including redir/TProxy",
     "Supported-device TUN proof and broader archive interoperability",
     "Advanced style assets, full Mihomo schema, template-aware editor references and downloaded-provider completion"
   ],
   "goalCompletionProven": false,
-  "reviewedAt": "2026-10-17 14:49:05 UTC",
-  "verificationNotes": "Status summary only; goal completion remains unproven. Per-run records/screenshots remain outside Git. Core 0.36 chain/group/provider/forward/VLESS/API/SS/YAML targeted suites and the editor tests pass. Hosts passed on a serial recheck after a parallel-run TCP response failure. Current configs/sniffer suite attempts cannot finish because host loopback bind returns EPERM; do not count these as passing full-suite checks. Device and true VPN validation remain separate."
+  "reviewedAt": "2026-10-17 15:42:41 UTC",
+  "verificationNotes": "Status summary only; goal completion remains unproven. Per-run records/screenshots stay outside Git. Native TLS/hosts/forward/VLESS/dialer/health-group suites and the 26-check probe service suite pass; simulator validates actual failure categories, mixed/three/five/ten UI results, context menus, stop/close/configuration isolation and OS system-proxy HTTPS. Full-suite host DNS binding remains unavailable (EPERM). Tests/README.md documents reproducible public controls; live-route first-flight evidence uses private local inputs and remains outside the repository."
 }

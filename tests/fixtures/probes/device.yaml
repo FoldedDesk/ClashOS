@@ -1,0 +1,12 @@
+# Public, loopback-only diagnostics fixture. Requires com.clashos.webdavtest.
+mode: rule
+port: 7890
+socks-port: 7891
+external-controller: 127.0.0.1:9090
+proxies:
+  - {name: Probe HTTP, type: http, server: 127.0.0.1, port: 18097}
+  - {name: Probe Untrusted TLS, type: http, server: 127.0.0.1, port: 18098, tls: true, servername: vmess.test}
+  - {name: Probe Wrong Host, type: http, server: 127.0.0.1, port: 18098, tls: true, servername: wrong.test}
+proxy-groups:
+  - {name: Probe Route, type: select, proxies: [Probe HTTP, Probe Untrusted TLS, Probe Wrong Host]}
+rules: ['MATCH,Probe Route']

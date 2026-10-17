@@ -22,6 +22,18 @@ python3 tests/run_native_tests.py --build-dir .host-build/native --config /path/
 `CLAHSOS_REFERENCE_PYTHON` 可指定已安装 cryptography 的 Python。
 原生测试会绑定本机回环端口；限制 socket 绑定的沙箱无法完成这些检查。
 
+TLS 故障分类专项使用继承的 Unix socket，无需监听权限：
+
+```sh
+python3 tests/run_native_tests.py --suite tls --build-dir .host-build/native
+CLAHSOS_TYPESCRIPT=/path/to/typescript node tests/probe_series_test.cjs
+```
+
+独立 OpenSSL 对端分别模拟握手前关闭、超时、TLS alert、非 TLS 响应、错误 CA 和错误服务器名称，
+并验证受信任 TLS 正常收发。未完成证书校验时的网络失败不能被归类为证书错误。
+连续检测服务检查混合结果、统计、报告、停止、关闭及配置变化后的请求隔离。
+模拟器公开配置与独立对端见 [节点检测设备验证](webdav_device_server/README.md#connection-probe-device-verification)。
+
 链式代理专项使用继承的 Unix socket，无需主机监听权限：
 
 ```sh

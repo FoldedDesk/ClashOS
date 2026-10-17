@@ -423,6 +423,7 @@ void latencyAndRuleTests() {
 #include "yaml_merges_test.inc"
 #include "ss_duplex_test.inc"
 #include "dialer_proxy_test.inc"
+#include "tls_failure_test.inc"
 
 int main(int argc, char** argv) {
     std::signal(SIGPIPE, SIG_IGN);
@@ -437,6 +438,7 @@ int main(int argc, char** argv) {
         if (argc == 4 && std::string(argv[3]) == "forward") { forwardProxyTests(argv[2]); shareLinkTests(); objectEditsTests(argv[2]); std::cout << "PASS " << checks << " forward proxy assertions (independent HTTP/SOCKS/OpenSSL/UDP peers)\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "providers") { providerTests(argv[2]); std::cout << "PASS " << checks << " provider assertions (independent OpenSSL peers and real cache lifecycle)\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "dialer") { dialerProxyTests(argv[2]); std::cout << "PASS " << checks << " dialer-proxy assertions\n"; return 0; }
+        if (argc == 4 && std::string(argv[3]) == "tls") { tlsFailureTests(); std::cout << "PASS " << checks << " independent TLS failure assertions\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "groups") { groupHealthTests(argv[2]); loadBalanceTests(argv[2]); std::cout << "PASS " << checks << " health/load-balance assertions\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "yaml") { yamlMergeTests(argv[2]); std::cout << "PASS " << checks << " YAML template assertions (configuration, scripts, providers, editing, export and independent protocol peers)\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "ss-duplex") { ssIncrementalTests(); ssDuplexTests(argv[2]); ssAeadTests(); std::cout << "PASS " << checks << " SS duplex assertions (independent AEAD peers, every vector split/EOF, actual ingress, UDP and HTTPS)\n"; return 0; }
@@ -450,7 +452,7 @@ int main(int argc, char** argv) {
             return 0;
         }
         ssIncrementalTests(); ssDuplexTests(argv[2]); yamlMergeTests(argv[2]); snifferTests(argv[2]); inboundTests(argv[2]); controllerConfigTests(argv[2]); backupCodecTests(argv[2]); controllerApiTests(argv[2]); controllerAuthTests(argv[2]);controllerStateTests(argv[2]); configScriptTests(argv[2]); configMergeTests(argv[2]); shareLinkTests(); objectEditsTests(argv[2]); ruleEditsTests(argv[2]); protocolTests(); configurationTests(argv[1], argv[2]); forwardingTests(); latencyAndRuleTests();
-        udpProtocolTests(); udpForwardingTests(); vlessTests(argv[2]); forwardProxyTests(argv[2]); dialerProxyTests(argv[2]);
+        udpProtocolTests(); udpForwardingTests(); vlessTests(argv[2]); forwardProxyTests(argv[2]); dialerProxyTests(argv[2]); tlsFailureTests();
         vmessTests(argv[2]);httpsProbeTests();groupHealthTests(argv[2]);providerTests(argv[2]);loadBalanceTests(argv[2]);ssAeadTests();trojanTests(argv[2]);ruleProviderTests(argv[2]);dnsHostsTests(argv[2]);vmessDuplexTests(argv[2]);dnsTests(argv[2]);dnsListenerTests(argv[2]);geoTests(argv[2]);proxyPortTests(argv[2]);
         std::cout << "PASS " << checks << " assertions (shipping Mbed TLS backend; Harmony networking still requires device verification)\n";
         return 0;

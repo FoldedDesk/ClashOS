@@ -12,6 +12,8 @@ import { ProxyGroupIcon } from '../components/ProxyGroupIcon';
 import { RuntimeConfigDialog } from '../components/RuntimeConfigDialog';
 import { InboundSettingsDialog } from '../components/InboundSettingsDialog';
 import { SnifferSettingsDialog } from '../components/SnifferSettingsDialog';
+import { ProbeSeriesDialog } from '../components/ProbeSeriesDialog';
+import { probeFailureText } from '../service/ProbeSeriesController';
 import { ClashInboundSettings, ClashInboundChanges } from '../service/ClashApi';
 import { ClashRuntimeConfig } from '../service/ClashApi';
 import { ProxyPortsDialog } from '../components/ProxyPortsDialog';
@@ -1750,6 +1752,37 @@ struct Index {
     } catch (error) { this.notice = `清除会话分配失败：${(error as Error).message}`; }
   }
 
+  private async openProbeSeries(name: string = this.selectedProxy): Promise<void> {
+    if (!this.coreConnected || !name || name === 'REJECT') return;
+    const version: number = this.mutationVersion;
+    try {
+      const initial: ClashRuntimeConfig | undefined = this.internalCore ? await this.coreApi.runtimeConfig() : undefined;
+      let valid: boolean = true;
+      const isCurrent = (): boolean => valid && this.pageActive && this.coreConnected && version === this.mutationVersion;
+      const check = async (): Promise<void> => {
+        if (!isCurrent()) throw new Error('当前配置或连接状态已变化');
+        if (initial) {
+          try {
+            const current: ClashRuntimeConfig = await this.coreApi.runtimeConfig();
+            if (current.path !== initial.path || current.revision !== initial.revision) throw new Error('当前配置已变化');
+          } catch (error) { valid = false; throw new Error((error as Error).message || '无法确认当前配置'); }
+        }
+        if (!isCurrent()) throw new Error('当前配置或连接状态已变化');
+      };
+      if (!isCurrent()) return;
+      this.dialogController?.close();
+      this.dialogController = new CustomDialogController({ builder: ProbeSeriesDialog({ nodeName: name, initialUrl: this.testUrl,
+        probe: async (node: string, url: string): Promise<number> => {
+          await check();
+          try { return await this.coreApi.testDelay(node, url); } finally { await check(); }
+        },
+        isCurrent, onCopy: (text: string): void => { this.copyText(text, '节点检测报告'); },
+        onFinished: (): void => { this.refreshCore(); }
+      }), autoCancel: false, customStyle: true });
+      this.dialogController.open();
+    } catch (error) { this.notice = `无法打开节点检测：${(error as Error).message}`; }
+  }
+
   private async testNode(name: string, quiet: boolean = false): Promise<void> {
     if (!this.coreConnected || this.testingNodes.indexOf(name) >= 0 || name === 'REJECT') return;
     const revision: number = this.mutationVersion;
@@ -1762,7 +1795,7 @@ struct Index {
       }
     } catch (error) {
       if (revision === this.mutationVersion) {
-        const message: string = (error as Error).message;
+        const message: string = probeFailureText((error as Error).message);
         this.setDelay(name, 0, message);
         if (!quiet) this.notice = `测速失败：${message}`;
       }
@@ -1915,6 +1948,8 @@ struct Index {
       }
       MenuItem({ content: '测试延迟', startIcon: $r('app.media.verge_chart') })
         .enabled(this.coreConnected && name !== 'REJECT' && this.testingNodes.indexOf(name) < 0).onClick(() => this.testNode(name));
+      MenuItem({ content: '连续检测节点', startIcon: $r('app.media.verge_chart') }).enabled(this.coreConnected && name !== 'REJECT')
+        .onClick(() => this.openProbeSeries(name));
       MenuItem({ content: '查看测速结果' }).enabled(this.nodeDelay(name) >= 0)
         .onClick(() => this.notice = this.delayErrors[name] || `${name} · ${this.nodeDelayText(name)}`);
       MenuItem({ content: '断开经过此节点的连接' }).enabled(this.coreConnected).onClick(() => this.closeProxyConnections(name));
@@ -2111,7 +2146,7 @@ struct Index {
   }
 
   @Builder
-  private outlineButton(label: string, source: Resource, action: () => void) {
+  private outlineButton(label: string, source: Resource, action: () => void, enabled: boolean = true) {
     Button({ type: ButtonType.Normal }) {
       Row({ space: 7 }) {
         this.icon(source, 16, 'primary');
@@ -2123,7 +2158,7 @@ struct Index {
     .borderRadius(this.theme.radius(5))
     .border({ width: 1, color: this.theme.primaryBorder })
     .backgroundColor(this.theme.surface)
-    .onClick(action);
+    .enabled(enabled).onClick(action);
   }
 
   @Builder
@@ -2587,6 +2622,8 @@ struct Index {
     Menu() {
       MenuItem({ content: '测试延迟', startIcon: $r('app.media.verge_speed') })
         .enabled(this.coreConnected && this.testingNodes.indexOf(name) < 0).onClick(() => this.testNode(name));
+      MenuItem({ content: '连续检测节点', startIcon: $r('app.media.verge_chart') }).enabled(this.coreConnected && name !== 'REJECT')
+        .onClick(() => this.openProbeSeries(name));
       MenuItem({ content: '复制节点名称' }).onClick(() => this.copyText(name, '节点名称'));
       MenuItem({ content: '断开经过此节点的连接', startIcon: $r('app.media.verge_close') })
         .enabled(this.coreConnected).onClick(() => this.closeProxyConnections(name));
@@ -3278,6 +3315,7 @@ struct Index {
             .height(34).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.onPrimary).padding({ left: 14, right: 14 }).borderRadius(this.theme.radius(5))
             .backgroundColor(this.theme.primary).enabled(this.coreConnected && this.selectedProxy.length > 0 && this.testingNodes.indexOf(this.selectedProxy) < 0)
             .onClick(() => this.testNode(this.selectedProxy));
+          this.outlineButton('连续检测', $r('app.media.verge_chart'), () => this.openProbeSeries(), this.coreConnected && this.selectedProxy.length > 0 && this.selectedProxy !== 'REJECT');
           if (this.internalCore) this.outlineButton('内核自检', $r('app.media.verge_shield'), () => this.diagnoseCore());
           Blank();
           Text(this.selectedProxy.length > 0 ? this.nodeDelayText(this.selectedProxy) : '—')

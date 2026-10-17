@@ -5,6 +5,7 @@ import { util } from '@kit.ArkTS';
 // values. Chained tests may relay only to the two fixed local fixture ports;
 // no arbitrary forwarding, production configuration or payload logging.
 export class ForwardFixtureConnection {
+  private static mixedSequence: number = 0;
   private input: Uint8Array = new Uint8Array(0);
   private phase: number = 0;
   private protocol: string = '';
@@ -12,6 +13,7 @@ export class ForwardFixtureConnection {
   private udp?: socket.UDPSocket;
   private relay?: socket.TCPSocket;
   private relayWrites: Promise<void> = Promise.resolve();
+  private probeMode: string = '';
   private encoder: util.TextEncoder = new util.TextEncoder();
   private decoder: util.TextDecoder = util.TextDecoder.create('utf-8');
   private send: (bytes: Uint8Array) => Promise<void>;
@@ -55,8 +57,11 @@ export class ForwardFixtureConnection {
         }
         const relayPort: number = text.startsWith('CONNECT chain.device.test:18097 HTTP/1.1\r\n') && fields['host'] === 'chain.device.test:18097' ? 18097 :
           text.startsWith('CONNECT chain.device.test:18098 HTTP/1.1\r\n') && fields['host'] === 'chain.device.test:18098' ? 18098 : 0;
-        if (!relayPort && (!text.startsWith('CONNECT forward.device.test:80 HTTP/1.1\r\n') || fields['host'] !== 'forward.device.test:80')) { await this.reject(); return; }
+        const authority: string = text.split(' ')[1];
+        this.probeMode = ['tls-eof.device.test:443', 'tls-alert.device.test:443', 'probe-mixed.device.test:80', 'probe-slow.device.test:80'].includes(authority) && fields['host'] === authority ? authority : '';
+        if (!relayPort && !this.probeMode && (!text.startsWith('CONNECT forward.device.test:80 HTTP/1.1\r\n') || fields['host'] !== 'forward.device.test:80')) { await this.reject(); return; }
         this.input = this.input.slice(end + 4); this.phase = 4; this.event('http');
+        if (this.probeMode.startsWith('tls-')) this.phase = 7;
         if (relayPort) await this.openRelay(relayPort);
         await this.send(this.encoder.encodeInto('HTTP/1.1 200 Connection established\r\n\r\n')); continue;
       }
@@ -96,9 +101,21 @@ export class ForwardFixtureConnection {
       }
       if (this.phase === 4) {
         const text = this.decoder.decodeToString(this.input); if (!text.includes('\r\n\r\n')) return;
-        if (!text.startsWith('GET /verify HTTP/1.1\r\n') || !/^forward\.device\.test(?::80)?$/.test(this.headers(text)['host'] || '')) { await this.reject(); return; }
-        await this.send(this.encoder.encodeInto('HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'));
+        const expectedHost: string = this.probeMode || 'forward.device.test:80';
+        const host: string = this.headers(text)['host'] || '';
+        if (!text.startsWith('GET /verify HTTP/1.1\r\n') || (host !== expectedHost && host !== expectedHost.split(':')[0])) { await this.reject(); return; }
+        if (this.probeMode.startsWith('probe-slow')) await new Promise<void>((resolve: () => void) => setTimeout(resolve, 3000));
+        if (this.closed) return;
+        const status: number = this.probeMode.startsWith('probe-mixed') && ++ForwardFixtureConnection.mixedSequence % 2 === 0 ? 503 : 204;
+        if (this.probeMode) this.event(status === 204 ? 'probe-pass' : 'probe-fail');
+        await this.send(this.encoder.encodeInto(`HTTP/1.1 ${status} Fixture\r\nContent-Length: 0\r\nConnection: close\r\n\r\n`));
         this.stop(); await this.close().catch(() => {}); return;
+      }
+      if (this.phase === 7) {
+        if (this.input.length < 5 || this.input.length < 5 + this.input[3] * 256 + this.input[4]) return;
+        if (this.input[0] !== 22) { await this.reject(); return; }
+        if (this.probeMode.startsWith('tls-alert')) await this.send(new Uint8Array([21,3,3,0,2,2,40]));
+        this.event(this.probeMode.startsWith('tls-alert') ? 'tls-alert' : 'tls-eof');this.stop();await this.close().catch(() => {});return;
       }
       if (this.phase === 5 && this.input.length) await this.reject();
       if (this.phase === 6 && this.relay && this.input.length) { const pending = this.input; this.input = new Uint8Array(0); await this.relay.send({ data: pending.buffer as ArrayBuffer }); }

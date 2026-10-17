@@ -6,6 +6,7 @@ import xml from '@ohos.xml';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { VlessFixtureServer } from './VlessFixtureServer';
 import { probeVlessUdp } from './VlessFixtureProbe';
+import { probeNetworkHttps } from './NetworkFixtureProbe';
 
 interface FixtureFile { text: string; revision: number; }
 
@@ -73,6 +74,11 @@ export default class EntryAbility extends UIAbility {
   }
 
   private handle(client: socket.TCPSocketConnection, method: string, path: string, headers: Record<string, string>, body: string): void {
+    if (path.startsWith('/test-admin/https/') && method === 'POST') {
+      const parts: string[] = path.substring('/test-admin/https/'.length).split('/');
+      if (parts.length > 2) { this.respond(client, 400, '{}'); return; }
+      probeNetworkHttps(parts[0], parts[1] || '').then((result: string) => this.respond(client, 200, result)).catch(() => this.respond(client, 400, '{}')); return;
+    }
     if (path === '/test-admin/vless/start' && method === 'POST') { this.vless.start(this.context); this.respond(client, 200, '{}'); return; }
     if (path === '/test-admin/forward/start' && method === 'POST') { this.vless.start(this.context); this.respond(client, 200, '{}'); return; }
     if (path === '/test-admin/forward/probe' && method === 'POST') { probeVlessUdp('forward.device.test').then((result: string) => this.respond(client, 200, result)).catch(() => this.respond(client, 500, '{}')); return; }

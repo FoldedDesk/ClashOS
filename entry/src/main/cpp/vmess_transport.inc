@@ -1,11 +1,38 @@
 // Shared VMess/Trojan byte transport: TCP, verified TLS and RFC 6455 WebSocket.
 #include "third_party/ca_bundle/trust_bundle.inc"
 
+struct TlsHandshakeFailure { std::string message;int code=EPROTO; };
+TlsHandshakeFailure tlsHandshakeFailure(int result,uint32_t verification,int transportError=0)
+{
+    // UINT32_MAX means certificate verification has not run. EOF, alerts and
+    // I/O failures before Certificate must never be described as bad trust.
+    if(result==MBEDTLS_ERR_X509_CERT_VERIFY_FAILED||(result==0&&verification!=0)) {
+        if(verification!=UINT32_MAX) {
+            if(verification&MBEDTLS_X509_BADCERT_CN_MISMATCH)return {"TLS certificate hostname mismatch",EPROTO};
+            if(verification&MBEDTLS_X509_BADCERT_EXPIRED)return {"TLS certificate has expired",EPROTO};
+            if(verification&MBEDTLS_X509_BADCERT_FUTURE)return {"TLS certificate is not valid yet",EPROTO};
+            if(verification&MBEDTLS_X509_BADCERT_NOT_TRUSTED)return {"TLS certificate is not trusted",EPROTO};
+        }
+        return {"TLS certificate verification failed",EPROTO};
+    }
+    if(result==MBEDTLS_ERR_SSL_CONN_EOF||result==MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY)
+        return {"TLS peer closed the connection before handshake completed",ECONNRESET};
+    if(result==MBEDTLS_ERR_SSL_TIMEOUT||transportError==ETIMEDOUT)return {"TLS handshake timed out",ETIMEDOUT};
+    if(result==MBEDTLS_ERR_NET_CONN_RESET||transportError==ECONNRESET||transportError==EPIPE)
+        return {"TLS connection reset during handshake",ECONNRESET};
+    if(transportError==EBADMSG)return {"Proxy response authentication failed during TLS handshake",EBADMSG};
+    if(result==MBEDTLS_ERR_NET_RECV_FAILED)return {"TLS handshake transport read failed",EIO};
+    if(result==MBEDTLS_ERR_NET_SEND_FAILED)return {"TLS handshake transport write failed",EIO};
+    if(result==MBEDTLS_ERR_SSL_FATAL_ALERT_MESSAGE)return {"TLS peer rejected the handshake",EPROTO};
+    return {"TLS handshake failed ("+std::to_string(result)+")",EPROTO};
+}
+
 struct TlsChannel {
     int fd;
     bool enabled = false;
     bool cleanEof = false;
     bool nonblockingRead = false;
+    int lastTransportError = 0;
     std::function<ssize_t(unsigned char*, size_t)> readTransport;
     std::function<ssize_t(const unsigned char*, size_t)> writeTransport;
     mbedtls_ssl_context ssl;
@@ -26,9 +53,10 @@ struct TlsChannel {
     }
     static int writeBio(void* context, const unsigned char* bytes, size_t size) {
         auto* channel = static_cast<TlsChannel*>(context);
-        if (!prepareSocketIo(channel->fd)) return MBEDTLS_ERR_SSL_TIMEOUT;
+        if (!prepareSocketIo(channel->fd)) { channel->lastTransportError=errno;return MBEDTLS_ERR_SSL_TIMEOUT; }
         if (channel->writeTransport) {
             const ssize_t result=channel->writeTransport(bytes,size);
+            if(result<0)channel->lastTransportError=errno;
             return result>=0 ? static_cast<int>(result) : MBEDTLS_ERR_NET_SEND_FAILED;
         }
         ssize_t result;
@@ -37,19 +65,21 @@ struct TlsChannel {
 #else
         do { result = send(channel->fd, bytes, size, 0); } while (result < 0 && errno == EINTR);
 #endif
+        if(result<0)channel->lastTransportError=errno;
         return result >= 0 ? static_cast<int>(result) : MBEDTLS_ERR_NET_SEND_FAILED;
     }
     static int readBio(void* context, unsigned char* bytes, size_t size) {
         auto* channel = static_cast<TlsChannel*>(context);
-        if (!prepareSocketIo(channel->fd)) return MBEDTLS_ERR_SSL_TIMEOUT;
+        if (!prepareSocketIo(channel->fd)) { channel->lastTransportError=errno;return MBEDTLS_ERR_SSL_TIMEOUT; }
         if (channel->readTransport) {
             const ssize_t result=channel->readTransport(bytes,size);
+            if(result<0)channel->lastTransportError=errno;
             return result>=0 ? static_cast<int>(result) : (errno==ETIMEDOUT ? MBEDTLS_ERR_SSL_TIMEOUT : MBEDTLS_ERR_NET_RECV_FAILED);
         }
         ssize_t result;
         do { result = recv(channel->fd, bytes, size, channel->nonblockingRead ? MSG_DONTWAIT : 0); } while (result < 0 && errno == EINTR);
-        if (result < 0) return errno == EAGAIN || errno == EWOULDBLOCK ?
-            (channel->nonblockingRead ? MBEDTLS_ERR_SSL_WANT_READ : MBEDTLS_ERR_SSL_TIMEOUT) : MBEDTLS_ERR_NET_RECV_FAILED;
+        if (result < 0) { channel->lastTransportError=errno;return errno == EAGAIN || errno == EWOULDBLOCK ?
+            (channel->nonblockingRead ? MBEDTLS_ERR_SSL_WANT_READ : MBEDTLS_ERR_SSL_TIMEOUT) : MBEDTLS_ERR_NET_RECV_FAILED; }
         return static_cast<int>(result);
     }
     bool start(const std::string& host, bool skipVerify, std::string& error, const char* trustOverride = nullptr,
@@ -89,11 +119,12 @@ struct TlsChannel {
             error = "Cannot configure TLS hostname"; return false;
         }
         mbedtls_ssl_set_bio(&ssl, this, writeBio, readBio, nullptr);
+        lastTransportError=0;
         do { result = mbedtls_ssl_handshake(&ssl); }
         while (result == MBEDTLS_ERR_SSL_WANT_READ || result == MBEDTLS_ERR_SSL_WANT_WRITE);
         if (result != 0 || (!skipVerify && mbedtls_ssl_get_verify_result(&ssl) != 0)) {
-            error = "TLS handshake or certificate verification failed (" + std::to_string(result) + ")";
-            errno = EPROTO; return false;
+            const auto failure=tlsHandshakeFailure(result,mbedtls_ssl_get_verify_result(&ssl),lastTransportError);
+            error=failure.message;errno=failure.code;return false;
         }
         enabled = true; return true;
     }

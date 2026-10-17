@@ -70,6 +70,34 @@ authentication; then correct the credentials and verify TCP/UDP after restart.
 Restore the original profile, mode, groups and window, remove the owned test
 profile and forwards, clear only the fixture clipboard and uninstall this app.
 
+## Connection probe device verification
+
+Start the optional VLESS/HTTP fixture and activate `../fixtures/probes/device.yaml`.
+The HTTP fixture accepts these additional fixed targets for native delay probes:
+
+- `https://tls-eof.device.test/`: close after the complete TLS ClientHello.
+- `https://tls-alert.device.test/`: return a fatal TLS handshake alert.
+- `http://probe-mixed.device.test/verify`: alternate HTTP 204 and HTTP 503.
+- `http://probe-slow.device.test/verify`: return HTTP 204 after three seconds.
+
+Use the untrusted/wrong-host TLS nodes to verify trust and hostname errors remain
+rejected. In ClashOS, open the continuous probe dialog from Tests or a node's
+right-click menu. Check mixed-result counts against `forward.probe-pass-tcp` and
+`probe-fail-tcp`; verify copy/report actions, three/five/ten attempt controls,
+stopping pending work, closing the dialog and changing runtime configuration
+during a pending request. Stop/close/change controls must issue no later probes.
+
+`POST /test-admin/https/{google|gstatic|github}/{http1|http2|system}` runs an
+independent HarmonyOS HTTP/TLS client against three fixed public destinations.
+Omit the final segment for default HTTP negotiation. It uses the core's explicit
+loopback proxy, or the OS default proxy in `system` mode, and returns only status,
+elapsed time or an error code. Requests disable response caching; HTTP/1.1 uses
+`Connection: close` for cold-connection checks. It never returns response bodies,
+headers, clipboard data, node addresses or credentials. The API follows the
+[HarmonyOS HTTP proxy options](https://developer.huawei.com/consumer/en/doc/harmonyos-references-V5/js-apis-http-V5).
+Restore the original profile/runtime/selections/window and remove owned fixture
+applications and forwards after verification.
+
 ## dialer-proxy device verification
 
 The HTTP/SOCKS parser can additionally tunnel only `chain.device.test:18097` or
