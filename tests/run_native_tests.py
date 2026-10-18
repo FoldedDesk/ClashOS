@@ -4,7 +4,7 @@ from pathlib import Path
 import argparse, os, shutil, subprocess, tempfile
 from native_test_env import find_cmake
 parser = argparse.ArgumentParser()
-parser.add_argument('--suite', choices=['http', 'tls', 'dialer', 'groups', 'all', 'api', 'configs', 'inbound', 'sniffer', 'rules', 'dns', 'hosts', 'vless', 'forward', 'providers', 'yaml', 'ss-duplex', 'ss2022', 'geo', 'ports', 'rule-edits', 'object-edits', 'share-links', 'merges', 'scripts', 'archive', 'network-backup', 'editor-providers'], default='all')
+parser.add_argument('--suite', choices=['connection-trace', 'http', 'tls', 'dialer', 'groups', 'all', 'api', 'configs', 'inbound', 'sniffer', 'rules', 'dns', 'hosts', 'vless', 'forward', 'providers', 'yaml', 'ss-duplex', 'ss2022', 'geo', 'ports', 'rule-edits', 'object-edits', 'share-links', 'merges', 'scripts', 'archive', 'network-backup', 'editor-providers'], default='all')
 parser.add_argument('--build-dir', type=Path, help='Optional reusable CMake build directory')
 parser.add_argument('--config', type=Path, help='Optional local configuration compatibility check; defaults to the public fixture')
 options = parser.parse_args()
@@ -23,7 +23,12 @@ if options.suite in ('ss2022', 'all') and subprocess.run([os.environ['CLAHSOS_RE
     raise SystemExit('SS2022 reference tests require blake3==1.0.8 and pycryptodome in CLAHSOS_REFERENCE_PYTHON (or its PYTHONPATH).')
 cmake = find_cmake()
 def run(command, timeout=180):
-    result = subprocess.run([str(p) for p in command], cwd=root, text=True, capture_output=True, timeout=timeout)
+    try:
+        result = subprocess.run([str(p) for p in command], cwd=root, text=True, capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        output = (error.stdout or b'') + (error.stderr or b'')
+        print(output.decode(errors='replace')[-8000:])
+        raise SystemExit(f'Native test command timed out after {timeout}s') from None
     if result.returncode:
         print((result.stdout + result.stderr)[-8000:])
         raise SystemExit(result.returncode)

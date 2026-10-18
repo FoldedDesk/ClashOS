@@ -213,6 +213,7 @@ struct ConnectionInfo {
     std::string start;
     uint64_t upload = 0;
     uint64_t download = 0;
+    HealthClock::time_point startedAt{};
 };
 
 struct CoreLog {
@@ -390,11 +391,14 @@ void trackSocket(int fd)
     g_state.sockets.insert(fd);
 }
 
+#include "connection_trace.inc"
+
 void closeSocket(int fd)
 {
     if (fd < 0) return;
     // Keep removal and close atomic with respect to cancellation and descriptor reuse.
     std::lock_guard<std::mutex> guard(g_state.sessionsMutex);
+    traceConnectionLocked(fd,"close");
     g_state.connections.erase(fd);
     for (auto& pair : g_state.connections) if (pair.second.upstream == fd) pair.second.upstream = -1;
     g_state.sockets.erase(fd);
@@ -406,8 +410,7 @@ void coreLog(const std::string& type, const std::string& payload)
     const int level = type == "debug" ? 0 : type == "info" ? 1 : (type == "warning" || type == "warn") ? 2 : 3;
     if (level < g_state.logLevel.load()) return;
     std::lock_guard<std::mutex> guard(g_state.sessionsMutex);
-    g_state.logs.push_back({g_state.nextLogId++, utcNow(), type, payload});
-    if (g_state.logs.size() > 300) g_state.logs.pop_front();
+    appendCoreLogLocked(type,payload);
 }
 
 bool beginConnection(int client, const std::string& host, int port, const std::vector<std::string>& chains,
@@ -424,11 +427,13 @@ bool beginConnection(int client, const std::string& host, int port, const std::v
     info.host = host;
     info.port = port;
     info.start = utcNow();
+    info.startedAt = HealthClock::now();
     info.chains = chains;
     info.rule = rule;
     info.network = network;
     info.owner = owner;
     g_state.connections[client] = std::move(info);
+    traceConnectionLocked(client,"open");
     return true;
 }
 
@@ -1567,7 +1572,7 @@ std::string responseFor(const std::string& method, const std::string& path, cons
     if (path.substr(0, path.find('?')) == "/clashos/ports") return proxyPortsControlLocked(method, path, body);
     if (path.substr(0, path.find('?')) == "/clashos/inbound") return inboundControlLocked(method, path, body);
     if (method == "GET" && path == "/version") {
-        return "{\"version\":\"ClashOS Core 0.43 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
+        return "{\"version\":\"ClashOS Core 0.44 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
             "\",\"premium\":false,\"meta\":true,\"features\":[\"http-message-framing\",\"http-upgrade\",\"yaml-merge-keys\",\"dialer-proxy\",\"dialer-proxy-udp\",\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"shadowsocks-2022\",\"ss2022-identity-headers\",\"vmess\",\"vless\",\"trojan\",\"http-outbound\",\"socks5-outbound\",\"socks5-udp\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
     }
     if (method == "GET" && path == "/clahsos/diagnostics") return diagnosticsJson();
@@ -2587,6 +2592,7 @@ bool sendPayload(int client, ProxyStream& stream, const std::string& data)
 
 void relayStream(int client, ProxyStream& stream, bool clientOpen = true)
 {
+    traceConnection(client,"relay-start");
     bool remoteOpen = true;
     if (!clientOpen) shutdown(stream.fd, SHUT_WR);
     std::vector<unsigned char> buffer(16384);
@@ -2595,11 +2601,12 @@ void relayStream(int client, ProxyStream& stream, bool clientOpen = true)
         const bool buffered = remoteOpen && ((stream.vmess && stream.vmess->pending()) || (stream.trojan && stream.trojan->pending()) || (stream.vless && stream.vless->pending()) || (stream.forward && stream.forward->pending()));
         const int ready = poll(reads, 2, buffered ? 0 : 300000);
         if (ready < 0 && errno == EINTR) continue;
-        if (ready < 0 || (ready == 0 && !buffered)) break;
+        if (ready < 0 || (ready == 0 && !buffered)) { traceConnection(client,ready<0?"poll-error":"poll-timeout",ready<0?errno:0);break; }
         if (buffered) reads[1].revents |= POLLIN;
         if (clientOpen && reads[0].revents != 0) {
             const ssize_t count = recv(client, buffer.data(), buffer.size(), 0);
             if (count == 0) {
+                traceConnection(client,"client-eof");
                 clientOpen = false;
                 bool finished = true;
                 if (stream.vmess) finished = stream.vmess->finish();
@@ -2617,9 +2624,11 @@ void relayStream(int client, ProxyStream& stream, bool clientOpen = true)
                 }
             } else if (count < 0) {
                 if (errno == EINTR) continue;
+                traceConnection(client,"client-read-error",errno);
                 break;
             } else {
                 if (!streamWrite(stream, reinterpret_cast<const char*>(buffer.data()), static_cast<size_t>(count))) {
+                    traceConnection(client,"upload-error",errno);
                     // A failed upload does not invalidate independent incoming
                     // records. Never replay it; stop writing and drain the peer
                     // through the same authenticated receive path as before.
@@ -2634,6 +2643,7 @@ void relayStream(int client, ProxyStream& stream, bool clientOpen = true)
             if (!streamRead(stream, plain, true)) {
                 if ((stream.ss2022 || stream.shadowsocks || stream.vmess || stream.trojan || stream.vless || stream.forward) && (errno == EAGAIN || errno == EWOULDBLOCK)) continue;
                 if (errno != 0) {
+                    traceConnection(client,"upstream-read-error",errno);
                     if (stream.vmess) coreLog("warning", errno == EBADMSG ? "VMess response authentication failed" :
                         errno == EOVERFLOW ? "VMess connection reached its nonce limit" : "VMess transport interrupted or timed out");
                     else if (stream.trojan) coreLog("warning", "Trojan TLS or WebSocket transport interrupted or timed out");
@@ -2643,9 +2653,10 @@ void relayStream(int client, ProxyStream& stream, bool clientOpen = true)
                     break;
                 }
                 remoteOpen = false;
+                traceConnection(client,"upstream-eof");
                 shutdown(client, SHUT_WR);
             } else {
-                if (!sendAll(client, plain)) break;
+                if (!sendAll(client, plain)) { traceConnection(client,"client-write-error",errno);break; }
                 recordTransfer(client, false, plain.size());
             }
         }

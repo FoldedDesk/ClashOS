@@ -27,11 +27,13 @@ async function settleUntil(test){for(let n=0;n<100&&!test();n++)await new Promis
   assert.deepEqual(plain(env.networkStatistics(result)),{responses:2,passed:1,httpErrors:1,networkErrors:1});checks++;
   check(env.networkSampleText(result.samples[1]).includes('已收到 HTTP 403')&&!env.networkSampleText(result.samples[1]).includes('网络请求失败'),'A real HTTP error is distinguished from a transport failure');
   check(env.networkSampleText(result.samples[2]).includes('2300999')&&!env.networkSampleText(result.samples[2]).includes('证书'),'Unknown OS errors preserve their code without inventing a certificate diagnosis');
+  check(env.networkSampleText({...result.samples[2],elapsed:123}).includes('123 ms'),'Transport failures retain their measured duration');
   check(states[0].samples.length===0&&states[2].samples.length===1,'Published progress snapshots are immutable');
   states[1].proxy.exclusions.push('edited-by-view');check(!result.proxy.exclusions.includes('edited-by-view'),'Published exclusion lists cannot mutate controller state');
   const report=env.networkReport(result),snapshots=JSON.stringify(states);
   check(![report,snapshots].some(x=>/secret-credential|private-user|private-response-body|private-header|must-not-export/.test(x)),'Reports and snapshots exclude credentials, bodies, headers and untrusted error messages');
   check(report.includes('HTTP 状态异常 1')&&report.includes('网络请求失败 1')&&report.includes('系统代理：127.0.0.1:7890'),'Report retains route policy and separate result categories');
+  check(report.includes(`代码 2300999） · ${result.samples[2].elapsed} ms`),'Copied reports retain failure duration instead of losing the failed-request timing');
   check(env.state.destroyed===3,'Every completed/failed HTTP object is destroyed exactly once');
   for(const call of env.state.calls){check(call.options.usingProxy===true&&call.options.usingCache===false&&call.options.usingProtocol===1&&call.options.maxLimit===262144,'Requests use the actual system proxy and bounded uncached HTTP/1.1');check(!('caPath' in call.options)&&!('clientCert' in call.options)&&!('serverTrust' in call.options),'System TLS trust is not overridden');}
   check(env.networkTargets().length===3&&env.networkTargets()[0].expected===204,'Default targets have independent expected statuses');

@@ -45,7 +45,7 @@ export function networkErrorText(code: number): string {
   return '系统网络请求失败';
 }
 export function networkSampleText(sample: NetworkSample): string {
-  if (!sample.status) return `${networkErrorText(sample.error)}（代码 ${sample.error || '未知'}）`;
+  if (!sample.status) return `${networkErrorText(sample.error)}（代码 ${sample.error || '未知'}） · ${sample.elapsed} ms`;
   return networkPassed(sample) ? `HTTP ${sample.status} · ${sample.elapsed} ms` :
     `已收到 HTTP ${sample.status} · 期望 ${sample.expected || '200–399'} · ${sample.elapsed} ms`;
 }
