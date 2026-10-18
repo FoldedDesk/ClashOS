@@ -5,6 +5,7 @@ Ordinary loopback listeners are required (Linux CI). Credentials, certificates
 and names below are public fixtures. No user's configuration is read or edited.
 """
 import argparse
+from contextlib import contextmanager
 import json
 from pathlib import Path
 import shutil
@@ -51,6 +52,18 @@ def read_exact(stream, length):
             raise AssertionError('Unexpected EOF in actual SOCKS handshake')
         result += part
     return result
+
+
+@contextmanager
+def udp_association(port, check):
+    with socket.create_connection(('127.0.0.1', port), timeout=8) as control, socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
+        udp.bind(('127.0.0.1', 0)); udp.settimeout(8)
+        control.sendall(b'\x05\x01\x00')
+        check(read_exact(control, 2) == b'\x05\x00', 'SOCKS no-auth negotiation')
+        control.sendall(b'\x05\x03\x00\x01' + b'\x00' * 6)
+        association = read_exact(control, 10)
+        check(association[:4] == b'\x05\x00\x00\x01', 'SOCKS UDP association')
+        yield udp, ('127.0.0.1', int.from_bytes(association[-2:], 'big'))
 
 
 class Echo:
@@ -106,6 +119,32 @@ def main():
                 time.sleep(.05)
         raise AssertionError('Owned listener did not become ready')
 
+    def udp_packets(port, echoes, prefix, lengths):
+        nonlocal label
+        with udp_association(port, check) as (udp, relay):
+            for echo in echoes:
+                header = b'\x00\x00\x00\x01\x7f\x00\x00\x01' + struct.pack('!H', echo.port)
+                for length in lengths:
+                    if length == 'maximum':
+                        length = 65507 - len(header)
+                    label = prefix + f' UDP {length} destination {echo.port}'
+                    body = bytes(index % 256 for index in range(length))
+                    before = len(echo.packets)
+                    if length == 0:
+                        # Pinned sing-vmess v0.2.5 serverSession.recv explicitly
+                        # discards zero-length data. Verify this known peer
+                        # limitation and continued flow, rather than omit it or
+                        # count a dropped empty datagram as a successful echo.
+                        udp.sendto(header, relay)
+                        body = b'after-empty'
+                    udp.sendto(header + body, relay)
+                    reply, source = udp.recvfrom(65535)
+                    check(source == relay, 'Reply must come from the actual SOCKS relay')
+                    check(reply == header + body[::-1], 'Actual reply source/body/boundaries must match independent UDP echo')
+                    check(echo.packets[before:] == [body],
+                        'Pinned peer must discard only the empty frame and deliver the following datagram exactly once' if length == 0 else
+                        'Every nonempty datagram must reach the independent destination exactly once')
+
     with tempfile.TemporaryDirectory(prefix='clashos-xudp-network-') as temporary:
         work = Path(temporary)
         processes, logs, echoes = [], [], []
@@ -158,10 +197,18 @@ def main():
                             node['ws-opts'] = {'path': '/xudp-public', 'headers': {'Host': 'vmess.test'}}
                         client['proxies'].append(node)
                         client['proxy-groups'][0]['proxies'].append(name)
-            for filename, content in (('server.yaml', server), ('client.yaml', client)):
+            reference_api, reference_socks = free_port(), free_port()
+            reference_node = client['proxies'][0]
+            reference = {'external-controller': f'127.0.0.1:{reference_api}',
+                'socks-port': reference_socks, 'mode': 'rule', 'log-level': 'warning',
+                'find-process-mode': 'off', 'proxies': [reference_node],
+                'rules': ['MATCH,' + reference_node['name']]}
+            reference_work = work / 'reference'; reference_work.mkdir()
+            for filename, content in (('server.yaml', server), ('client.yaml', client), ('reference.yaml', reference)):
                 (work / filename).write_text(json.dumps(content))
             for command, name in (([str(mihomo), '-d', str(work), '-f', str(work / 'server.yaml')], 'mihomo'),
-                ([str(native), 'serve', str(work / 'client.yaml'), str(controller), str(ROOT / 'tests/fixtures/vmess/ca.pem')], 'native')):
+                ([str(native), 'serve', str(work / 'client.yaml'), str(controller), str(ROOT / 'tests/fixtures/vmess/ca.pem')], 'native'),
+                ([str(mihomo), '-d', str(reference_work), '-f', str(work / 'reference.yaml')], 'reference-client')):
                 log = (work / (name + '.log')).open('w+')
                 logs.append(log)
                 processes.append(subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=log))
@@ -170,6 +217,9 @@ def main():
             check('Core 0.45' in version['version'] and 'xudp' in version['features'], 'Production XUDP implementation must be running')
             for _ in range(2):
                 echoes.append(Echo())
+            check(ready(processes[2], reference_api)['version'] == 'v1.19.32', 'Official reference client release is pinned')
+            udp_packets(reference_socks, echoes[:1], 'official-client control', (8, 0, 1400, 8192, 'maximum'))
+            print('PASS official-client control: nonempty XUDP works; pinned server discards zero-length frames', flush=True)
             group = '/proxies/' + urllib.parse.quote('XUDP public', safe='')
             for node in client['proxies']:
                 label = node['name']
@@ -184,25 +234,7 @@ def main():
                         *proxy, f'https://vmess.test:{peer_tls}/version'], capture_output=True, text=True, timeout=15)
                     check(result.returncode == 0 and json.loads(result.stdout)['version'] == 'v1.19.32',
                         'Ordinary TCP and verified HTTPS must reach official server: ' + result.stderr)
-                with socket.create_connection(('127.0.0.1', socks_port), timeout=8) as control, socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
-                    udp.bind(('127.0.0.1', 0)); udp.settimeout(8)
-                    control.sendall(b'\x05\x01\x00')
-                    check(read_exact(control, 2) == b'\x05\x00', 'SOCKS no-auth negotiation')
-                    control.sendall(b'\x05\x03\x00\x01' + b'\x00' * 6)
-                    association = read_exact(control, 10)
-                    check(association[:4] == b'\x05\x00\x00\x01', 'SOCKS UDP association')
-                    relay = ('127.0.0.1', int.from_bytes(association[-2:], 'big'))
-                    for echo in echoes:
-                        header = b'\x00\x00\x00\x01\x7f\x00\x00\x01' + struct.pack('!H', echo.port)
-                        for length in (0, 8, 1400, 8192, 65507 - len(header)):
-                            label = node['name'] + f' UDP {length} destination {echo.port}'
-                            body = bytes(index % 256 for index in range(length))
-                            before = len(echo.packets)
-                            udp.sendto(header + body, relay)
-                            reply, source = udp.recvfrom(65535)
-                            check(source == relay, 'Reply must come from the real native relay')
-                            check(reply == header + body[::-1], 'Actual reply source/body/boundaries must match independent UDP echo')
-                            check(len(echo.packets) == before + 1 and echo.packets[-1] == body, 'Every datagram must reach the independent destination exactly once')
+                udp_packets(socks_port, echoes, node['name'], (0, 8, 1400, 8192, 'maximum'))
                 query = urllib.parse.urlencode({'name': 'udp-fixture.test', 'type': 'A',
                     'server': f'udp://127.0.0.1:{dns_port}#XUDP public'}, quote_via=urllib.parse.quote)
                 api(controller, '/clahsos/dns/cache', method='DELETE')
@@ -215,6 +247,7 @@ def main():
         except Exception as error:
             message = f'After {checks} assertions ({label}): {error}'
             print('::error title=XUDP interoperability::' + message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'), flush=True)
+            print('Independent echo packet lengths: ' + json.dumps([[len(packet) for packet in echo.packets] for echo in echoes]), flush=True)
             for log in logs:
                 log.flush(); log.seek(0); print(log.read()[-6000:])
             raise
