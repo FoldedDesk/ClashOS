@@ -47,7 +47,7 @@ class Channel:
         value, self.buffer = self.buffer[:size], self.buffer[size:]
         return value
 
-    def send(self, data, corrupt=False):
+    def send(self, data, corrupt=False, fragment=True):
         if not self.header:
             self.wire.send(response_packet(self.command, self.alter, '', []) if self.command else b'\0\0')
             self.header = True
@@ -57,7 +57,8 @@ class Channel:
         # Deliberately split mux metadata and lengths over authenticated VMess
         # records instead of preserving sender write/packet boundaries.
         offset = 0
-        for length in [1, 2, 3, 7, 19] + [1337] * (len(data) // 1337 + 1):
+        sizes = [1, 2, 3, 7, 19] + [1337] * (len(data) // 1337 + 1) if fragment else [len(data)]
+        for length in sizes:
             body = data[offset:offset + length]
             if not body:
                 break
@@ -66,12 +67,13 @@ class Channel:
             packet = self.write_cipher.encrypt(self.write_counter.to_bytes(2, 'big') + self.write_iv[2:12], body, None) if self.write_cipher else body
             if corrupt:
                 packet = packet[:-1] + bytes([packet[-1] ^ 1])
-                corrupt = False
             length = len(packet) + padding
             if self.options & 4:
                 length ^= self.write_mask.next()
             self.wire.send(struct.pack('>H', length) + packet + b'P' * padding)
             self.write_counter += 1
+            if corrupt:
+                return  # The client must close after this invalid record.
         assert offset == len(data)
 
 
@@ -147,13 +149,15 @@ def main():
                     response[3] = 1
                 elif fault == 'bad-network':
                     response[6] = 1
-                channel.send(bytes(response), corrupt=fault == 'tag')
+                # Send exactly the invalid record. A correctly rejecting client
+                # may close immediately; no later test writes are required.
+                channel.send(bytes(response), corrupt=fault == 'tag', fragment=False)
                 break
             source = [('192.0.2.80', 5400), ('reply.test', 5401), ('2001:db8::9', 5402), (None, 0), ('2001:db8::9', 5404)][index]
             response = frame(2, body[::-1], *source)
             # Keepalive with its own discard-only body must never become UDP data.
             channel.send(struct.pack('>H H B B H', 4, 0, 4, 1, 4) + b'DROP' + response)
-    if wire.ws:
+    if wire.ws and fault not in ('bad-session', 'bad-network', 'tag'):
         wire.frame(b'', opcode=8)
     conn.close()
 
