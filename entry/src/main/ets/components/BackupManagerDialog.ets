@@ -7,6 +7,7 @@ import { AppearanceSettings } from '../theme/AppearanceTypes';
 import { utf8Bytes } from '../service/TextCodec';
 import { WebDavClient } from '../service/WebDavClient';
 import { networkBackupSummary } from '../service/NetworkBackupTypes';
+import { DesktopPreferences, desktopPreferencesSummary } from '../service/DesktopController';
 
 @CustomDialog
 export struct BackupManagerDialog {
@@ -18,6 +19,7 @@ export struct BackupManagerDialog {
   readAppearance: () => AppearanceSettings | undefined = (): AppearanceSettings | undefined => undefined;
   readGroupIconRevision: () => string | undefined = (): string | undefined => undefined;
   readNetworkRevision: () => string | undefined = (): string | undefined => undefined;
+  readDesktop: () => DesktopPreferences | undefined = (): DesktopPreferences | undefined => undefined;
   onRestore: (text: string, selection: BackupRestoreSelection) => Promise<BackupRestoreResult> = async (_text: string, _selection: BackupRestoreSelection): Promise<BackupRestoreResult> => { throw new Error('恢复服务不可用'); };
   @State remoteMode: boolean = false;
   @State localEntries: BackupEntry[] = [];
@@ -35,9 +37,13 @@ export struct BackupManagerDialog {
   @State includeGlobals: boolean = true;
   @State includeAppearance: boolean = true;
   @State includeNetwork: boolean = false;
+  @State includeDesktop: boolean = false;
   @State restoreGlobals: boolean = false;
   @State restoreAppearance: boolean = false;
   @State restoreNetwork: boolean = false;
+  @State restoreDesktop: boolean = false;
+  @State hasDesktop: boolean = false;
+  @State desktopSummary: string = '';
   @State hasNetwork: boolean = false;
   @State networkSummary: string = '';
   @State hasGlobals: boolean = false;
@@ -56,6 +62,7 @@ export struct BackupManagerDialog {
   private expectedAppearance?: AppearanceSettings;
   private expectedGroupIcons?: string;
   private expectedNetwork?: string;
+  private expectedDesktop?: DesktopPreferences;
   private expectedNames: string = '';
   private client?: WebDavClient;
   private clientKey: string = '';
@@ -99,7 +106,7 @@ export struct BackupManagerDialog {
     if (this.busy.length) return;
     try {
       this.createRows = this.profiles?.list() ?? []; this.createSelected = this.createRows.map((profile: ClashProfile) => profile.id);
-      this.pendingUpload = upload; this.includeGlobals = true; this.includeAppearance = true; this.includeNetwork = false;
+      this.pendingUpload = upload; this.includeGlobals = true; this.includeAppearance = true; this.includeNetwork = false; this.includeDesktop = false;
       this.creating = true; this.error = ''; this.notice = '';
     } catch (error) { this.error = (error as Error).message; }
   }
@@ -108,7 +115,7 @@ export struct BackupManagerDialog {
     this.perform(this.pendingUpload ? '正在备份并上传…' : '正在创建备份…', async (): Promise<void> => {
       if (this.store === undefined) throw new Error('备份目录不可用');
       const client: WebDavClient | undefined = this.pendingUpload ? this.connection() : undefined;
-      const entry: BackupEntry = this.store.create({ profileIds: this.createSelected, includeGlobals: this.includeGlobals, includeAppearance: this.includeAppearance, includeNetwork: this.includeNetwork });
+      const entry: BackupEntry = this.store.create({ profileIds: this.createSelected, includeGlobals: this.includeGlobals, includeAppearance: this.includeAppearance, includeNetwork: this.includeNetwork, includeDesktop: this.includeDesktop });
       this.creating = false;
       if (client !== undefined) {
         try { await client.upload(entry, this.store.read(entry)); }
@@ -141,7 +148,7 @@ export struct BackupManagerDialog {
 
   private openPreview(text: string): void {
     if (this.profiles === undefined) throw new Error('配置目录不可用');
-    this.pendingText = text; this.restoreGlobals = false; this.restoreAppearance = false; this.restoreNetwork = false;
+    this.pendingText = text; this.restoreGlobals = false; this.restoreAppearance = false; this.restoreNetwork = false; this.restoreDesktop = false;
     this.refreshPreview(); this.previewing = true;
   }
 
@@ -153,6 +160,8 @@ export struct BackupManagerDialog {
     this.migrationNotes = (preview.archive.migrationNotes ?? []).join('\n');
     this.hasGlobals = preview.archive.globals !== undefined; this.hasAppearance = preview.archive.appearance !== undefined;
     this.hasNetwork = preview.archive.network !== undefined;
+    this.hasDesktop = preview.archive.desktop !== undefined;
+    this.desktopSummary = preview.archive.desktop ? desktopPreferencesSummary(preview.archive.desktop) : '';
     this.networkSummary = preview.archive.network ? networkBackupSummary(preview.archive.network) : '';
     this.globalSummary = preview.archive.globals ? `YAML：${preview.archive.globals.merge ? `${utf8Bytes(preview.archive.globals.merge).length} 字节` : '空，将清除现有扩展'}；脚本：${preview.archive.globals.script ? `${utf8Bytes(preview.archive.globals.script).length} 字节` : '空，将清除现有脚本'}` : '';
     const appearance: AppearanceSettings | undefined = preview.archive.appearance;
@@ -163,6 +172,7 @@ export struct BackupManagerDialog {
     try { this.expectedAppearance = this.readAppearance(); } catch (_) { this.expectedAppearance = undefined; }
     try { this.expectedGroupIcons = this.readGroupIconRevision(); } catch (_) { this.expectedGroupIcons = undefined; }
     try { this.expectedNetwork = this.readNetworkRevision(); } catch (_) { this.expectedNetwork = undefined; }
+    try { this.expectedDesktop = this.readDesktop(); } catch (_) { this.expectedDesktop = undefined; }
     this.selected = preview.rows.filter((row: BackupPreviewRow) => row.valid).map((row: BackupPreviewRow) => row.index);
     this.previewReady = true;
   }
@@ -183,6 +193,7 @@ export struct BackupManagerDialog {
       if (this.profiles === undefined) throw new Error('配置目录不可用');
       const result: BackupRestoreResult = await this.onRestore(this.pendingText, { profiles: this.selected, globals: this.restoreGlobals, appearance: this.restoreAppearance,
         network: this.restoreNetwork, expectedNetwork: this.expectedNetwork,
+        desktop: this.restoreDesktop, expectedDesktop: this.expectedDesktop,
         expectedGlobals: this.expectedGlobals, expectedAppearance: this.expectedAppearance, expectedGroupIcons: this.expectedGroupIcons, expectedNames: this.expectedNames });
       this.previewing = false; this.pendingText = ''; this.previewRows = []; this.selected = [];
       const parts: string[] = [];
@@ -190,6 +201,7 @@ export struct BackupManagerDialog {
       if (result.globals) parts.push(result.reloaded ? '全局扩展（已加载）' : '全局扩展（下次加载时生效）');
       if (result.appearance) parts.push('外观');
       if (result.network) parts.push(result.networkApplied ? '端口与共享设置（已应用）' : '端口与共享设置（下次加载时生效）');
+      if (result.desktop) parts.push('窗口与托盘设置（已应用）');
       this.notice = `已恢复${parts.join('、')}；活动配置保持不变`;
     });
   }
@@ -295,6 +307,26 @@ export struct BackupManagerDialog {
       }.width('100%');
       Scroll() {
         Column({ space: 8 }) {
+          Row({ space: 10 }) {
+            Checkbox({ name: 'backup-globals' }).select(this.includeGlobals).selectedColor(this.theme.primary).enabled(this.busy.length === 0)
+              .accessibilityText('备份全局扩展与脚本').onChange((checked: boolean) => this.includeGlobals = checked);
+            Text('包含全局 YAML 扩展与 JavaScript 脚本').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1);
+          }.width('100%');
+          Row({ space: 10 }) {
+            Checkbox({ name: 'backup-appearance' }).select(this.includeAppearance).selectedColor(this.theme.primary).enabled(this.busy.length === 0)
+              .accessibilityText('备份外观').onChange((checked: boolean) => this.includeAppearance = checked);
+            Text('包含外观：颜色模式、主题色、样式与代理组图标（含本机图片）').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1);
+          }.width('100%');
+          Row({ space: 10 }) {
+            Checkbox({ name: 'backup-network' }).select(this.includeNetwork).selectedColor(this.theme.primary).enabled(this.busy.length === 0)
+              .accessibilityText('备份端口与共享设置').onChange((checked: boolean) => this.includeNetwork = checked);
+            Text('包含端口与局域网共享设置（含代理账号密码）').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1);
+          }.width('100%');
+          Row({ space: 10 }) {
+            Checkbox({ name: 'backup-desktop' }).select(this.includeDesktop).selectedColor(this.theme.primary).enabled(this.busy.length === 0)
+              .accessibilityText('备份窗口与托盘设置').onChange((checked: boolean) => this.includeDesktop = checked);
+            Text('包含窗口与托盘设置：系统托盘、关闭窗口行为').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1);
+          }.width('100%');
           ForEach(this.createRows, (profile: ClashProfile) => {
             Row({ space: 12 }) {
               Checkbox({ name: `backup-${profile.id}` }).select(this.createSelected.indexOf(profile.id) >= 0).selectedColor(this.theme.primary)
@@ -303,29 +335,14 @@ export struct BackupManagerDialog {
               Text(profile.name).fontSize(this.theme.font(14)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1).maxLines(2);
             }.width('100%').padding(14).borderRadius(this.theme.radius(7)).backgroundColor(this.theme.surface);
           }, (profile: ClashProfile) => profile.id);
-          if (!this.createRows.length) Text('当前没有配置，仍可备份全局扩展、外观或网络设置。').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%').padding(14);
+          if (!this.createRows.length) Text('当前没有配置，仍可备份全局扩展、外观、网络或窗口设置。').fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%').padding(14);
         }.width('100%');
       }.width('100%').layoutWeight(1).align(Alignment.Top);
-      Row({ space: 10 }) {
-        Checkbox({ name: 'backup-globals' }).select(this.includeGlobals).selectedColor(this.theme.primary).enabled(this.busy.length === 0)
-          .accessibilityText('备份全局扩展与脚本').onChange((checked: boolean) => this.includeGlobals = checked);
-        Text('包含全局 YAML 扩展与 JavaScript 脚本').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1);
-      }.width('100%');
-      Row({ space: 10 }) {
-        Checkbox({ name: 'backup-appearance' }).select(this.includeAppearance).selectedColor(this.theme.primary).enabled(this.busy.length === 0)
-          .accessibilityText('备份外观').onChange((checked: boolean) => this.includeAppearance = checked);
-        Text('包含外观：颜色模式、主题色、样式与代理组图标（含本机图片）').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1);
-      }.width('100%');
-      Row({ space: 10 }) {
-        Checkbox({ name: 'backup-network' }).select(this.includeNetwork).selectedColor(this.theme.primary).enabled(this.busy.length === 0)
-          .accessibilityText('备份端口与共享设置').onChange((checked: boolean) => this.includeNetwork = checked);
-        Text('包含端口与局域网共享设置（含代理账号密码）').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1);
-      }.width('100%');
       Row({ space: 10 }) {
         Blank(); this.action('返回备份列表', () => this.creating = false);
         Button(this.pendingUpload ? '创建并上传所选内容' : '创建所选备份', { type: ButtonType.Normal }).height(36).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
           .fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary)
-          .enabled(this.busy.length === 0 && (this.createSelected.length > 0 || this.includeGlobals || this.includeAppearance || this.includeNetwork)).onClick(() => this.confirmCreate());
+          .enabled(this.busy.length === 0 && (this.createSelected.length > 0 || this.includeGlobals || this.includeAppearance || this.includeNetwork || this.includeDesktop)).onClick(() => this.confirmCreate());
       }.width('100%');
     }.width('100%').layoutWeight(1);
   }
@@ -333,50 +350,61 @@ export struct BackupManagerDialog {
   @Builder
   private previewContent() {
     Column({ space: 12 }) {
-      Text(`备份时间：${this.time(this.previewTime)}`).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
-      if (this.migrationNotes) Text(this.migrationNotes).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
-      Text(this.restoreGlobals ? '将替换全局扩展并重新加载当前内置配置。端口与共享设置默认保留；扩展中的端口字段可能改变实际监听端口。' : '配置恢复为独立副本，不切换活动配置。全局、外观和网络设置默认保留，可在下方单独选择。')
-        .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
-      if (this.hasGlobals) {
-        Row({ space: 10 }) {
-          Checkbox({ name: 'restore-globals' }).select(this.restoreGlobals).selectedColor(this.theme.primary).enabled(this.busy.length === 0)
-            .accessibilityText('恢复全局扩展与脚本').onChange((checked: boolean) => {
-              if (checked === this.restoreGlobals) return;
-              this.restoreGlobals = checked; this.error = '';
-              try { this.refreshPreview(); this.notice = '已按所选全局扩展重新校验，请确认配置选择'; }
-              catch (error) { this.error = (error as Error).message; }
-            });
-          Column({ space: 4 }) {
-            Text('恢复备份中的全局扩展与脚本').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
-            Text(this.globalSummary).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
-          }.layoutWeight(1).alignItems(HorizontalAlign.Start);
-        }.width('100%');
-      }
-      if (this.hasAppearance) {
-        Row({ space: 10 }) {
-          Checkbox({ name: 'restore-appearance' }).select(this.restoreAppearance).selectedColor(this.theme.primary).enabled(this.busy.length === 0)
-            .accessibilityText('恢复外观').onChange((checked: boolean) => this.restoreAppearance = checked);
-          Text(`恢复外观：${this.appearanceSummary}`).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1);
-        }.width('100%');
-      }
-      if (this.hasNetwork) {
-        Row({ space: 10 }) {
-          Checkbox({ name: 'restore-network' }).select(this.restoreNetwork).selectedColor(this.theme.primary).enabled(this.busy.length === 0 && this.expectedNetwork !== undefined)
-            .accessibilityText('恢复端口与共享设置').onChange((checked: boolean) => this.restoreNetwork = checked);
-          Column({ space: 4 }) {
-            Text(`恢复端口与共享设置：${this.networkSummary}`).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
-            Text(this.expectedNetwork === undefined ? '无法读取当前网络设置，请重新打开备份预览。' : '包含代理账号密码；应用到当前内置内核。请同步系统代理端口，系统代理开关保持不变。')
-              .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
-          }.layoutWeight(1).alignItems(HorizontalAlign.Start);
-        }.width('100%');
-      }
-      Row({ space: 10 }) {
-        this.action('选择全部可用配置', () => this.selected = this.previewRows.filter((row: BackupPreviewRow) => row.valid).map((row: BackupPreviewRow) => row.index));
-        this.action('取消全选', () => this.selected = []);
-        Text(`已选 ${this.selected.length} / ${this.previewRows.length}`).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
-      }.width('100%');
       Scroll() {
-        Column({ space: 8 }) {
+        Column({ space: 12 }) {
+          Text(`备份时间：${this.time(this.previewTime)}`).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
+          if (this.migrationNotes) Text(this.migrationNotes).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
+          Text(this.restoreGlobals ? '将替换全局扩展并重新加载当前内置配置。端口与共享设置默认保留；扩展中的端口字段可能改变实际监听端口。' : '配置恢复为独立副本，不切换活动配置。全局、外观、网络和窗口设置默认保留，可单独选择。')
+            .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
+          if (this.hasGlobals) {
+            Row({ space: 10 }) {
+              Checkbox({ name: 'restore-globals' }).select(this.restoreGlobals).selectedColor(this.theme.primary).enabled(this.busy.length === 0)
+                .accessibilityText('恢复全局扩展与脚本').onChange((checked: boolean) => {
+                  if (checked === this.restoreGlobals) return;
+                  this.restoreGlobals = checked; this.error = '';
+                  try { this.refreshPreview(); this.notice = '已按所选全局扩展重新校验，请确认配置选择'; }
+                  catch (error) { this.error = (error as Error).message; }
+                });
+              Column({ space: 4 }) {
+                Text('恢复备份中的全局扩展与脚本').fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
+                Text(this.globalSummary).fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
+              }.layoutWeight(1).alignItems(HorizontalAlign.Start);
+            }.width('100%');
+          }
+          if (this.hasAppearance) {
+            Row({ space: 10 }) {
+              Checkbox({ name: 'restore-appearance' }).select(this.restoreAppearance).selectedColor(this.theme.primary).enabled(this.busy.length === 0)
+                .accessibilityText('恢复外观').onChange((checked: boolean) => this.restoreAppearance = checked);
+              Text(`恢复外观：${this.appearanceSummary}`).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text).layoutWeight(1);
+            }.width('100%');
+          }
+          if (this.hasNetwork) {
+            Row({ space: 10 }) {
+              Checkbox({ name: 'restore-network' }).select(this.restoreNetwork).selectedColor(this.theme.primary).enabled(this.busy.length === 0 && this.expectedNetwork !== undefined)
+                .accessibilityText('恢复端口与共享设置').onChange((checked: boolean) => this.restoreNetwork = checked);
+              Column({ space: 4 }) {
+                Text(`恢复端口与共享设置：${this.networkSummary}`).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
+                Text(this.expectedNetwork === undefined ? '无法读取当前网络设置，请重新打开备份预览。' : '包含代理账号密码；应用到当前内置内核。请同步系统代理端口，系统代理开关保持不变。')
+                  .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
+              }.layoutWeight(1).alignItems(HorizontalAlign.Start);
+            }.width('100%');
+          }
+          if (this.hasDesktop) {
+            Row({ space: 10 }) {
+              Checkbox({ name: 'restore-desktop' }).select(this.restoreDesktop).selectedColor(this.theme.primary).enabled(this.busy.length === 0 && this.expectedDesktop !== undefined)
+                .accessibilityText('恢复窗口与托盘设置').onChange((checked: boolean) => this.restoreDesktop = checked);
+              Column({ space: 4 }) {
+                Text(`恢复窗口与托盘设置：${this.desktopSummary}`).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).fontColor(this.theme.text);
+                Text(this.expectedDesktop === undefined ? '当前托盘状态不可用，请稍后重新预览。' : '仅恢复托盘开关和关闭行为；不关闭当前窗口，也不退出应用。')
+                  .fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
+              }.layoutWeight(1).alignItems(HorizontalAlign.Start);
+            }.width('100%');
+          }
+          Row({ space: 10 }) {
+            this.action('选择全部可用配置', () => this.selected = this.previewRows.filter((row: BackupPreviewRow) => row.valid).map((row: BackupPreviewRow) => row.index));
+            this.action('取消全选', () => this.selected = []);
+            Text(`已选 ${this.selected.length} / ${this.previewRows.length}`).fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted);
+          }.width('100%');
           ForEach(this.previewRows, (row: BackupPreviewRow) => {
             Row({ space: 12 }) {
               Checkbox({ name: `restore-${row.index}` }).select(this.selected.indexOf(row.index) >= 0)
@@ -397,7 +425,7 @@ export struct BackupManagerDialog {
         Blank();
         this.action('返回备份列表', () => { this.previewing = false; this.pendingText = ''; this.previewRows = []; this.selected = []; });
         Button('恢复选中内容', { type: ButtonType.Normal }).height(36).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))
-          .fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary).enabled(this.previewReady && (this.selected.length > 0 || this.restoreGlobals || this.restoreAppearance || this.restoreNetwork) && this.busy.length === 0)
+          .fontColor(this.theme.onPrimary).backgroundColor(this.theme.primary).enabled(this.previewReady && (this.selected.length > 0 || this.restoreGlobals || this.restoreAppearance || this.restoreNetwork || this.restoreDesktop) && this.busy.length === 0)
           .onClick(() => this.restore());
       }.width('100%');
     }.width('100%').layoutWeight(1);
@@ -415,7 +443,7 @@ export struct BackupManagerDialog {
       } else if (this.previewing) {
         this.previewContent();
       } else {
-          Text('备份可包含配置原文及其凭据、扩展/脚本、可视化修改和集合缓存，也可选全局扩展、外观及端口与共享设置（含代理账号密码）。不会额外收集 WebDAV 账户、内置控制器密钥和地理数据库。')
+          Text('备份可包含配置原文及其凭据、扩展/脚本、可视化修改和集合缓存，也可选全局扩展、外观、窗口托盘及端口与共享设置（含代理账号密码）。不会额外收集 WebDAV 账户、内置控制器密钥和地理数据库。')
           .fontSize(this.theme.font(12)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textSecondary).width('100%');
         Row({ space: 8 }) {
           Button('本地备份', { type: ButtonType.Normal }).height(36).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).borderRadius(this.theme.radius(5))

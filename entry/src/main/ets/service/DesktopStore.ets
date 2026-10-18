@@ -1,5 +1,5 @@
 import { fileIo } from '@kit.CoreFileKit';
-import { DesktopPreferences } from './DesktopController';
+import { DesktopPreferences, desktopPreferences } from './DesktopController';
 import { utf8Bytes } from './TextCodec';
 
 export class DesktopStore {
@@ -9,17 +9,16 @@ export class DesktopStore {
   load(): DesktopPreferences {
     if (!fileIo.accessSync(this.path)) return { trayEnabled: true, closeToTray: true };
     if (fileIo.statSync(this.path).size > 1024) throw new Error('窗口与托盘设置文件过大');
-    const value: DesktopPreferences = JSON.parse(fileIo.readTextSync(this.path)) as DesktopPreferences;
-    if (!value || typeof value.trayEnabled !== 'boolean' || typeof value.closeToTray !== 'boolean') throw new Error('窗口与托盘设置格式无效');
-    return { trayEnabled: value.trayEnabled, closeToTray: value.closeToTray };
+    return desktopPreferences(JSON.parse(fileIo.readTextSync(this.path)) as DesktopPreferences);
   }
   save(value: DesktopPreferences): void {
+    const next: DesktopPreferences = desktopPreferences(value);
     const temporary: string = `${this.path}.tmp`; let committed: boolean = false;
     try {
       const file = fileIo.openSync(temporary, fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.TRUNC);
       try {
         this.protect(file.fd);
-        const bytes: Uint8Array = utf8Bytes(JSON.stringify({ trayEnabled: value.trayEnabled, closeToTray: value.closeToTray }));
+        const bytes: Uint8Array = utf8Bytes(JSON.stringify(next));
         let offset: number = 0;
         while (offset < bytes.length) {
           const count: number = fileIo.writeSync(file.fd, bytes.slice(offset).buffer as ArrayBuffer);

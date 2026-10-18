@@ -12,7 +12,8 @@ function evaluate(source, context = {}) {
     {module, exports: module.exports, console, ...context});
   return module.exports;
 }
-const {DesktopController: Controller} = evaluate(fs.readFileSync(path.join(root, 'service/DesktopController.ets'), 'utf8'));
+const desktopModule = evaluate(fs.readFileSync(path.join(root, 'service/DesktopController.ets'), 'utf8'));
+const {DesktopController: Controller} = desktopModule;
 const deferred = () => { let resolve; const promise = new Promise(r => resolve = r); return {promise, resolve}; };
 const tick = () => new Promise(setImmediate);
 class Host {
@@ -86,6 +87,51 @@ async function run() {
   check(!c.takeAction() && c.snapshot().error.includes('显示主窗口'),'Failed foreground launch keeps queued actions from mutating an invisible window');
   c.foreground();check(c.takeAction()==='network-check' && !c.snapshot().error,'Manual taskbar restoration releases the original queued action');c.finishAction('network-check');
 
+  // Whole-preference replacement coordinates one persisted commit with actual
+  // registration, guarded snapshots and rollback of partial platform changes.
+  ({host:h, controller:c} = instance()); await c.initialize(); c.setCloseHook(true);
+  const originalDesktop = c.backupPreferences(); originalDesktop.closeToTray = false;
+  check(c.backupPreferences().closeToTray, 'Backup snapshots cannot mutate controller or stored preferences');
+  h.calls = []; await c.replacePreferences({trayEnabled:false,closeToTray:false}, c.backupPreferences());
+  same(h.preferences, {trayEnabled:false,closeToTray:false}, 'Restore commits both desktop fields together');
+  check(!c.snapshot().ready && h.calls.filter(x=>x==='save').length===1, 'Disabling through restore detaches the resident and writes once');
+  await c.replacePreferences({trayEnabled:true,closeToTray:true}, c.backupPreferences());
+  check(c.snapshot().ready && c.snapshot().closeToTray, 'Restore immediately reattaches tray before enabling close behavior');
+  h.calls = []; await c.replacePreferences({trayEnabled:true,closeToTray:false}, c.backupPreferences());
+  check(!h.calls.some(x=>['add','remove','attach','detach'].includes(x)), 'Close-policy-only restore does not recreate a working tray');
+  await assert.rejects(c.replacePreferences({trayEnabled:false,closeToTray:false},{trayEnabled:true,closeToTray:true}),/已变化/); checks++;
+  h.fail='save'; await assert.rejects(c.replacePreferences({trayEnabled:false,closeToTray:true},c.backupPreferences()),/save/); checks++;
+  check(c.snapshot().ready && h.preferences.trayEnabled && !h.preferences.closeToTray, 'Failed whole-preference write restores residency and both old settings');
+  h.fail=''; await c.setEnabled(false); h.fail='attach';
+  await assert.rejects(c.replacePreferences({trayEnabled:true,closeToTray:false},c.backupPreferences()),/attach/); checks++;
+  check(!c.snapshot().ready && !h.preferences.trayEnabled, 'Failed attachment leaves disabled persisted preferences and no usable-tray claim');
+  h.fail=''; h.supportedValue=false; h.calls=[];
+  await assert.rejects(c.replacePreferences({trayEnabled:true,closeToTray:false},c.backupPreferences()),/不支持/); checks++;
+  check(!h.calls.some(x=>['add','attach','save'].includes(x)), 'Unsupported-device restore rejects before platform or preference mutations');
+  h.supportedValue=true; c.setCloseHook(false);
+  await assert.rejects(c.replacePreferences({trayEnabled:true,closeToTray:true},c.backupPreferences()),/不支持关闭/); checks++;
+  c.setCloseHook(true); h.pause={name:'attach',wait:deferred()};
+  const replacing=c.replacePreferences({trayEnabled:true,closeToTray:true},c.backupPreferences()); await tick();
+  check(c.snapshot().busy && !c.snapshot().ready, 'Backup restoration owns pending registration');
+  assert.throws(()=>c.backupPreferences(),/正在切换/); checks++;
+  await assert.rejects(c.setEnabled(true),/正在切换/); checks++;
+  h.preferences={trayEnabled:false,closeToTray:true}; h.pause.wait.resolve();
+  await assert.rejects(replacing,/已变化/); checks++;
+  same(h.preferences,{trayEnabled:false,closeToTray:true},'A newer file change during registration is never overwritten');
+  check(!c.snapshot().ready && !c.snapshot().busy,'Stale asynchronous restore removes its new resident');
+  assert.throws(()=>c.backupPreferences(),/已变化/); checks++;
+  for(const invalid of [null,[],{}, {trayEnabled:1,closeToTray:false},{trayEnabled:false,closeToTray:'true'}]) {
+    assert.throws(()=>desktopModule.desktopPreferences(invalid)); checks++;
+  }
+  same(desktopModule.desktopPreferences({trayEnabled:false,closeToTray:true,privateExtra:'excluded'}),{trayEnabled:false,closeToTray:true},'Only two allowlisted booleans enter a desktop snapshot');
+  ({host:h, controller:c} = instance()); await c.initialize(); c.setCloseHook(true); h.fail='remove';
+  await assert.rejects(c.replacePreferences({trayEnabled:false,closeToTray:false},c.backupPreferences()),/未能撤回/); checks++;
+  check(!c.snapshot().ready && !c.snapshot().busy && h.preferences.trayEnabled, 'Failed platform rollback reports uncertainty and cannot hide the main window');
+  ({host:h, controller:c} = instance()); h.preferences={trayEnabled:false,closeToTray:false};await c.initialize();c.setCloseHook(true);
+  h.pause={name:'attach',wait:deferred()};const losingHook=c.replacePreferences({trayEnabled:true,closeToTray:true},c.backupPreferences());await tick();
+  c.setCloseHook(false);h.pause.wait.resolve();await assert.rejects(losingHook,/不支持关闭/);checks++;
+  check(!c.snapshot().ready&&!h.preferences.trayEnabled&&!h.preferences.closeToTray,'A close hook lost during asynchronous registration rejects before persistence and removes the new resident');
+
   // Real private-file writes, deliberately short writes and failing fsync/rename.
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'clashos-desktop-tests-')); fs.chmodSync(work, 0o700);
   let failure = '', short = false;
@@ -94,7 +140,7 @@ async function run() {
     writeSync:(fd,buffer) => { if(failure==='write') return 0; const b=Buffer.from(buffer);return fs.writeSync(fd,b,0,short ? Math.min(3,b.length) : b.length); },
     fsyncSync:fd => {if(failure==='sync')throw Error('sync');fs.fsyncSync(fd);},renameSync:(a,b) => {if(failure==='rename')throw Error('rename');fs.renameSync(a,b);}};
   const Store = evaluate(fs.readFileSync(path.join(root,'service/DesktopStore.ets'),'utf8'), {Uint8Array, require:name => {
-    if(name==='@kit.CoreFileKit')return {fileIo:io};if(name==='./TextCodec')return {utf8Bytes:s=>new Uint8Array(Buffer.from(s))};throw Error(name);
+    if(name==='@kit.CoreFileKit')return {fileIo:io};if(name==='./TextCodec')return {utf8Bytes:s=>new Uint8Array(Buffer.from(s))};if(name==='./DesktopController')return desktopModule;throw Error(name);
   }}).DesktopStore;
   const store = new Store(work, fd => {if(failure==='protect')throw Error('protect');fs.fchmodSync(fd,0o600);});
   const file = path.join(work,'desktop.json');

@@ -5,6 +5,7 @@ import { sameAppearance as appearancesEqual } from '../theme/AppearanceTypes';
 import { BackupGlobals, BackupRestoreSelection, BackupRestoreResult } from './BackupTypes';
 import { GroupIconStore } from './GroupIconStore';
 import { NetworkBackupSnapshot } from './NetworkBackupTypes';
+import { DesktopController, DesktopPreferences, sameDesktopPreferences } from './DesktopController';
 
 export interface BackupRuntime {
   validate: (globals: BackupGlobals) => void;
@@ -16,19 +17,24 @@ export class BackupRestoreCoordinator {
   private appearance?: AppearanceController;
   private active?: ClashProfile;
   private icons?: GroupIconStore;
-  constructor(profiles: ProfileStore, appearance?: AppearanceController, active?: ClashProfile, icons?: GroupIconStore) {
-    this.profiles = profiles; this.appearance = appearance; this.active = active; this.icons = icons;
+  private desktop?: DesktopController;
+  constructor(profiles: ProfileStore, appearance?: AppearanceController, active?: ClashProfile, icons?: GroupIconStore, desktop?: DesktopController) {
+    this.profiles = profiles; this.appearance = appearance; this.active = active; this.icons = icons; this.desktop = desktop;
   }
   private sameGlobals(a: BackupGlobals, b: BackupGlobals): boolean { return a.merge === b.merge && a.script === b.script; }
   private sameAppearance(a: AppearanceSettings, b: AppearanceSettings): boolean { return appearancesEqual(a, b); }
 
   async restore(text: string, selection: BackupRestoreSelection, runtime?: BackupRuntime): Promise<BackupRestoreResult> {
     const preview = this.profiles.inspectBackup(text, selection.globals);
-    if (!selection.profiles.length && !selection.globals && !selection.appearance && !selection.network) throw new Error('请选择配置或需要恢复的设置');
+    if (!selection.profiles.length && !selection.globals && !selection.appearance && !selection.network && !selection.desktop) throw new Error('请选择配置或需要恢复的设置');
     if (selection.profiles.some((i: number) => !Number.isInteger(i) || i < 0 || i >= preview.rows.length || !preview.rows[i].valid) ||
       new Set(selection.profiles).size !== selection.profiles.length) throw new Error('请选择可以加载的配置');
     if (selection.appearance && (!preview.archive.appearance || !this.appearance)) throw new Error('此备份不包含外观，或当前外观服务不可用');
     if (selection.network && !preview.archive.network) throw new Error('此备份不包含端口和共享设置');
+    if (selection.desktop && (!preview.archive.desktop || !this.desktop)) throw new Error('此备份不包含窗口与托盘设置，或当前桌面服务不可用');
+    const previousDesktop: DesktopPreferences | undefined = selection.desktop ? this.desktop!.backupPreferences() : undefined;
+    if (previousDesktop && (!selection.expectedDesktop || !sameDesktopPreferences(previousDesktop, selection.expectedDesktop)))
+      throw new Error('窗口与托盘设置已变化，请重新预览备份');
     const previousNetwork: NetworkBackupSnapshot | undefined = selection.network ? this.profiles.networkBackupSnapshot() : undefined;
     if (selection.network && (!selection.expectedNetwork || selection.expectedNetwork !== previousNetwork?.revision)) throw new Error('端口或共享设置已变化，请重新预览备份');
     const restoreIcons: boolean = selection.appearance && preview.archive.groupIcons !== undefined;
@@ -50,6 +56,7 @@ export class BackupRestoreCoordinator {
     }
     let created: ClashProfile[] = [], globalsChanged: boolean = false, runtimeAttempted: boolean = false, appearanceAttempted: boolean = false;
     let networkChanged: boolean = false, networkApplied: boolean = false, networkRevision: string = '';
+    let desktopChanged: boolean = false;
     try {
       if (selection.profiles.length) created = this.profiles.restoreBackup(text, selection.profiles, selection.globals);
       if (selection.globals) {
@@ -61,6 +68,13 @@ export class BackupRestoreCoordinator {
         const result = this.profiles.replaceBackupNetwork(preview.archive.network, previousNetwork.revision, this.active?.path ?? '');
         networkChanged = true; networkApplied = result.applied; networkRevision = result.revision;
       }
+      if (selection.desktop && this.desktop && preview.archive.desktop && previousDesktop) {
+        await this.desktop.replacePreferences(preview.archive.desktop, previousDesktop); desktopChanged = true;
+      }
+      if (selection.globals && !this.sameGlobals(this.profiles.backupGlobals(), preview.archive.globals as BackupGlobals))
+        throw new Error('全局扩展在恢复期间已变化，无法提交本次恢复');
+      if (networkChanged && this.profiles.networkBackupSnapshot().revision !== networkRevision)
+        throw new Error('端口或共享设置在恢复期间已变化，无法提交本次恢复');
       if (selection.appearance && this.appearance && preview.archive.appearance) {
         // Native API calls above may yield; do not overwrite a newer preference.
         if (previousAppearance && !this.sameAppearance(previousAppearance, this.appearance.savedSettings())) throw new Error('外观设置已变化，请重新预览备份');
@@ -71,7 +85,7 @@ export class BackupRestoreCoordinator {
       // intact, so earlier profile/global/appearance steps can still be rolled back.
       if (restoreIcons) this.icons!.restoreBackup(preview.archive.groupIcons!, previousIcons);
       return { count: created.length, globals: selection.globals, appearance: selection.appearance, reloaded: runtimeAttempted,
-        network: selection.network === true, networkApplied };
+        network: selection.network === true, networkApplied, desktop: selection.desktop === true };
     } catch (error) {
       const problems: string[] = [];
       if (networkChanged && previousNetwork) {
@@ -90,6 +104,10 @@ export class BackupRestoreCoordinator {
       if (globalsChanged) {
         try { this.profiles.replaceBackupGlobals(preview.archive.globals as BackupGlobals, previousGlobals); }
         catch (_) { problems.push('全局扩展未能撤回'); }
+      }
+      if (desktopChanged && previousDesktop && this.desktop && preview.archive.desktop) {
+        try { await this.desktop.replacePreferences(previousDesktop, preview.archive.desktop); }
+        catch (_) { problems.push('窗口与托盘设置未能撤回，请检查桌面设置'); }
       }
       try { if (!this.sameGlobals(this.profiles.backupGlobals(), previousGlobals)) problems.push('全局扩展与恢复前不一致'); }
       catch (_) { problems.push('无法确认全局扩展'); }

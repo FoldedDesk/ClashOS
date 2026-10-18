@@ -871,6 +871,7 @@ struct Index {
           readAppearance: () => this.appearanceController?.savedSettings(),
           readGroupIconRevision: () => this.groupIconStore?.revision(),
           readNetworkRevision: () => this.profileStore?.networkBackupSnapshot().revision,
+          readDesktop: () => desktopSession.backupPreferences(),
           onRestore: (text: string, selection: BackupRestoreSelection): Promise<BackupRestoreResult> => this.restoreBackup(text, selection) }),
         autoCancel: false, customStyle: true
       });
@@ -894,7 +895,7 @@ struct Index {
     const locks: string[] = this.profiles.map((p: ClashProfile) => p.id);
     this.updatingProfiles = locks.length ? locks : ['.backup']; this.mutationVersion++;
     try {
-      const result: BackupRestoreResult = await new BackupRestoreCoordinator(store, this.appearanceController, active, this.groupIconStore).restore(text, selection, runtime);
+      const result: BackupRestoreResult = await new BackupRestoreCoordinator(store, this.appearanceController, active, this.groupIconStore, desktopSession).restore(text, selection, runtime);
       if (result.appearance && this.appearanceController) {
         this.appearanceMode = this.appearanceController.settings.mode; this.accentInput = this.appearanceController.settings.accent; this.appearanceError = '';
         try { this.groupIcons = this.groupIconStore?.load() ?? []; ++this.groupIconRevision; }
@@ -906,6 +907,7 @@ struct Index {
       if (result.globals) restored.push('全局扩展');
       if (result.appearance) restored.push('外观');
       if (result.network) restored.push('端口与共享设置');
+      if (result.desktop) restored.push('窗口与托盘设置');
       this.notice = `已恢复${restored.join('、')}，原活动配置保持不变${result.network ? '；请确认系统代理端口与当前监听端口一致' : ''}`;
       return result;
     } finally { this.updatingProfiles = []; this.mutationVersion++; this.reloadProfiles(); await this.refreshCore(); }

@@ -223,6 +223,83 @@ const same=(a,b)=>a.merge===b.merge&&a.script===b.script;
    const legacyNetwork=JSON.parse(networkText);legacyNetwork.version=1;assert.throws(()=>networkProfiles.inspectBackup(JSON.stringify(legacyNetwork)));checks++;
   }finally{failAppearanceWrite=false;networkAppearance.dispose();}
  }
+ // Desktop preferences use the real private store/controller/coordinator. The
+ // platform host records registration only; it never opens a network socket.
+ {
+  const desktopDirectory=path.join(directory,'desktop-integration');fs.mkdirSync(desktopDirectory);
+  const desktopContext={...context,filesDir:desktopDirectory};
+  const desktopProfiles=new ProfileStore(desktopContext),desktopLooks=new AppearanceController(desktopContext,fd=>protector.protectFile(fd));
+  const desktopIcons=new GroupIconStore(desktopDirectory,fd=>protector.protectFile(fd));
+  const {DesktopStore}=load('service/DesktopStore.ets'),{DesktopController}=load('service/DesktopController.ets');
+  const disk=new DesktopStore(desktopDirectory,fd=>protector.protectFile(fd)),calls=[];
+  let failDesktopSave=false,onAdd;
+  const host={load:()=>disk.load(),save:value=>{if(failDesktopSave)throw Error('injected desktop save failure');disk.save(value);},supported:()=>true,
+   addTray:async()=>{calls.push('add');onAdd?.();},removeTray:async()=>{calls.push('remove');},startResident:async()=>{calls.push('attach');},stopResident:async()=>{calls.push('detach');},
+   show:async()=>calls.push('show'),hide:async()=>calls.push('hide'),terminate:async()=>calls.push('terminate')};
+  const desktop=new DesktopController(host,()=>{});desktop.setCloseHook(true);await desktop.initialize();
+  const enabled={trayEnabled:true,closeToTray:true},disabled={trayEnabled:false,closeToTray:false};
+  try {
+   const profile=desktopProfiles.create('public-desktop','rules: [MATCH,DIRECT]\n');
+   desktopLooks.save('light','#3478F6');
+   await desktop.replacePreferences(disabled,desktop.backupPreferences());
+   const desktopText=desktopProfiles.createBackup({profileIds:[],includeGlobals:false,includeAppearance:false,includeDesktop:true});
+   const desktopArchive=JSON.parse(desktopText);
+   check(desktopArchive.version===2&&desktopArchive.profiles.length===0&&JSON.stringify(desktopArchive.desktop)===JSON.stringify(disabled),'A real settings-only archive preserves exactly the selected desktop preferences');
+   check(desktopArchive.network===undefined&&desktopArchive.appearance===undefined&&desktopArchive.globals===undefined,'Desktop-only backup excludes unrelated settings');
+   check(!JSON.stringify(JSON.parse(desktopProfiles.createBackup({profileIds:[profile.id],includeGlobals:false,includeAppearance:false}))).includes('trayEnabled'),'Desktop preferences require explicit backup opt-in');
+   const desktopBackups=new BackupStore(desktopContext,desktopProfiles),entry=desktopBackups.importText(desktopText);
+   check(desktopBackups.read(entry)===desktopText&&(fs.statSync(path.join(desktopDirectory,'backups',entry.name)).mode&0o777)===0o600,'Desktop-only archives use the normal private backup store');
+   for(const value of [null,[],{}, {trayEnabled:'yes',closeToTray:false},{trayEnabled:true,closeToTray:0}]) {
+    const bad={...desktopArchive,desktop:value};assert.throws(()=>desktopProfiles.inspectBackup(JSON.stringify(bad)));checks++;
+   }
+   const legacyDesktop={...desktopArchive,version:1};assert.throws(()=>desktopProfiles.inspectBackup(JSON.stringify(legacyDesktop)));checks++;
+   const allowlisted={...desktopArchive,desktop:{...disabled,privateExtra:'SYNTHETIC-NOT-APPLIED'}};
+   check(!JSON.stringify(desktopProfiles.inspectBackup(JSON.stringify(allowlisted)).archive.desktop).includes('SYNTHETIC'),'Desktop inspection excludes non-preference fields');
+   const nativeZip=new (load('service/BackupArchiveCodec.ets').BackupArchiveCodec)();
+   check(JSON.parse(nativeZip.decode(nativeZip.encode(desktopArchive))).desktop.closeToTray===false,'Desktop-only native ZIP roundtrip keeps both fields without profiles');
+   await desktop.replacePreferences(enabled,desktop.backupPreferences());
+   const desktopCoordinator=new BackupRestoreCoordinator(desktopProfiles,desktopLooks,undefined,desktopIcons,desktop);
+   const plan=()=>({profiles:[],globals:false,appearance:false,desktop:true,expectedDesktop:desktop.backupPreferences()});
+   const originalNames=desktopProfiles.backupNamesSnapshot(),originalGlobals=desktopProfiles.backupGlobals();
+   let outcome=await desktopCoordinator.restore(desktopText,plan());
+   check(outcome.desktop&&outcome.count===0&&!outcome.reloaded&&!desktop.snapshot().ready&&!disk.load().trayEnabled,'Desktop-only restore immediately removes residency and persists without core reload or new profiles');
+   check(desktopLooks.savedSettings().mode==='light'&&same(desktopProfiles.backupGlobals(),originalGlobals)&&desktopProfiles.backupNamesSnapshot()===originalNames,'Desktop-only restore preserves profiles, globals and appearance');
+   check(!calls.some(x=>['show','hide','terminate'].includes(x)),'Restoration never hides, closes, terminates or replaces the active window');
+   await desktop.replacePreferences(enabled,desktop.backupPreferences());
+   const withProfile=JSON.parse(desktopProfiles.createBackup({profileIds:[profile.id],includeGlobals:true,includeAppearance:true}));withProfile.desktop=disabled;
+   let oldResult=await desktopCoordinator.restore(JSON.stringify(withProfile),{profiles:[0],globals:false,appearance:false});
+   for(const p of desktopProfiles.list())if(p.id!==profile.id)desktopProfiles.remove(p);
+   check(oldResult.count===1&&!oldResult.desktop&&disk.load().trayEnabled,'An archive containing desktop settings does not change them without restore opt-in');
+   const staleDesktop=plan();desktop.setCloseToTray(false);
+   await assert.rejects(desktopCoordinator.restore(desktopText,staleDesktop),/已变化/);checks++;
+   check(desktopProfiles.backupNamesSnapshot()===originalNames&&disk.load().closeToTray===false,'A stale preview leaves newer preferences and profile list intact');
+   await desktop.replacePreferences(enabled,desktop.backupPreferences());
+   await assert.rejects(desktopCoordinator.restore(desktopText,{...plan(),expectedDesktop:undefined}),/重新预览/);checks++;
+   await assert.rejects(new BackupRestoreCoordinator(desktopProfiles).restore(desktopText,plan()),/桌面服务不可用/);checks++;
+   withProfile.globals={merge:'# public archived desktop global\n',script:''};withProfile.appearance={mode:'dark',accent:'#8B5CF6'};
+   const mixedText=JSON.stringify(withProfile);
+   for(const point of ['desktop','appearance','icons']) {
+    let reloads=0;
+    const runtime={validate:()=>{},reload:async()=>{reloads++;}};
+    const mixed=JSON.parse(mixedText);if(point==='icons')mixed.groupIcons=JSON.parse(iconText).groupIcons;
+    failDesktopSave=point==='desktop';failAppearanceWrite=point==='appearance';failIconWrite=point==='icons';
+    await assert.rejects(desktopCoordinator.restore(JSON.stringify(mixed),{...plan(),profiles:[0],globals:true,appearance:true},runtime));checks++;
+    failDesktopSave=false;failAppearanceWrite=false;failIconWrite=false;
+    check(desktop.snapshot().ready&&disk.load().trayEnabled&&disk.load().closeToTray,'Mixed '+point+' failure restores actual residency and both saved desktop fields');
+    check(desktopProfiles.backupNamesSnapshot()===originalNames&&same(desktopProfiles.backupGlobals(),originalGlobals)&&desktopLooks.savedSettings().mode==='light'&&reloads===2,'Mixed '+point+' failure rolls back copies, global/runtime and appearance');
+   }
+   let reloads=0;
+   const concurrent={validate:()=>{},reload:async()=>{if(reloads++===0)desktop.setCloseToTray(false);}};
+   await assert.rejects(desktopCoordinator.restore(mixedText,{...plan(),profiles:[0],globals:true},concurrent),/窗口与托盘设置已变化/);checks++;
+   check(!disk.load().closeToTray&&desktop.snapshot().ready&&desktopProfiles.backupNamesSnapshot()===originalNames,'Concurrent desktop changes during reload survive rollback of other settings');
+   await desktop.replacePreferences(disabled,desktop.backupPreferences());
+   const enabledArchive=JSON.parse(mixedText);enabledArchive.desktop=enabled;
+   const newerGlobal={merge:'# public concurrent during native registration\n',script:''};
+   onAdd=()=>{onAdd=undefined;desktopProfiles.replaceBackupGlobals(enabledArchive.globals,newerGlobal);};
+   await assert.rejects(desktopCoordinator.restore(JSON.stringify(enabledArchive),{...plan(),profiles:[0],globals:true},{validate:()=>{},reload:async()=>{}}),/全局扩展/);checks++;
+   check(same(desktopProfiles.backupGlobals(),newerGlobal)&&!desktop.snapshot().ready&&!disk.load().trayEnabled&&desktopProfiles.backupNamesSnapshot()===originalNames,'Newer global changes during desktop registration are retained while desktop/copies roll back');
+  } finally { failAppearanceWrite=false;failIconWrite=false;desktopLooks.dispose(); }
+ }
  check(descriptors.size===0,'All migration descriptors are released');
  console.log(`Backup migration scenarios passed: ${checks} (production services, real temporary filesystem${native?', actual native network preferences':' ; set CLASHOS_NATIVE_TESTS for native network preference integration'})`);
 }finally{appearance?.dispose();fs.rmSync(directory,{recursive:true,force:true});}})().catch(e=>{console.error(e);process.exitCode=1;});

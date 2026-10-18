@@ -15,6 +15,8 @@ import { validateGroupIconBackup } from './GroupIconBackup';
 import { NetworkBackup, NetworkBackupSnapshot, NetworkBackupResult } from './NetworkBackupTypes';
 import { SubscriptionData, SubscriptionOptions, subscriptionData, subscriptionOptions, subscriptionUrl } from './SubscriptionTypes';
 import { SubscriptionClient, SubscriptionDownload } from './SubscriptionClient';
+import { DesktopStore } from './DesktopStore';
+import { desktopPreferences } from './DesktopController';
 
 export interface ClashProfile {
   id: string;
@@ -456,7 +458,7 @@ export class ProfileStore {
     if (options && (new Set(options.profileIds).size !== options.profileIds.length || options.profileIds.some((id: string) => !available.some((p: ClashProfile) => p.id === id))))
       throw new Error('所选配置已变化，请重新选择备份内容');
     const profiles: ClashProfile[] = options ? available.filter((profile: ClashProfile) => options.profileIds.indexOf(profile.id) >= 0) : available;
-    if (profiles.length === 0 && (!options || (!options.includeGlobals && !options.includeAppearance && !options.includeNetwork))) throw new Error('请选择配置或需要备份的设置');
+    if (profiles.length === 0 && (!options || (!options.includeGlobals && !options.includeAppearance && !options.includeNetwork && !options.includeDesktop))) throw new Error('请选择配置或需要备份的设置');
     if (profiles.length > 500) throw new Error('一次最多备份 500 份配置');
     const names: string[] = fileIo.listFileSync(this.profileDir);
     const entries: BackupProfile[] = [];
@@ -491,6 +493,7 @@ export class ProfileStore {
     const backup: ProfileBackup = { format: 'ClashOS.profile-backup', version: options ? 2 : 1, createdAt: new Date().toISOString(), profiles: entries };
     if (options?.includeGlobals) backup.globals = this.backupGlobals();
     if (options?.includeNetwork) backup.network = this.networkBackupSnapshot().settings;
+    if (options?.includeDesktop) backup.desktop = new DesktopStore(this.context.filesDir, (fd: number) => this.validator.protectFile(fd)).load();
     if (options?.includeAppearance) {
       backup.appearance = new AppearanceStore(this.context.filesDir, (fd: number) => this.validator.protectFile(fd)).load();
       backup.groupIcons = new GroupIconStore(this.context.filesDir, (fd: number) => this.validator.protectFile(fd)).exportBackup();
@@ -508,9 +511,10 @@ export class ProfileStore {
     if (archive === null || typeof archive !== 'object' || archive.format !== 'ClashOS.profile-backup' || [1, 2].indexOf(archive.version) < 0 ||
       typeof archive.createdAt !== 'string' || !Number.isFinite(Date.parse(archive.createdAt)) ||
       !Array.isArray(archive.profiles) || archive.profiles.length > 500 ||
-      (archive.profiles.length === 0 && (archive.version !== 2 || (archive.globals === undefined && archive.appearance === undefined && archive.network === undefined)))) throw new Error('备份格式或版本不受支持');
-    if (archive.version === 1 && (archive.globals !== undefined || archive.appearance !== undefined || archive.network !== undefined)) throw new Error('旧版备份不能包含全局设置');
+      (archive.profiles.length === 0 && (archive.version !== 2 || (archive.globals === undefined && archive.appearance === undefined && archive.network === undefined && archive.desktop === undefined)))) throw new Error('备份格式或版本不受支持');
+    if (archive.version === 1 && (archive.globals !== undefined || archive.appearance !== undefined || archive.network !== undefined || archive.desktop !== undefined)) throw new Error('旧版备份不能包含全局设置');
     if (archive.network !== undefined) archive.network = this.validator.validateNetworkBackup(JSON.stringify(archive.network));
+    if (archive.desktop !== undefined) archive.desktop = desktopPreferences(archive.desktop);
     if (archive.groupIcons !== undefined) {
       if (archive.version !== 2 || archive.appearance === undefined) throw new Error('代理组图标必须随外观备份');
       archive.groupIcons = validateGroupIconBackup(archive.groupIcons);

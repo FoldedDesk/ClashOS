@@ -2,23 +2,26 @@ import { AppearanceSettings } from '../theme/AppearanceTypes';
 import { GroupIconBackup } from './GroupIconBackup';
 import { NetworkBackup } from './NetworkBackupTypes';
 import { SubscriptionData } from './SubscriptionTypes';
+import { DesktopPreferences } from './DesktopController';
 
 export const BACKUP_LIMIT: number = 32 * 1024 * 1024;
 
 export interface BackupGlobals { merge: string; script: string; }
-export interface BackupCreateOptions { profileIds: string[]; includeGlobals: boolean; includeAppearance: boolean; includeNetwork?: boolean; }
+export interface BackupCreateOptions { profileIds: string[]; includeGlobals: boolean; includeAppearance: boolean; includeNetwork?: boolean; includeDesktop?: boolean; }
 export interface BackupRestoreSelection {
   profiles: number[];
   globals: boolean;
   appearance: boolean;
   network?: boolean;
+  desktop?: boolean;
+  expectedDesktop?: DesktopPreferences;
   expectedNetwork?: string;
   expectedGlobals?: BackupGlobals;
   expectedAppearance?: AppearanceSettings;
   expectedGroupIcons?: string;
   expectedNames?: string;
 }
-export interface BackupRestoreResult { count: number; globals: boolean; appearance: boolean; reloaded: boolean; network?: boolean; networkApplied?: boolean; }
+export interface BackupRestoreResult { count: number; globals: boolean; appearance: boolean; reloaded: boolean; network?: boolean; networkApplied?: boolean; desktop?: boolean; }
 
 export interface BackupResource {
   suffix: string;
@@ -51,6 +54,7 @@ export interface ProfileBackup {
   appearance?: AppearanceSettings;
   groupIcons?: GroupIconBackup;
   network?: NetworkBackup;
+  desktop?: DesktopPreferences;
 }
 
 export interface BackupPreviewRow {
