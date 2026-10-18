@@ -6,6 +6,7 @@ and names below are public fixtures. No user's configuration is read or edited.
 """
 import argparse
 from contextlib import contextmanager
+import errno
 import json
 from pathlib import Path
 import shutil
@@ -36,10 +37,16 @@ def api(port, path, data=None, method=None):
 
 def free_port():
     while True:
-        with socket.socket() as listener:
+        with socket.socket() as listener, socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as packet:
             listener.bind(('127.0.0.1', 0))
             port = listener.getsockname()[1]
             if port not in USED_PORTS:
+                try:
+                    packet.bind(('127.0.0.1', port))
+                except OSError as error:
+                    if error.errno == errno.EADDRINUSE:
+                        continue
+                    raise
                 USED_PORTS.add(port)
                 return port
 
@@ -69,7 +76,7 @@ def udp_association(port, check):
 class Echo:
     def __init__(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.socket.bind(('127.0.0.1', 0))
+        self.socket.bind(('127.0.0.1', free_port()))
         self.socket.settimeout(.1)
         self.port = self.socket.getsockname()[1]
         self.stopped = threading.Event()
@@ -118,6 +125,18 @@ def main():
             except (OSError, ValueError):
                 time.sleep(.05)
         raise AssertionError('Owned listener did not become ready')
+
+    def tcp_ready(process, port):
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                raise AssertionError('Owned process stopped during listener startup')
+            try:
+                with socket.create_connection(('127.0.0.1', port), timeout=.5):
+                    return
+            except OSError:
+                time.sleep(.05)
+        raise AssertionError(f'Protocol listener {port} never became ready')
 
     def udp_packets(port, echoes, prefix, lengths, official_socks_limit=False):
         nonlocal label
@@ -196,6 +215,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='clashos-xudp-network-') as temporary:
         work = Path(temporary)
         processes, logs, echoes = [], [], []
+        server, reference, controller = {}, {}, 0
         label = 'setup'
         try:
             for name in ('server.pem', 'server-key.pem'):
@@ -204,13 +224,13 @@ def main():
             server = {'external-controller': f'127.0.0.1:{peer_api}',
                 'external-controller-tls': f'127.0.0.1:{peer_tls}',
                 'tls': {'certificate': 'server.pem', 'private-key': 'server-key.pem'},
-                'mode': 'rule', 'log-level': 'warning', 'find-process-mode': 'off',
+                'mode': 'rule', 'log-level': 'debug', 'find-process-mode': 'off',
                 'hosts': {'udp-fixture.test': '192.0.2.44'},
                 'dns': {'enable': True, 'listen': f'127.0.0.1:{dns_port}',
                     'ipv6': False, 'use-hosts': True, 'use-system-hosts': False,
                     'nameserver': ['udp://127.0.0.1:1']},
                 'listeners': [], 'rules': ['MATCH,DIRECT']}
-            client = {'port': http_port, 'socks-port': socks_port, 'mode': 'rule',
+            client = {'port': http_port, 'socks-port': socks_port, 'mode': 'rule', 'log-level': 'debug',
                 'hosts': {'vmess.test': '127.0.0.1', 'wrong.test': '127.0.0.1'},
                 'dns': {'enable': False, 'use-hosts': True}, 'proxies': [],
                 'proxy-groups': [{'name': 'XUDP public', 'type': 'select', 'proxies': []}],
@@ -248,9 +268,11 @@ def main():
             reference_api, reference_socks = free_port(), free_port()
             reference_node = client['proxies'][0]
             reference = {'external-controller': f'127.0.0.1:{reference_api}',
-                'socks-port': reference_socks, 'mode': 'rule', 'log-level': 'warning',
+                'listeners': [{'name': 'official-control', 'type': 'socks', 'listen': '127.0.0.1',
+                    'port': reference_socks, 'udp': True, 'proxy': reference_node['name']}],
+                'mode': 'rule', 'log-level': 'debug',
                 'find-process-mode': 'off', 'proxies': [reference_node],
-                'rules': ['MATCH,' + reference_node['name']]}
+                'rules': ['MATCH,DIRECT']}
             reference_work = work / 'reference'; reference_work.mkdir()
             for filename, content in (('server.yaml', server), ('client.yaml', client), ('reference.yaml', reference)):
                 (work / filename).write_text(json.dumps(content))
@@ -266,7 +288,22 @@ def main():
             for _ in range(2):
                 echoes.append(Echo())
             check(ready(processes[2], reference_api)['version'] == 'v1.19.32', 'Official reference client release is pinned')
+            # /version proves only controller readiness. Check real protocol
+            # ports and the SOCKS listener's post-TCP-and-UDP-bind log before
+            # issuing the first measured datagram, without retrying its payload.
+            for listener in server['listeners']:
+                tcp_ready(processes[0], listener['port'])
+            deadline = time.monotonic() + 15
+            while 'SOCKS[official-control] proxy listening at:' not in (work / 'reference-client.log').read_text():
+                if processes[2].poll() is not None:
+                    raise AssertionError('Official client stopped during UDP listener startup')
+                if time.monotonic() >= deadline:
+                    raise AssertionError('Official SOCKS TCP and UDP listener never became ready')
+                time.sleep(.05)
             udp_packets(reference_socks, echoes[:1], 'official-client control', (8, 0, 1400, 8192, 'maximum'), official_socks_limit=True)
+            check(any(reference_node['name'] in connection.get('chains', [])
+                for connection in api(reference_api, '/connections').get('connections', [])),
+                'Official reference traffic must actually use the declared XUDP node')
             print('PASS official-client control: nonempty XUDP works; pinned server discards zero-length frames; official SOCKS UDP receives at most 16 KiB including its address header', flush=True)
             # An independent raw client bypasses the official SOCKS listener.
             # sing-vmess's packet reader has a separate 16 KiB bound and ends
@@ -302,6 +339,12 @@ def main():
             message = f'After {checks} assertions ({label}): {error}'
             print('::error title=XUDP interoperability::' + message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'), flush=True)
             print('Independent echo packet lengths: ' + json.dumps([[len(packet) for packet in echo.packets] for echo in echoes]), flush=True)
+            print('Owned public fixture ports: ' + json.dumps({'listeners': server.get('listeners'),
+                'reference': reference.get('listeners'), 'echoes': [echo.port for echo in echoes]}), flush=True)
+            try:
+                print('Native public fixture diagnostics: ' + json.dumps(api(controller, '/logs'))[-6000:], flush=True)
+            except Exception as diagnostic_error:
+                print('Native diagnostic read failed: ' + type(diagnostic_error).__name__, flush=True)
             for log in logs:
                 log.flush(); log.seek(0); print(log.read()[-6000:])
             raise
