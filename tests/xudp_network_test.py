@@ -119,7 +119,7 @@ def main():
                 time.sleep(.05)
         raise AssertionError('Owned listener did not become ready')
 
-    def udp_packets(port, echoes, prefix, lengths):
+    def udp_packets(port, echoes, prefix, lengths, official_socks_limit=False):
         nonlocal label
         with udp_association(port, check) as (udp, relay):
             for echo in echoes:
@@ -139,11 +139,59 @@ def main():
                         body = b'after-empty'
                     udp.sendto(header + body, relay)
                     reply, source = udp.recvfrom(65535)
+                    if official_socks_limit and length > 16384 - len(header):
+                        # Pinned Mihomo's SOCKS UDP listener receives into a
+                        # 16 KiB pool buffer, including the SOCKS address header.
+                        body = body[:16384 - len(header)]
                     check(source == relay, 'Reply must come from the actual SOCKS relay')
-                    check(reply == header + body[::-1], 'Actual reply source/body/boundaries must match independent UDP echo')
+                    check(reply == header + body[::-1], f'Actual reply source/body/boundaries must match independent UDP echo (got {len(reply)} bytes, expected {len(header) + len(body)})')
                     check(echo.packets[before:] == [body],
                         'Pinned peer must discard only the empty frame and deliver the following datagram exactly once' if length == 0 else
                         'Every nonempty datagram must reach the independent destination exactly once')
+
+    def raw_vless_control(node, echo, length, rejected):
+        nonlocal label
+        label = f'Independent raw VLESS control UDP {length}'
+        body = bytes(index % 256 for index in range(length))
+        before = len(echo.packets)
+        metadata = struct.pack('!HBBBHB4s', 0, 1, 1, 2, echo.port, 1, socket.inet_aton('127.0.0.1')) + b'XUDPtest'
+        frame = struct.pack('!H', len(metadata)) + metadata + struct.pack('!H', length) + body
+        handshake = b'\x00' + bytes.fromhex(UUID.replace('-', '')) + b'\x00\x03'
+        with socket.create_connection(('127.0.0.1', node['port']), timeout=8) as stream:
+            stream.sendall(handshake + frame)
+            response = read_exact(stream, 2)
+            check(response[0] == 0, 'Independent raw control receives the VLESS response')
+            read_exact(stream, response[1])
+            size = int.from_bytes(read_exact(stream, 2), 'big')
+            check(4 <= size <= 4096, 'Raw control mux metadata is bounded')
+            response = read_exact(stream, size)
+            if rejected:
+                check(response[:3] == b'\x00\x00\x03' and not response[3] & 1,
+                    'Pinned server explicitly ends the oversized raw UDP stream')
+                check(len(echo.packets) == before, 'Rejected raw maximum packet never reaches the destination')
+            else:
+                source = struct.pack('!HB4s', echo.port, 1, socket.inet_aton('127.0.0.1'))
+                check(response == b'\x00\x00\x02\x01\x02' + source, 'Raw control retains actual UDP reply source')
+                reply_size = int.from_bytes(read_exact(stream, 2), 'big')
+                check(read_exact(stream, reply_size) == body[::-1], 'Raw control retains the full supported peer-boundary packet')
+                check(echo.packets[before:] == [body], 'Raw packet reaches the destination exactly once')
+
+    def native_oversize_control(port, echo, prefix):
+        nonlocal label
+        label = prefix + ' UDP maximum peer-rejection control'
+        header = b'\x00\x00\x00\x01\x7f\x00\x00\x01' + struct.pack('!H', echo.port)
+        before = len(echo.packets)
+        with udp_association(port, check) as (udp, relay):
+            udp.settimeout(1)
+            udp.sendto(header + bytes(65507 - len(header)), relay)
+            try:
+                udp.recvfrom(65535)
+            except socket.timeout:
+                check(True, 'The pinned peer returns no UDP data after rejecting an oversized frame')
+            else:
+                check(False, 'Pinned server maximum-packet rejection must not become a partial UDP reply')
+            check(len(echo.packets) == before, 'Oversized native XUDP packet is rejected without truncated destination data')
+        udp_packets(port, [echo], prefix + ' recovery', (8,))
 
     with tempfile.TemporaryDirectory(prefix='clashos-xudp-network-') as temporary:
         work = Path(temporary)
@@ -218,8 +266,13 @@ def main():
             for _ in range(2):
                 echoes.append(Echo())
             check(ready(processes[2], reference_api)['version'] == 'v1.19.32', 'Official reference client release is pinned')
-            udp_packets(reference_socks, echoes[:1], 'official-client control', (8, 0, 1400, 8192, 'maximum'))
-            print('PASS official-client control: nonempty XUDP works; pinned server discards zero-length frames', flush=True)
+            udp_packets(reference_socks, echoes[:1], 'official-client control', (8, 0, 1400, 8192, 'maximum'), official_socks_limit=True)
+            print('PASS official-client control: nonempty XUDP works; pinned server discards zero-length frames; official SOCKS UDP receives at most 16 KiB including its address header', flush=True)
+            # An independent raw client bypasses the official SOCKS listener.
+            # sing-vmess's packet reader has a separate 16 KiB bound and ends
+            # larger mux packets with io.ErrShortBuffer rather than forwarding.
+            raw_vless_control(reference_node, echoes[0], 16384, rejected=False)
+            raw_vless_control(reference_node, echoes[0], 65497, rejected=True)
             group = '/proxies/' + urllib.parse.quote('XUDP public', safe='')
             for node in client['proxies']:
                 label = node['name']
@@ -234,7 +287,8 @@ def main():
                         *proxy, f'https://vmess.test:{peer_tls}/version'], capture_output=True, text=True, timeout=15)
                     check(result.returncode == 0 and json.loads(result.stdout)['version'] == 'v1.19.32',
                         'Ordinary TCP and verified HTTPS must reach official server: ' + result.stderr)
-                udp_packets(socks_port, echoes, node['name'], (0, 8, 1400, 8192, 'maximum'))
+                udp_packets(socks_port, echoes, node['name'], (0, 8, 1400, 8192, 16384))
+                native_oversize_control(socks_port, echoes[0], node['name'])
                 query = urllib.parse.urlencode({'name': 'udp-fixture.test', 'type': 'A',
                     'server': f'udp://127.0.0.1:{dns_port}#XUDP public'}, quote_via=urllib.parse.quote)
                 api(controller, '/clahsos/dns/cache', method='DELETE')
