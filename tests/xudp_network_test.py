@@ -136,6 +136,10 @@ def main():
                         'users': [{'username': 'public', 'uuid': UUID}]}
                     if protocol == 'vmess':
                         listener['users'][0]['alterId'] = alter
+                    elif 'tls' not in transport:
+                        # The independent server requires explicit opt-in for
+                        # plaintext VLESS. This fixture listens only on loopback.
+                        listener['allow-insecure'] = True
                     if 'ws' in transport:
                         listener['ws-path'] = '/xudp-public'
                     if 'tls' in transport:
