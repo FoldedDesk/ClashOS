@@ -60,8 +60,16 @@ TCP 校验响应时间与请求盐绑定，UDP 校验会话、时间和滑动重
 
 VLESS 支持标准 TCP、TLS、WebSocket、WebSocket + TLS 和长度分帧 UDP，
 可从 `vless://` 链接、本地配置或订阅导入，并使用节点表单编辑、切换及测速。
-Reality、Vision、XUDP、额外 VLESS 加密、gRPC / XHTTP 等传输尚不支持；
+Reality、Vision、额外 VLESS 加密、gRPC / XHTTP 等传输尚不支持；
 配置这些选项时会明确报错，不会自动改为直连。TLS 默认校验证书和服务器名称。
+
+VMess 和 VLESS 可设置 `packet-encoding: xudp`，或在节点表单中选择“UDP 包编码 → XUDP”。
+支持 TCP、TLS、WebSocket 及 WebSocket + TLS；此选项只改变 UDP，普通 TCP 连接保持原协议。
+兼容旧的 `xudp: true` 配置和分享链接的 `packetEncoding=xudp`；保存表单时统一为标准字段。
+支持空 UDP 包、分片读取和服务端回复源地址；SOCKS5 数据报连同地址头最多 65507 字节，
+实际可用负载还取决于地址长度和对端限制。编码留空时保留原有 UDP 格式；`packetaddr` 尚不支持。
+已知 Mihomo v1.19.32 的 XUDP 服务端会丢弃空包；独立设备对端验证的空包支持不代表所有服务端都会转发。
+该版本还使用 16 KiB UDP 缓冲区，官方 SOCKS 入站的地址头也占用这部分空间；超大包需按对端能力判断。
 
 HTTP/HTTPS 节点使用 CONNECT 隧道，支持 Basic 认证及自定义请求头；托管的 CONNECT 请求头不允许覆盖。
 SOCKS5 节点支持匿名或用户名密码认证，以及 TCP / UDP；控制连接关闭后停止对应 UDP 转发。

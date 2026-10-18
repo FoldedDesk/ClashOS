@@ -55,6 +55,8 @@ jobs:
         run: python tests/run_native_tests.py --suite connection-trace --build-dir "$RUNNER_TEMP/native"
       - name: XUDP independent wire, crypto and stream regression
         run: python tests/run_native_tests.py --suite xudp --build-dir "$RUNNER_TEMP/native"
+      - name: VMess authentication timing and existing hosts routing
+        run: python tests/run_native_tests.py --suite hosts --build-dir "$RUNNER_TEMP/native"
       - name: Fetch pinned independent Mihomo server
         run: |
           curl --fail --location --silent --show-error --max-time 120 https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-linux-amd64-compatible-v1.19.32.gz -o "$RUNNER_TEMP/mihomo.gz"

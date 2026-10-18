@@ -43,6 +43,18 @@ certificate/key in `../fixtures/vmess`, never production credentials.
 5. Verify wrong-UUID and enabled certificate-check controls fail, then restore the working node. Check UI selection and a saved node-form change after cold startup.
 6. Restore the original ClashOS profile, mode and group selections; delete only the newly created fixture profile. Clear the fixture clipboard, remove owned forwards and uninstall this test app.
 
+For XUDP, import `../fixtures/vless/xudp-device-links.txt` as a separate profile
+(the node dialog also accepts its Base64-encoded list). The independent ArkTS
+parser accepts VLESS Mux command 3 without a legacy destination header, validates
+session 0 / UDP / destination / the association's global ID, and echoes framed packets
+with a response deliberately split after its third byte. The state endpoint's
+`xudp` counters distinguish this path from the original UDP framing.
+Repeat the four transport and wrong-UUID / required-certificate controls; the
+same UDP probe checks 0 / 8 / 4096 / 65483 bytes. Change the TCP node's encoding
+to raw in its visual form and check that only the legacy packet counter grows;
+restore XUDP, save and cold-start, then confirm both the form value and actual
+XUDP traffic. Delete only this new profile after restoring the user's profile.
+
 These controls prove emulator proxy forwarding, not true-device VPN authorization
 or full interoperability with every VLESS extension. Host-side OpenSSL tests
 separately verify accepted CA chains, SNI, malformed frames and HTTPS destinations.

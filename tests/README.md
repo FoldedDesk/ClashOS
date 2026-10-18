@@ -161,10 +161,41 @@ python3 tests/run_native_tests.py --suite vless --build-dir .host-build/native
 独立 Python / OpenSSL 对端检查 VLESS v0 的 UUID、命令、域名 / IPv4 / IPv6、
 TCP / TLS / WebSocket / WebSocket + TLS、双向分片、服务器先发数据与 TCP 半关闭。
 包含实际 HTTP / SOCKS5 入站、空包和大 UDP 包、HTTPS 证书与状态检查、hosts 映射、
-分享链接和节点编辑；错误响应头、Vision / Reality / XUDP 等不支持的配置必须明确失败。
+分享链接和节点编辑；错误响应头、Vision / Reality 等不支持的配置必须明确失败。
 模拟器专项使用 [独立设备测试应用](webdav_device_server/README.md#vless-device-verification)，
 验证实际数据面；TLS 参考证书属于公开测试 CA，设备正向控制显式跳过该测试证书校验，
 关闭跳过选项的负向控制必须失败。主机专项另验证受信任 CA 和主机名。
+
+XUDP 专项覆盖 VMess / VLESS 的 Mux 命令和独立分帧协议：
+
+```sh
+python3 tests/run_native_tests.py --suite xudp --build-dir .host-build/native
+python3 tests/run_native_tests.py --suite hosts --build-dir .host-build/native
+python3 tests/xudp_network_test.py --native .host-build/native/native_tests --mihomo /path/to/mihomo
+```
+
+第一项使用 Unix socket、独立 Python / OpenSSL 对端和 `fixtures/xudp-wire.json`，
+2320 项检查覆盖四种传输、VMess AEAD / 旧认证及四种加密配置、普通 TCP 保持原协议、
+空包与最大包、实际回复源地址、所有切分 / EOF 位置、部分回复期间继续上传、控制帧预算、
+错误会话 / 网络 / 标签 / CA / 主机名拒绝，以及每个 SOCKS 关联的全局标识隔离。
+`generate_xudp_vectors.py` 只使用 Python 标准库重新生成公开向量。
+第二项需要真实 TCP / UDP 监听权限及官方 Mihomo v1.19.32，CI 校验其下载 SHA256；
+它检查真实 HTTP / SOCKS TCP、验证证书的 HTTPS、两个独立 UDP 目的地和未缓存的代理 DNS。
+另启动同版本官方客户端作对照。固定版本服务端依赖的 `sing-vmess v0.2.5`
+在 `serverSession.recv` 中明确丢弃长度为 0 的数据帧；该限制单独验证，
+要求空帧后的非空包仍精确到达，不把被丢弃的空包计作成功回声，也不删除这项覆盖。
+官方 SOCKS 入站的 16 KiB 接收缓冲区包含地址头，最大物理包会先被截短；独立对照检查实际到达的字节。
+原始 VLESS 对照绕过 SOCKS 入站，分别验证对端 16 KiB 包和最大包的处理。
+ClashOS 路径保留完整的非空包、对端上限、超限拒绝及新关联恢复检查；
+65507 字节物理包的完整回声由支持该大小的独立主机 / 模拟器对端验证，不推广到有更小缓冲区的服务端。
+旧版 VMess 认证使用发送时的当前时间，慢 TLS / WebSocket 握手后刷新尚未发送的认证头。
+独立滚动缓存对照可复现旧二进制的过旧时间戳被拒绝；另加 2.2 秒慢 TLS / WSS 握手回归。
+修正后的 `hosts` 专项通过 2597 项检查。官方互通覆盖 24 种协议、加密及传输组合，
+通过 1110 项断言；其中空帧丢弃、官方 SOCKS 截断和超限拒绝均按已验证的对端限制单独计验。
+主机测试可通过 `native_tests serve <profile> <port> <ca.pem>` 显式信任公开参考 CA；
+这项入口只属于测试可执行文件，不更改生产证书策略。
+模拟器使用 `fixtures/vless/xudp-device-links.txt` 和下述独立设备应用；
+完成后须恢复原配置、全部选择、窗口与托盘设置，移除自己创建的配置、应用和额外转发。
 
 HTTP/HTTPS 与 SOCKS5 出站专项：
 
