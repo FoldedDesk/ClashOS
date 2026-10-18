@@ -6,7 +6,8 @@ import tlsBridge from 'libvlessfixture.so';
 import { ForwardFixtureConnection } from './ForwardFixtureConnection';
 
 interface FixtureTransport { send: (bytes: Uint8Array) => Promise<void>; close: () => Promise<void>; }
-interface FixtureState { wire: Uint8Array; data: Uint8Array; websocket: boolean; header: boolean; udp: boolean; responded: boolean; closing: boolean; queue: Promise<void>; forward?: ForwardFixtureConnection; }
+interface FixtureXudpStats { packets: number; empty: number; maximum: number; }
+interface FixtureState { wire: Uint8Array; data: Uint8Array; websocket: boolean; header: boolean; udp: boolean; mux: boolean; muxStarted: boolean; responded: boolean; closing: boolean; queue: Promise<void>; forward?: ForwardFixtureConnection; }
 
 // Independent, loopback-only VLESS server. It never dials a network destination:
 // vless.device.test:80 receives fixed HTTP 204; :443 UDP receives byte echoes.
@@ -20,6 +21,9 @@ export class VlessFixtureServer {
   private active: boolean = false;
   private requests: number[] = [0, 0, 0, 0];
   private packets: number = 0;
+  private xudpPackets: number = 0;
+  private xudpEmpty: number = 0;
+  private xudpMaximum: number = 0;
   private rejected: number = 0;
   private ready: string[] = [];
   private failures: string[] = [];
@@ -48,10 +52,13 @@ export class VlessFixtureServer {
     this.active = false; this.clients.forEach((client: FixtureTransport) => client.close().catch(() => {})); this.clients = [];
     tlsBridge.stop(); this.tcp.close().catch(() => {}); this.decrypted.close().catch(() => {});
   }
-  status(): string { return JSON.stringify({ ready: this.ready, failures: this.failures, requests: this.requests, packets: this.packets, rejected: this.rejected, forward: this.forward }); }
+  status(): string {
+    const xudp: FixtureXudpStats = { packets: this.xudpPackets, empty: this.xudpEmpty, maximum: this.xudpMaximum };
+    return JSON.stringify({ ready: this.ready, failures: this.failures, requests: this.requests, packets: this.packets, xudp, rejected: this.rejected, forward: this.forward });
+  }
   private state(client: FixtureTransport): FixtureState {
     this.clients.push(client);
-    return { wire: new Uint8Array(0), data: new Uint8Array(0), websocket: false, header: false, udp: false, responded: false, closing: false, queue: Promise.resolve() };
+    return { wire: new Uint8Array(0), data: new Uint8Array(0), websocket: false, header: false, udp: false, mux: false, muxStarted: false, responded: false, closing: false, queue: Promise.resolve() };
   }
   private remove(client: FixtureTransport): void { this.clients = this.clients.filter((item: FixtureTransport) => item !== client); }
   private join(first: Uint8Array, second: Uint8Array): Uint8Array { const result = new Uint8Array(first.length + second.length); result.set(first); result.set(second, first.length); return result; }
@@ -100,18 +107,27 @@ export class VlessFixtureServer {
         }
       }
       if (!state.header) {
-        if (state.data.length < 23) return;
+        if (state.data.length < 19) return;
         const id: number[] = [17,17,17,17,34,34,67,51,132,68,85,85,85,85,85,85];
-        if (state.data[0] !== 0 || !id.every((value: number, i: number) => state.data[i + 1] === value) || state.data[17] !== 0 || ![1,2].includes(state.data[18]) || state.data[21] !== 2) { this.reject(client, state); return; }
-        const length: number = state.data[22]; if (state.data.length < 23 + length) return;
-        const host = this.decoder.decodeToString(state.data.slice(23, 23 + length)), port = state.data[19] * 256 + state.data[20];
-        state.udp = state.data[18] === 2;
-        if (host !== 'vless.device.test' || port !== (state.udp ? 443 : 80)) { this.reject(client, state); return; }
-        state.header = true; state.data = state.data.slice(23 + length); this.requests[(tls ? 1 : 0) + (state.websocket ? 2 : 0)]++;
+        if (state.data[0] !== 0 || !id.every((value: number, i: number) => state.data[i + 1] === value) || state.data[17] !== 0 || ![1,2,3].includes(state.data[18])) { this.reject(client, state); return; }
+        if (state.data[18] === 3) {
+          state.mux = true; state.udp = true; state.header = true; state.data = state.data.slice(19);
+        } else {
+          if (state.data.length < 23) return;
+          if (state.data[21] !== 2) { this.reject(client, state); return; }
+          const length: number = state.data[22]; if (state.data.length < 23 + length) return;
+          const host = this.decoder.decodeToString(state.data.slice(23, 23 + length)), port = state.data[19] * 256 + state.data[20];
+          state.udp = state.data[18] === 2;
+          if (host !== 'vless.device.test' || port !== (state.udp ? 443 : 80)) { this.reject(client, state); return; }
+          state.header = true; state.data = state.data.slice(23 + length);
+        }
+        this.requests[(tls ? 1 : 0) + (state.websocket ? 2 : 0)]++;
         // Fragment the response header across native socket sends.
         await this.send(client, state, new Uint8Array([0])); await this.send(client, state, new Uint8Array([0]));
       }
-      if (state.udp) {
+      if (state.mux) {
+        await this.receiveXudp(client, state);
+      } else if (state.udp) {
         while (state.data.length >= 2) {
           const size: number = state.data[0] * 256 + state.data[1]; if (state.data.length < 2 + size) return;
           const packet = state.data.slice(0, size + 2); state.data = state.data.slice(size + 2); this.packets++;
@@ -126,6 +142,30 @@ export class VlessFixtureServer {
         state.closing = true; await client.close();
       }
     }).catch(() => this.reject(client, state));
+  }
+  // Independent fixed-destination Mux peer, deliberately split across sends.
+  // No production implementation is linked into this test app.
+  private async receiveXudp(client: FixtureTransport, state: FixtureState): Promise<void> {
+    while (state.data.length >= 2) {
+      const size: number = state.data[0] * 256 + state.data[1];
+      if (size < 9 || size > 512) { this.reject(client, state); return; }
+      if (state.data.length < 2 + size + 2) return;
+      const metadata = state.data.slice(2, 2 + size);
+      const hostLength: number = metadata[8];
+      const expected: number = 9 + hostLength;
+      if (metadata[0] !== 0 || metadata[1] !== 0 || metadata[2] !== (state.muxStarted ? 2 : 1) || metadata[3] !== 1 || metadata[4] !== 2 || metadata[5] !== 1 || metadata[6] !== 187 || metadata[7] !== 2 ||
+        this.decoder.decodeToString(metadata.slice(9, expected)) !== 'vless.device.test' || size !== expected + (state.muxStarted ? 0 : 8)) { this.reject(client, state); return; }
+      const length: number = state.data[size + 2] * 256 + state.data[size + 3];
+      if (length > 65507) { this.reject(client, state); return; }
+      if (state.data.length < size + 4 + length) return;
+      const payload = state.data.slice(size + 4, size + 4 + length);
+      state.data = state.data.slice(size + 4 + length); state.muxStarted = true;
+      this.xudpPackets++; if (length === 0) this.xudpEmpty++; this.xudpMaximum = Math.max(this.xudpMaximum, length);
+      const reply = new Uint8Array(4 + expected + payload.length);
+      reply[0] = expected >> 8; reply[1] = expected & 255; reply.set(metadata.slice(0, expected), 2); reply[4] = 2;
+      reply[2 + expected] = length >> 8; reply[3 + expected] = length & 255; reply.set(payload, 4 + expected);
+      await this.send(client, state, reply.slice(0, 3)); await this.send(client, state, reply.slice(3));
+    }
   }
   private send(client: FixtureTransport, state: FixtureState, bytes: Uint8Array): Promise<void> {
     if (!state.websocket) return client.send(bytes);

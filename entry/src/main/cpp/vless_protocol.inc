@@ -16,10 +16,11 @@ struct VlessSession {
         else return true;
         errno = EPROTONOSUPPORT; return false;
     }
-    static VmBytes header(const std::string& uuid, const std::string& host, int port, bool udp) {
+    static VmBytes header(const std::string& uuid, const std::string& host, int port, bool udp, bool mux = false) {
         const auto id = vmUuid(uuid);
-        if (id.size() != 16 || host.empty() || host.find('\0') != std::string::npos || port < 1 || port > 65535) return {};
-        VmBytes result{0}; vmAppend(result, id); result.push_back(0); result.push_back(udp ? 2 : 1);
+        if (id.size() != 16 || (!mux && (host.empty() || host.find('\0') != std::string::npos || port < 1 || port > 65535))) return {};
+        VmBytes result{0}; vmAppend(result, id); result.push_back(0); result.push_back(mux ? 3 : udp ? 2 : 1);
+        if (mux) return result;
         vmUint(result, port, 2);
         unsigned char address[16];
         if (inet_pton(AF_INET, host.c_str(), address) == 1) {
@@ -33,11 +34,11 @@ struct VlessSession {
         }
         return result;
     }
-    bool start(const ProxyNode& node, const std::string& host, int port, bool udp, std::string& error) {
+    bool start(const ProxyNode& node, const std::string& host, int port, bool udp, std::string& error, bool mux = false) {
         if (!validate(node, error)) return false;
-        const auto request = header(node.uuid, host, port, udp);
+        const auto request = header(node.uuid, host, port, udp, mux);
         if (request.empty()) { error = "Invalid VLESS destination"; return false; }
-        datagram = udp;
+        datagram = udp && !mux;
         const char* roots = nullptr;
 #ifdef CLAHSOS_HOST_TEST
         roots = g_testVmessTrust;

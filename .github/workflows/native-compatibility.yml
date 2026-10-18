@@ -53,6 +53,8 @@ jobs:
           python tests/run_native_tests.py --suite ss-duplex --build-dir "$RUNNER_TEMP/native"
       - name: Connection lifecycle and error diagnostics
         run: python tests/run_native_tests.py --suite connection-trace --build-dir "$RUNNER_TEMP/native"
+      - name: XUDP independent wire, crypto and stream regression
+        run: python tests/run_native_tests.py --suite xudp --build-dir "$RUNNER_TEMP/native"
       - name: Fetch pinned independent Mihomo server
         run: |
           curl --fail --location --silent --show-error --max-time 120 https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-linux-amd64-compatible-v1.19.32.gz -o "$RUNNER_TEMP/mihomo.gz"
@@ -61,3 +63,5 @@ jobs:
           chmod 700 "$RUNNER_TEMP/mihomo"
       - name: Actual official-server interoperability
         run: python tests/ss2022_network_test.py --native "$RUNNER_TEMP/native/native_tests" --mihomo "$RUNNER_TEMP/mihomo"
+      - name: Actual official-server XUDP interoperability
+        run: python tests/xudp_network_test.py --native "$RUNNER_TEMP/native/native_tests" --mihomo "$RUNNER_TEMP/mihomo"

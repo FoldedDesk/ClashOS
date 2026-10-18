@@ -209,10 +209,15 @@ bool shareVless(std::string body, ShareLinkNode& node, std::string& error)
     const std::string network = params["type"].empty() ? "tcp" : params["type"];
     const std::string security = params["security"].empty() ? "none" : params["security"];
     if ((network != "tcp" && network != "ws") || (security != "none" && security != "tls")) { error = "VLESS 当前支持 TCP、TLS、WebSocket 和 WebSocket + TLS；尚不支持 Reality"; return false; }
-    if (!params["flow"].empty() || !params["packetEncoding"].empty() || !params["packet-encoding"].empty() ||
+    if (!params["flow"].empty() ||
         (!params["encryption"].empty() && params["encryption"] != "none") || (!params["headerType"].empty() && params["headerType"] != "none")) {
-        error = "VLESS 尚不支持 Vision、XUDP、额外加密或 TCP 伪装"; return false;
+        error = "VLESS 尚不支持 Vision、额外加密或 TCP 伪装"; return false;
     }
+    const bool encodingAlias = params.count("packetEncoding"), encodingField = params.count("packet-encoding");
+    const std::string packetEncoding = lower(encodingField ? params["packet-encoding"] : params["packetEncoding"]);
+    if ((encodingAlias && encodingField && lower(params["packetEncoding"]) != lower(params["packet-encoding"])) ||
+        (!packetEncoding.empty() && packetEncoding != "xudp")) { error = "VLESS UDP 包编码无效或互相冲突"; return false; }
+    if (!packetEncoding.empty()) node.fields["packet-encoding"] = shareQuoted(packetEncoding);
     if ((!params["sni"].empty() && !params["peer"].empty() && params["sni"] != params["peer"]) ||
         (params.count("insecure") && params.count("allowInsecure") && params["insecure"] != params["allowInsecure"])) { error = "VLESS 链接参数互相冲突"; return false; }
     bool insecure = false;
@@ -236,12 +241,19 @@ bool shareVmess(const std::string& body, ShareLinkNode& node, std::string& error
     EditorYaml data; if (!data.parse(decoded, 64 * 1024, error)) { error = "VMess JSON 格式无效"; return false; }
     auto* root = yaml_document_get_root_node(&data.document); std::string normalized;
     if (!root || root->type != YAML_MAPPING_NODE || !editorNodeText(data.document, 1, normalized, error)) { error = "VMess JSON 不能包含重复字段或复杂引用"; return false; }
-    const std::set<std::string> accepted = {"v", "ps", "add", "port", "id", "aid", "scy", "net", "type", "host", "path", "tls", "sni", "alpn", "insecure", "fp", "vcn", "pcs"};
+    const std::set<std::string> accepted = {"v", "ps", "add", "port", "id", "aid", "scy", "net", "type", "host", "path", "tls", "sni", "alpn", "insecure", "fp", "vcn", "pcs", "packetEncoding", "packet-encoding", "xudp"};
     for (auto* pair = root->data.mapping.pairs.start; pair < root->data.mapping.pairs.top; ++pair) {
         const auto* value = yaml_document_get_node(&data.document, pair->value);
         if (!accepted.count(yamlText(yaml_document_get_node(&data.document, pair->key))) || !value || value->type != YAML_SCALAR_NODE) { error = "VMess 链接含有尚不支持的字段"; return false; }
     }
     auto get = [&](const char* key) { return yamlText(yamlValue(data.document, root, key)); };
+    const bool alias = yamlValue(data.document, root, "packetEncoding"), canonical = yamlValue(data.document, root, "packet-encoding");
+    std::string packetEncoding = lower(canonical ? get("packet-encoding") : get("packetEncoding"));
+    if ((alias && canonical && lower(get("packetEncoding")) != lower(get("packet-encoding"))) ||
+        (!packetEncoding.empty() && packetEncoding != "xudp") ||
+        (!get("xudp").empty() && get("xudp") != "true" && get("xudp") != "false")) { error = "VMess UDP 包编码无效或互相冲突"; return false; }
+    if (get("xudp") == "true") packetEncoding = "xudp";
+    if (!packetEncoding.empty()) node.fields["packet-encoding"] = shareQuoted(packetEncoding);
     if ((!get("v").empty() && get("v") != "2") || (!get("type").empty() && get("type") != "none") ||
         !get("fp").empty() || !get("vcn").empty() || !get("pcs").empty()) { error = "内置内核不支持此 VMess 版本、伪装或证书指纹选项"; return false; }
     const std::string host = get("add"), endpoint = host.find(':') == std::string::npos ? host + ":" + get("port") : "[" + host + "]:" + get("port");

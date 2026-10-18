@@ -32,6 +32,10 @@ void shareLinkTests()
     config = parse(vless + "[2001:db8::1]:443?encryption=none&type=ws&security=tls&sni=tls.test&host=ws.test&path=%2Fsocket&alpn=http%2F1.1#VLESS%20%E6%B5%8B%E8%AF%95");
     require(config.nodes.size() == 1 && config.nodes[0].name == "VLESS 测试" && config.nodes[0].type == "vless" && config.nodes[0].server == "2001:db8::1" && config.nodes[0].tls && !config.nodes[0].skipCertVerify && config.nodes[0].wsPath == "/socket" && config.nodes[0].wsHeaders.at("Host") == "ws.test" && config.nodes[0].serverName == "tls.test" && supportsUdp(config.nodes[0]), "VLESS links must reach the real UUID/TLS/WebSocket/UDP model");
     config = parse(vless + "fixture.test:443"); require(!config.nodes[0].tls && config.nodes[0].network == "tcp", "Default VLESS uses standard TCP without inventing TLS");
+    for(const std::string key:{"packetEncoding","packet-encoding"}) {
+        config=parse(vless+"fixture.test:443?"+key+"=xudp");
+        require(config.nodes[0].packetEncoding=="xudp"&&config.nodes[0].transportError.empty(),"VLESS share aliases retain actual XUDP support for TCP/UDP");
+    }
     config = parse("https://fixture%E7%94%A8%E6%88%B7:p%40ss%3Aword%2B@fixture.test/?sni=tls.test&alpn=http%2F1.1#HTTPS");
     require(config.nodes[0].type == "http" && config.nodes[0].tls && !config.nodes[0].skipCertVerify && config.nodes[0].port == 443 && config.nodes[0].username == "fixture用户" && config.nodes[0].password == "p@ss:word+" && !supportsUdp(config.nodes[0]), "HTTPS proxy URI must preserve percent-encoded credentials and default to verified TLS/TCP");
     config = parse("socks5://u%3Aser:p%40ss@[2001:db8::1]:1080?tls=1&sni=tls.test&udp=0#SOCKS");
@@ -42,6 +46,10 @@ void shareLinkTests()
     const std::string vmess = R"({"v":"2","ps":"VMess 中文","add":"fixture.test","port":"443","id":"01234567-89ab-cdef-0123-456789abcdef","aid":"0","scy":"auto","net":"ws","type":"none","host":"ws.test","path":"/ws","tls":"tls","sni":"tls.test","alpn":"h2,http/1.1","insecure":"0"})";
     config = parse("vmess://" + encode(vmess));
     require(config.nodes[0].name == "VMess 中文" && config.nodes[0].uuid == "01234567-89ab-cdef-0123-456789abcdef" && config.nodes[0].tls && !config.nodes[0].skipCertVerify && config.nodes[0].wsPath == "/ws" && config.nodes[0].serverName == "tls.test" && config.nodes[0].alpn.size() == 2, "v2rayN VMess v2 fields must preserve authentication, transport and TLS settings");
+    for(const std::string field:{"\"packetEncoding\":\"xudp\"","\"packet-encoding\":\"xudp\"","\"xudp\":true"}) {
+        config=parse("vmess://"+encode(vmess.substr(0,vmess.size()-1)+","+field+"}"));
+        require(config.nodes[0].packetEncoding=="xudp"&&config.nodes[0].transportError.empty(),"VMess JSON import normalizes supported XUDP aliases without downgrading the transport");
+    }
     const std::string legacyTls = R"({"v":"2","add":"192.0.2.1","port":443,"id":"01234567-89ab-cdef-0123-456789abcdef","aid":64,"net":"tcp","host":"tls.test,second.test","tls":"tls"})";
     config = parse("vmess://" + encode(legacyTls));
     require(config.nodes[0].serverName == "tls.test" && config.nodes[0].alterId == 64 && config.nodes[0].network == "tcp", "Legacy VMess TLS links must derive SNI from the first host when explicit SNI is absent");
@@ -55,7 +63,7 @@ void shareLinkTests()
         "", "not a link", "vless://public-secret@fixture.test:443#unsupported", "ss://bad@fixture.test:443", "ss://a:public-secret@fixture.test:0",
         "http://fixture.test/path", "https://fixture.test?tls=0", "http://fixture.test?udp=1", "socks5://user@fixture.test", "socks5://:public-secret@fixture.test", "http://u%3Aser:public-secret@fixture.test", "http://u%0d%0a:public-secret@fixture.test", "http://fixture.test?alpn=h2", "socks5://fixture.test?tls=maybe", "http://fixture.test?udp=0&udp=1",
         vless + "fixture.test:443?security=reality", vless + "fixture.test:443?flow=xtls-rprx-vision", vless + "fixture.test:443?encryption=mlkem768x25519plus",
-        vless + "fixture.test:443?packetEncoding=xudp", vless + "fixture.test:443?type=grpc", vless + "fixture.test:443?fp=chrome",
+        vless + "fixture.test:443?packetEncoding=packetaddr", vless + "fixture.test:443?packetEncoding=xudp&packet-encoding=", vless + "fixture.test:443?type=grpc", vless + "fixture.test:443?fp=chrome",
         vless + "fixture.test:443?type=ws&alpn=h2", vless + "fixture.test:443?path=%2Fws", vless + "fixture.test:443?security=tls&security=none",
         vless + "fixture.test:443?allowInsecure=invalid", vless + "fixture.test:443?host=cdn.test", vless + "fixture.test:443?type=ws&path=%2Fws%0d%0aevil",
         "ss://aes-128-gcm:public-secret@fixture.test:65536", "ss://aes-128-gcm:public-secret@fixture.test:80.0", "ss://aes-128-gcm:public-secret@::1:443",

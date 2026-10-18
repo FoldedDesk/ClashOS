@@ -158,7 +158,7 @@ void vlessTests(const std::string& directory)
         g_testConnector = nullptr; peer.finish();
     }
     const std::string base = "{name: fixture, type: vless, server: vless.invalid, port: 443, uuid: 11111111-2222-4333-8444-555555555555, udp: true";
-    for (const std::string option : {"flow: xtls-rprx-vision", "reality-opts: {public-key: public}", "packet-encoding: xudp", "encryption: mlkem768x25519plus", "network: grpc", "client-fingerprint: chrome", "smux: {enabled: true}", "ws-opts: {max-early-data: 2048}", "network: ws, alpn: [h2]"}) {
+    for (const std::string option : {"flow: xtls-rprx-vision", "reality-opts: {public-key: public}", "packet-encoding: packetaddr", "encryption: mlkem768x25519plus", "network: grpc", "client-fingerprint: chrome", "smux: {enabled: true}", "ws-opts: {max-early-data: 2048}", "network: ws, alpn: [h2]"}) {
         const auto content = base + ", " + option + "}"; EditorYaml yaml; std::string error; ProxyNode node;
         require(yaml.parse(content, 4096, error) && parseProxyNode(yaml.document, yaml_document_get_root_node(&yaml.document), node, error), "Unsupported VLESS options must remain inspectable as nodes");
         bool dialed = false; g_testConnector = [&](const std::string&, int, int) { dialed = true; return -1; };

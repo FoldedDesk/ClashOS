@@ -4,7 +4,7 @@ from pathlib import Path
 import argparse, os, shutil, subprocess, tempfile
 from native_test_env import find_cmake
 parser = argparse.ArgumentParser()
-parser.add_argument('--suite', choices=['connection-trace', 'http', 'tls', 'dialer', 'groups', 'all', 'api', 'configs', 'inbound', 'sniffer', 'rules', 'dns', 'hosts', 'vless', 'forward', 'providers', 'yaml', 'ss-duplex', 'ss2022', 'geo', 'ports', 'rule-edits', 'object-edits', 'share-links', 'merges', 'scripts', 'archive', 'network-backup', 'editor-providers'], default='all')
+parser.add_argument('--suite', choices=['xudp', 'connection-trace', 'http', 'tls', 'dialer', 'groups', 'all', 'api', 'configs', 'inbound', 'sniffer', 'rules', 'dns', 'hosts', 'vless', 'forward', 'providers', 'yaml', 'ss-duplex', 'ss2022', 'geo', 'ports', 'rule-edits', 'object-edits', 'share-links', 'merges', 'scripts', 'archive', 'network-backup', 'editor-providers'], default='all')
 parser.add_argument('--build-dir', type=Path, help='Optional reusable CMake build directory')
 parser.add_argument('--config', type=Path, help='Optional local configuration compatibility check; defaults to the public fixture')
 options = parser.parse_args()

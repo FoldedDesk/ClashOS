@@ -81,7 +81,7 @@ class Wire:
         self.conn.sendall(b'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: keep-alive, Upgrade\r\nSec-WebSocket-Accept: '+accept+b'\r\n\r\n')
         self.ws=True
 
-def decode_header(wire, alter, target_host="target.test", target_port=443):
+def decode_header(wire, alter, target_host="target.test", target_port=443, mux=False):
     auth=wire.exact(16); command_key=hashlib.md5(ID+b'c48619fe-8f02-49e0-b9e9-edf763e17e21').digest()
     if alter==0:
         auth_plain=Cipher(algorithms.AES(kdf(command_key,b'AES Auth ID Encryption')[:16]),modes.ECB()).decryptor().update(auth)
@@ -99,13 +99,19 @@ def decode_header(wire, alter, target_host="target.test", target_port=443):
             if any(hmac.digest(value,raw,'md5')==auth for value in ids):found=raw;break
         assert found is not None, 'Legacy auth must use configured alternate IDs'
         decryptor=Cipher(algorithms.AES(command_key),modes.CFB(hashlib.md5(found*4).digest())).decryptor()
-        command=decryptor.update(wire.exact(41)); kind=command[40]
-        if kind==1: count=4
-        elif kind==3: count=16
-        else:
-            assert kind==2;command+=decryptor.update(wire.exact(1));count=command[-1]
+        command=decryptor.update(wire.exact(38));count=0
+        if command[37]!=3:
+            command+=decryptor.update(wire.exact(3));kind=command[40]
+            if kind==1: count=4
+            elif kind==3: count=16
+            else:
+                assert kind==2;command+=decryptor.update(wire.exact(1));count=command[-1]
         command+=decryptor.update(wire.exact(count+(command[35]>>4)+4))
-    assert command[0]==1 and command[36]==0 and command[37] in (1,2)
+    assert command[0]==1 and command[36]==0 and (command[37]==3 if mux else command[37] in (1,2))
+    if mux:
+        assert len(command)==38+(command[35]>>4)+4, 'VMess Mux must not include a destination'
+        assert int.from_bytes(command[-4:],'big')==fnv(command[:-4])
+        return command
     assert int.from_bytes(command[38:40], 'big') == target_port
     if command[40] == 2:
         assert command[41]==len(target_host) and command[42:42+len(target_host)]==target_host.encode()
@@ -158,7 +164,7 @@ def response_packet(command, alter, failure, data_chunks=None):
         prefix+=AESGCM(kdf(key,b'AEAD Resp Header Key')[:16]).encrypt(kdf(iv,b'AEAD Resp Header IV')[:12],header,None)
     else:prefix=Cipher(algorithms.AES(key),modes.CFB(iv)).encryptor().update(header)
     options=command[34];security=command[35]&15
-    if not options&1:return prefix+RESPONSE
+    if not options&1:return prefix+(b''.join(data_chunks) if data_chunks is not None else RESPONSE)
     mask=Mask(iv);counter=0;cipher=body_aead(key,security)
     chunks=data_chunks if data_chunks is not None else [b'udp-response:0'+PAYLOAD[:512],b'udp-response:1'+PAYLOAD[-1024:],b''] if command[37]==2 else [RESPONSE[:37],RESPONSE[37:1500],RESPONSE[1500:],b'']
     for data in chunks:

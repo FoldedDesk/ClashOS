@@ -8,6 +8,7 @@ interface NodeFormPatch {
   name: string; type: string; udp: boolean; 'dialer-proxy': string | null;
   server?: string; port?: number; username?: string; password?: string; uuid?: string; cipher?: string; alterId?: number;
   tls?: boolean; 'skip-cert-verify'?: boolean; servername?: string | null; sni?: string | null; network?: string; 'ws-opts'?: WsNodePatch;
+  'packet-encoding'?: string | null; xudp?: null;
 }
 const NODE_TYPES: string[] = ['ss', 'vmess', 'vless', 'trojan', 'http', 'socks5', 'direct', 'reject'];
 const SS_CIPHERS: string[] = ['aes-128-gcm', 'aes-256-gcm', 'chacha20-ietf-poly1305', 'chacha20-poly1305', 'aead_aes_128_gcm', 'aead_aes_256_gcm', 'aead_chacha20_poly1305', '2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm', '2022-blake3-chacha20-poly1305'];
@@ -55,8 +56,10 @@ export struct ProxyNodeDialog {
   }
   private patch(): string {
     const transport: boolean = this.form.type === 'vmess' || this.form.type === 'vless' || this.form.type === 'trojan' || this.form.type === 'http' || this.form.type === 'socks5';
+    const encodedUdp: boolean = this.form.type === 'vmess' || this.form.type === 'vless';
     const patch: NodeFormPatch = { name: this.lockName ? this.identity : this.form.name.trim(), type: this.form.type, udp: this.form.type !== 'http' && this.form.udp,
       'dialer-proxy': this.form.type === 'reject' ? null : this.form.dialerProxy || null,
+      'packet-encoding': encodedUdp ? this.form.packetEncoding || null : undefined, xudp: encodedUdp ? null : undefined,
       'skip-cert-verify': transport ? this.form.skipCertVerify : undefined,
       'ws-opts': transport && this.form.network === 'ws' ? { path: this.form.wsPath || '/', headers: { Host: this.form.wsHost.trim() || null } } : undefined };
     if (this.form.type !== 'direct' && this.form.type !== 'reject') {
@@ -64,7 +67,7 @@ export struct ProxyNodeDialog {
       if (this.form.type === 'http' || this.form.type === 'socks5') patch.username = this.form.username;
       if (this.form.type === 'ss' || this.form.type === 'trojan' || this.form.type === 'http' || this.form.type === 'socks5') patch.password = this.form.password;
       if (this.form.type === 'ss' || this.form.type === 'vmess') patch.cipher = this.form.cipher;
-      if (this.form.type === 'vmess' || this.form.type === 'vless') patch.uuid = this.form.uuid.trim();
+      if (encodedUdp) patch.uuid = this.form.uuid.trim();
       if (this.form.type === 'vmess') { patch.alterId = this.integer(this.form.alterId || '0', 65535); }
       if (transport) {
         patch.tls = this.form.type === 'trojan' || this.form.tls;
@@ -167,6 +170,12 @@ export struct ProxyNodeDialog {
                 Column() { this.label('alterId（0 为 AEAD）'); TextInput({ text: this.form.alterId }).fontColor(this.theme.text).placeholderColor(this.theme.textMuted).height(38).fontSize(this.theme.font(13)).fontFamily(this.theme.fontFamily).type(InputType.Number).backgroundColor(this.theme.field)
                   .onChange((value: string) => this.form.alterId = value); }.width('100%');
               }
+              if (this.form.type === 'vmess' || this.form.type === 'vless') {
+                Column() { this.label('UDP 包编码'); Select([{ value: '原始编码' }, { value: 'XUDP' }])
+                  .value(this.form.packetEncoding === 'xudp' ? 'XUDP' : '原始编码').selected(this.form.packetEncoding === 'xudp' ? 1 : 0)
+                  .height(38).width('100%').font({ size: this.theme.font(13), family: this.theme.fontFamily }).accessibilityText('UDP 包编码')
+                  .onSelect((index: number) => this.form.packetEncoding = index === 1 ? 'xudp' : ''); }.width('100%');
+              }
               if (this.form.type === 'vmess' || this.form.type === 'vless' || this.form.type === 'trojan' || this.form.type === 'http' || this.form.type === 'socks5') {
                 if (this.form.type !== 'http' && this.form.type !== 'socks5') {
                   Column() { this.label('传输方式'); Select([{ value: 'tcp' }, { value: 'ws' }]).value(this.form.network).selected(this.form.network === 'ws' ? 1 : 0)
@@ -190,7 +199,7 @@ export struct ProxyNodeDialog {
                 }
               }
             }
-            if (this.form.type === 'vless') Text('支持标准 VLESS TCP / TLS / WebSocket 和 UDP；Reality、Vision、XUDP 及额外加密尚不支持。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
+            if (this.form.type === 'vless') Text('支持标准 VLESS TCP / TLS / WebSocket、原始 UDP 和 XUDP；Reality、Vision 及额外加密尚不支持。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
             if (this.form.type === 'ss' && this.form.cipher.startsWith('2022-')) Text(this.form.cipher === '2022-blake3-aes-128-gcm' ? '密码需为 16 字节密钥的 Base64；AES 多用户密钥按“身份密钥:用户密钥”填写。' : this.form.cipher === '2022-blake3-aes-256-gcm' ? '密码需为 32 字节密钥的 Base64；AES 多用户密钥按“身份密钥:用户密钥”填写。' : '密码需为 32 字节密钥的 Base64。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
             if (this.form.type === 'http') Text('HTTP / HTTPS 出站使用 CONNECT 隧道，仅支持 TCP。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');
             if (this.form.type === 'socks5') Text('UDP 需要服务器支持 UDP ASSOCIATE；TLS 保护 TCP 控制连接，UDP 使用原生 SOCKS5 数据报。').fontSize(this.theme.font(11)).fontFamily(this.theme.fontFamily).fontColor(this.theme.textMuted).width('100%');

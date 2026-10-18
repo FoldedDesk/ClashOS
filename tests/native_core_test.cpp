@@ -430,13 +430,17 @@ void latencyAndRuleTests() {
 #include "dialer_proxy_test.inc"
 #include "tls_failure_test.inc"
 #include "connection_trace_test.inc"
+#include "xudp_core_test.inc"
 volatile std::sig_atomic_t serveStopped=0;
 
 int main(int argc, char** argv) {
     std::signal(SIGPIPE, SIG_IGN);
     try {
-        if(argc==4&&std::string(argv[1])=="serve") {
+        if((argc==4||argc==5)&&std::string(argv[1])=="serve") {
             const int port=std::atoi(argv[3]);
+            // Explicit trust input belongs only to this host test executable.
+            const std::string roots=argc==5?readTestFile(argv[4]):"";
+            if(argc==5){require(!roots.empty(),"Reference CA file must not be empty");g_testVmessTrust=roots.c_str();}
             std::signal(SIGTERM,[](int){serveStopped=1;});std::signal(SIGINT,[](int){serveStopped=1;});
             require(startCore(argv[2],port),"Production core could not start its real loopback listeners");
             while(!serveStopped)std::this_thread::sleep_for(std::chrono::milliseconds(25));
@@ -460,6 +464,7 @@ int main(int argc, char** argv) {
             std::cout << output; return 0;
         }
         if (argc == 4 && std::string(argv[3]) == "connection-trace") { connectionTraceTests(); std::cout << "PASS " << checks << " connection trace assertions (actual duplex, independent JSON, EOF/authentication controls)\n"; return 0; }
+        if (argc == 4 && std::string(argv[3]) == "xudp") { xudpTests(argv[2]); std::cout << "PASS " << checks << " XUDP assertions\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "archive") { backupCodecTests(argv[2]); std::cout << "PASS " << checks << " archive assertions\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "network-backup") { networkBackupTests(argv[2]); std::cout << "PASS " << checks << " network backup assertions\n"; return 0; }
         if (argc == 4 && std::string(argv[3]) == "editor-providers") { editorProviderReferenceTests(argv[2]); std::cout << "PASS " << checks << " editor provider assertions\n"; return 0; }
@@ -482,7 +487,7 @@ int main(int argc, char** argv) {
             std::cout << "PASS " << checks << " " << argv[3] << " assertions (shipping YAML/Zstandard/Mbed TLS backends)\n";
             return 0;
         }
-        connectionTraceTests(); ssIncrementalTests(); ssDuplexTests(argv[2]); ss2022Tests(argv[2]); yamlMergeTests(argv[2]); snifferTests(argv[2]); inboundTests(argv[2]); controllerConfigTests(argv[2]); backupCodecTests(argv[2]); controllerApiTests(argv[2]); controllerAuthTests(argv[2]);controllerStateTests(argv[2]); configScriptTests(argv[2]); configMergeTests(argv[2]); shareLinkTests(); objectEditsTests(argv[2]); ruleEditsTests(argv[2]); protocolTests(); configurationTests(argv[1], argv[2]); httpIngressTests(argv[2]); latencyAndRuleTests();
+        xudpTests(argv[2]); connectionTraceTests(); ssIncrementalTests(); ssDuplexTests(argv[2]); ss2022Tests(argv[2]); yamlMergeTests(argv[2]); snifferTests(argv[2]); inboundTests(argv[2]); controllerConfigTests(argv[2]); backupCodecTests(argv[2]); controllerApiTests(argv[2]); controllerAuthTests(argv[2]);controllerStateTests(argv[2]); configScriptTests(argv[2]); configMergeTests(argv[2]); shareLinkTests(); objectEditsTests(argv[2]); ruleEditsTests(argv[2]); protocolTests(); configurationTests(argv[1], argv[2]); httpIngressTests(argv[2]); latencyAndRuleTests();
         udpProtocolTests(); udpForwardingTests(); vlessTests(argv[2]); forwardProxyTests(argv[2]); dialerProxyTests(argv[2]); tlsFailureTests();
         vmessTests(argv[2]);httpsProbeTests();groupHealthTests(argv[2]);providerTests(argv[2]);loadBalanceTests(argv[2]);ssAeadTests();trojanTests(argv[2]);ruleProviderTests(argv[2]);dnsHostsTests(argv[2]);vmessDuplexTests(argv[2]);dnsTests(argv[2]);dnsListenerTests(argv[2]);geoTests(argv[2]);proxyPortTests(argv[2]);
         networkBackupTests(std::string(argv[2]) + "/network-backup");

@@ -86,6 +86,15 @@ void objectEditsTests(const std::string& directory)
     require(objectDraftJson("proxies", vmess, "{\"port\":null}").find("\"error\":\"\"") == std::string::npos, "Removing required fields must fail final draft validation");
     require(objectDraftJson("proxies", vmess, "{\"port\":null}", false).find("\"error\":\"\"") != std::string::npos, "Advanced mode may inspect an incomplete draft without saving it");
     require(objectDraftJson("unknown", "{}", "").find("Unknown editor") != std::string::npos, "Draft API must reject unknown collection types");
+    for(const std::string protocol:{"vmess","vless"}) {
+        const std::string encoded="{name: public-xudp, type: "+protocol+", server: public.invalid, port: 443, uuid: 11111111-2222-4333-8444-555555555555, xudp: true}";
+        const auto decoded=objectDraftJson("proxies",encoded,"");
+        require(decoded.find("\"error\":\"\"")!=std::string::npos&&decoded.find("\"packetEncoding\":\"xudp\"")!=std::string::npos,"Visual node forms reflect the effective legacy XUDP alias");
+        const auto legacy=objectDraftJson("proxies",encoded,R"({"packet-encoding":null,"xudp":null})");
+        require(legacy.find("\"error\":\"\"")!=std::string::npos&&legacy.find("\"packetEncoding\":\"\"")!=std::string::npos,"Selecting original UDP encoding clears its legacy alias rather than reactivating XUDP");
+        const auto saved=objectDraftJson("proxies",encoded,R"({"packet-encoding":"xudp","xudp":null})");
+        require(saved.find("\"error\":\"\"")!=std::string::npos&&saved.find("\"packetEncoding\":\"xudp\"")!=std::string::npos,"Canonical XUDP form edits remain loadable after raw-mode normalization");
+    }
     const std::string ss = "{name: Public, type: ss, server: fixture.test, port: 443, cipher: aes-128-gcm, password: fixture}";
     const std::string password = objectDraftJson("proxies", ss, "{\"password\":\"null\"}");
     require(password.find("\"error\":\"\"") != std::string::npos && password.find("\\\"null\\\"") != std::string::npos, "Literal null passwords must remain strings rather than erase instructions");

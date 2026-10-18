@@ -121,13 +121,13 @@ struct VmessSession {
     size_t receiveOffset=0, responseLength=65536, frameLength=65536, framePadding=0;
     explicit VmessSession(int fd) : transport(fd) {}
     bool makeHeader(const ProxyNode& node, const std::string& host, int port, bool udp, uint64_t timestamp,
-        const VmBytes& random, VmBytes& wire) {
+        const VmBytes& random, VmBytes& wire, bool mux = false) {
         const VmBytes id = vmUuid(node.uuid);
-        if (id.size() != 16 || random.size() != 64 || port < 1 || port > 65535) return false;
+        if (id.size() != 16 || random.size() != 64 || (!mux && (port < 1 || port > 65535))) return false;
         const std::string cipher = lower(node.cipher);
         if (cipher.empty() || cipher == "auto" || cipher == "aes-128-gcm") security = 3;
         else if (cipher == "chacha20-poly1305") security = 4;
-        else if (cipher == "none" || cipher == "zero") { security = 5; raw = cipher == "zero" && !udp; }
+        else if (cipher == "none" || cipher == "zero") { security = 5; raw = cipher == "zero" && (!udp || mux); }
         else return false;
         aead = node.alterId == 0;
         requestKey.assign(random.begin(), random.begin() + 16);
@@ -140,7 +140,9 @@ struct VmessSession {
         command.push_back(responseAuth); command.push_back(raw ? 0 : security == 5 ? 5 : 13);
         const unsigned char padding = random[33] & 15;
         command.push_back(static_cast<unsigned char>((padding << 4) | security));
-        command.push_back(0); command.push_back(udp ? 2 : 1); vmUint(command, port, 2);
+        command.push_back(0); command.push_back(mux ? 3 : udp ? 2 : 1);
+        if (!mux) {
+        vmUint(command, port, 2);
         in_addr ipv4{}; in6_addr ipv6{};
         if (inet_pton(AF_INET, host.c_str(), &ipv4) == 1) {
             command.push_back(1); const auto* bytes = reinterpret_cast<const unsigned char*>(&ipv4); command.insert(command.end(), bytes, bytes + 4);
@@ -149,6 +151,7 @@ struct VmessSession {
         } else {
             if (host.empty() || host.size() > 255 || host.find('\0') != std::string::npos) return false;
             command.push_back(2); command.push_back(host.size()); vmAppend(command, vmBytes(host));
+        }
         }
         command.insert(command.end(), random.begin() + 49, random.begin() + 49 + padding);
         vmUint(command, vmFnv(command), 4);
@@ -180,11 +183,12 @@ struct VmessSession {
             vmKdf(key, {vmBytes("VMess Header AEAD Nonce"), encryptedAuth, nonce}, 12), encryptedAuth, command, encrypted)) return false;
         vmAppend(wire, encrypted); return true;
     }
-    bool start(const ProxyNode& node, const std::string& host, int port, bool udp, std::string& error) {
+    bool start(const ProxyNode& node, const std::string& host, int port, bool udp, std::string& error, bool mux = false) {
+        if (!node.transportError.empty()) { error = node.transportError; return false; }
         VmBytes random(64), header;
         if (!randomBytes(random)) { error = "VMess random source failed"; return false; }
         const uint64_t timestamp = static_cast<uint64_t>(std::time(nullptr) + static_cast<int>(random[48] % 61) - 30);
-        if (!makeHeader(node, host, port, udp, timestamp, random, header)) { error = "Unsupported VMess cipher or invalid UUID/target"; return false; }
+        if (!makeHeader(node, host, port, udp, timestamp, random, header, mux)) { error = "Unsupported VMess cipher or invalid UUID/target"; return false; }
         if (node.network != "tcp" && node.network != "ws") { error = "Unsupported VMess transport: " + node.network; return false; }
         const char* roots = nullptr;
 #ifdef CLAHSOS_HOST_TEST

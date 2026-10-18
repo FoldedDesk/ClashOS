@@ -284,6 +284,7 @@ struct UdpFlow {
     std::unique_ptr<VmessSession> vmess;
     std::unique_ptr<TrojanSession> trojan;
     std::unique_ptr<VlessSession> vless;
+    std::unique_ptr<XudpSession> xudp;
     std::unique_ptr<ForwardProxySession> socksControl;
     int socksControlFd = -1;
     std::thread streamThread;
@@ -295,6 +296,7 @@ struct UdpFlow {
     bool cancelled() const { return internal ? streamStopping.load()||!g_state.running.load() : udpConnectionCancelled(fd); }
     void transferred(bool up,size_t bytes){if(!internal)recordTransfer(fd,up,bytes);}
     size_t payloadLimit() const {
+        if(xudp)return UDP_MAX_PACKET;
         if(vmess)return 1966;
         if(vless||trojan)return UDP_MAX_PACKET;
         const size_t overhead=node.type=="ss"?(ss2022?ss2022->overhead():shadowsocksKeySize(shadowsocksCipher(node.cipher))+16)+shadowsocksAddress(host,port).size():socksControl?3+shadowsocksAddress(host,port).size():0;
@@ -353,7 +355,7 @@ struct UdpFlow {
     void runStream() {
         bool ok = true;
         while (ok && g_state.running.load() && !streamStopping.load()) {
-            const bool buffered = vmess ? vmess->pending() : vless ? vless->pending() : trojan->pending();
+            const bool buffered = xudp ? xudp->pending() : vmess ? vmess->pending() : vless ? vless->pending() : trojan->pending();
             bool queued;
             { std::lock_guard<std::mutex> lock(streamMutex); queued = !streamInput.empty(); }
             pollfd watches[2] = {{fd, POLLIN, 0}, {notifyWorker, POLLIN, 0}};
@@ -364,16 +366,16 @@ struct UdpFlow {
             for (int count = 0; count < 16; ++count) {
                 VmBytes packet;
                 { std::lock_guard<std::mutex> lock(streamMutex); if (streamInput.empty()) break; packet=std::move(streamInput.front()); streamInput.pop_front(); }
-                const bool written = vmess ? vmess->chunk(packet.data(), packet.size()) : vless ? vless->writeDatagram(packet) : trojan->writeDatagram(host, port, packet);
+                const bool written = xudp ? xudp->writeDatagram(packet) : vmess ? vmess->chunk(packet.data(), packet.size()) : vless ? vless->writeDatagram(packet) : trojan->writeDatagram(host, port, packet);
                 if (!written) { streamError.store(errno); ok=false; break; }
                 transferred(true, packet.size());
             }
             if (!ok || streamStopping.load()) break;
             if (buffered || watches[0].revents) {
                 VmBytes packet;
-                const bool read = vmess ? vmess->read(packet, true) : vless ? vless->read(packet, true) : trojan->readDatagram(packet, true);
+                const bool read = xudp ? xudp->readDatagram(packet, true) : vmess ? vmess->read(packet, true) : vless ? vless->read(packet, true) : trojan->readDatagram(packet, true);
                 if (!read) { if (errno == EAGAIN || errno == EWOULDBLOCK || (trojan && errno == EMSGSIZE)) continue; streamError.store(errno); break; }
-                if (packet.size() <= UDP_MAX_PACKET - (trojan ? 3 : 0)) {
+                if (packet.size() <= (xudp ? UDP_MAX_ENVELOPE : UDP_MAX_PACKET - (trojan ? 3 : 0))) {
                     { std::lock_guard<std::mutex> lock(streamMutex); if (streamOutput.size() >= 64) streamOutput.pop_front(); streamOutput.push_back(std::move(packet)); }
                     notify(notifyWorker);
                 }
@@ -404,7 +406,7 @@ std::string udpFlowKey(const UdpTarget& target, const ProxyNode& node)
         std::to_string(node.revision) + '\0' + node.matchedRule;
 }
 
-std::unique_ptr<UdpFlow> openUdpFlow(int owner, const UdpTarget& target, const ProxyNode& node,bool internal=false)
+std::unique_ptr<UdpFlow> openUdpFlow(int owner, const UdpTarget& target, const ProxyNode& node,bool internal=false,const VmBytes& globalId={})
 {
     if (!supportsUdp(node)) return nullptr;
     DestinationDnsScope dnsScope(node);
@@ -451,10 +453,10 @@ std::unique_ptr<UdpFlow> openUdpFlow(int owner, const UdpTarget& target, const P
         bool opened;
         if (node.type == "vmess") {
             flow->vmess = std::make_unique<VmessSession>(flow->fd);
-            opened = flow->vmess->start(node, flow->host, target.port, true, error);
+            opened = flow->vmess->start(node, flow->host, target.port, true, error, node.packetEncoding == "xudp");
         } else if (node.type == "vless") {
             flow->vless = std::make_unique<VlessSession>(flow->fd);
-            opened = flow->vless->start(node, flow->host, target.port, true, error);
+            opened = flow->vless->start(node, flow->host, target.port, true, error, node.packetEncoding == "xudp");
         } else {
             flow->trojan = std::make_unique<TrojanSession>(flow->fd);
             opened = flow->trojan->start(node, flow->host, target.port, true, error);
@@ -463,6 +465,13 @@ std::unique_ptr<UdpFlow> openUdpFlow(int owner, const UdpTarget& target, const P
             coreLog("warning", node.type + " UDP startup failed: " + error); return nullptr;
         }
         // One worker owns both TLS directions; mbedtls_ssl_context is never shared concurrently.
+        if(node.packetEncoding == "xudp" && (flow->vmess || flow->vless)) {
+            UdpFlow* session=flow.get();
+            flow->xudp=std::make_unique<XudpSession>(flow->host,target.port,flow->originalHost,globalId,
+                [session](const unsigned char* data,size_t size){return session->vmess?session->vmess->write(data,size):session->vless->write(data,size);},
+                [session](VmBytes& bytes,bool nonblocking){return session->vmess?session->vmess->read(bytes,nonblocking):session->vless->read(bytes,nonblocking);},
+                [session](){return session->vmess?session->vmess->pending():session->vless->pending();});
+        }
         socketTimeout(flow->fd, 60000);
     } else flow->fd = datagram(node.type == "direct" ? flow->host : node.server,
         node.type == "direct" ? target.port : node.port, node.type=="direct"?DnsPurpose::Direct:DnsPurpose::Proxy);
@@ -482,7 +491,7 @@ bool writeUdpFlow(UdpFlow& flow, const std::vector<unsigned char>& packet, const
     std::vector<unsigned char> wire(packet.begin() + payloadOffset, packet.end());
     if(wire.size()>flow.payloadLimit())return false;
     if (flow.streamed()) {
-        if ((flow.vmess && (wire.empty() || wire.size() > 1966)) || wire.size() > 65535 ||
+        if ((flow.vmess && !flow.xudp && (wire.empty() || wire.size() > 1966)) || wire.size() > 65535 ||
             (flow.socksControl && wire.size() + 3 + shadowsocksAddress(flow.host, flow.port).size() > UDP_MAX_PACKET) || flow.streamStopped.load()) return false;
         { std::lock_guard<std::mutex> lock(flow.streamMutex); if (flow.streamInput.size() >= 64) return false; flow.streamInput.push_back(std::move(wire)); }
         UdpFlow::notify(flow.notifyMain); flow.lastActivity = UdpClock::now(); return true;
@@ -515,7 +524,7 @@ bool readUdpFlow(UdpFlow& flow, std::vector<unsigned char>& reply, size_t& paylo
           }
           packet=std::move(flow.streamOutput.front());flow.streamOutput.pop_front(); }
         reply.assign(3,0);
-        if (flow.trojan || flow.socksControl) {
+        if (flow.trojan || flow.socksControl || flow.xudp) {
             UdpTarget source;
             if (!parseUdpAddress(packet, 0, source)) { errno = EPROTO; return false; }
             payloadSize = packet.size() - source.headerSize;
@@ -612,6 +621,7 @@ void handleUdpAssociate(int client, const std::string& requestedHost, int reques
     UdpClientPin pin;
     pin.peer = peer; pin.requestedPort = requestedPort;
     std::map<std::string, std::unique_ptr<UdpFlow>> flows;
+    VmBytes xudpGlobalId; // One random identity per pinned SOCKS association; never persisted or logged.
     auto lastActivity = UdpClock::now();
     auto lastWarning = UdpClock::time_point::min();
     auto warn = [&](const std::string& message) {
@@ -643,7 +653,7 @@ void handleUdpAssociate(int client, const std::string& requestedHost, int reques
         if(!proxyDestination(node,udpDestinationHost(target),destination,error)){warn("UDP hosts mapping failed: "+error);return;}
         if (node.type == "ss" && packet.size() - 3 - target.headerSize + shadowsocksAddress(destination, target.port).size() > UDP_MAX_PACKET - ss2022UdpOverhead(node)) return;
         if (node.type == "socks5" && packet.size() - target.headerSize + shadowsocksAddress(destination, target.port).size() > UDP_MAX_PACKET) return;
-        if (node.type == "vmess" && (packet.size() == 3 + target.headerSize || packet.size() - 3 - target.headerSize > 1966)) {
+        if (node.type == "vmess" && node.packetEncoding != "xudp" && (packet.size() == 3 + target.headerSize || packet.size() - 3 - target.headerSize > 1966)) {
             warn("VMess UDP payload must be between 1 and 1966 bytes"); return;
         }
         const std::string key = udpFlowKey(target, node);
@@ -658,7 +668,11 @@ void handleUdpAssociate(int client, const std::string& requestedHost, int reques
                 });
                 flows.erase(oldest);
             }
-            auto flow = openUdpFlow(client, target, node);
+            if(node.packetEncoding == "xudp" && xudpGlobalId.empty()) {
+                xudpGlobalId.resize(8);
+                if(!randomBytes(xudpGlobalId)){xudpGlobalId.clear();warn("XUDP random source unavailable");return;}
+            }
+            auto flow = openUdpFlow(client, target, node, false, xudpGlobalId);
             if (flow == nullptr) { warn("Cannot open UDP outbound via " + node.name); return; }
             found = flows.emplace(key, std::move(flow)).first;
         }

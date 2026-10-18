@@ -9,7 +9,7 @@ export interface ObjectEditorSnapshot { error: string; proxies: ObjectSnapshotSe
 
 export interface ProxyNodeForm {
   name: string; type: string; server: string; port: string; username: string; password: string; uuid: string; cipher: string; alterId: string; dialerProxy: string;
-  tls: boolean; udp: boolean; skipCertVerify: boolean; serverName: string; network: string; wsPath: string; wsHost: string;
+  tls: boolean; udp: boolean; skipCertVerify: boolean; serverName: string; network: string; wsPath: string; wsHost: string; packetEncoding: string;
 }
 export interface ProxyGroupForm {
   icon: string; hidden: boolean;
@@ -22,7 +22,7 @@ export interface ProxyGroupDraft { error: string; item: EditorObjectView; form: 
 
 export function defaultProxyNodeForm(): ProxyNodeForm {
   return { name: '', type: 'ss', server: '', port: '443', username: '', password: '', uuid: '', cipher: 'aes-128-gcm', alterId: '0', dialerProxy: '', tls: false, udp: true,
-    skipCertVerify: false, serverName: '', network: 'tcp', wsPath: '/', wsHost: '' };
+    skipCertVerify: false, serverName: '', network: 'tcp', wsPath: '/', wsHost: '', packetEncoding: '' };
 }
 export function defaultProxyGroupForm(): ProxyGroupForm {
   return { name: '', type: 'select', icon: '', hidden: false, members: ['DIRECT'], providers: [], url: 'https://www.gstatic.com/generate_204', interval: '300', timeout: '5000', tolerance: '50',

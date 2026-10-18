@@ -73,7 +73,7 @@ with tempfile.TemporaryDirectory(prefix='clashos-ss2022-network-') as temp:
             processes.append(subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=log))
         peer_version, native_version = ready(processes[0], 19094), ready(processes[1], 19090)
         check(peer_version['version'] == 'v1.19.32', 'The independent server must be the pinned release')
-        check('Core 0.44' in native_version['version'], 'The production SS2022 implementation must be running')
+        check('Core 0.45' in native_version['version'], 'The production SS2022 implementation must be running')
         group = urllib.parse.quote('SS2022 public', safe='')
         for node in client['proxies']:
             api(19090, '/proxies/' + group, {'name': node['name']})

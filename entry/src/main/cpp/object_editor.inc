@@ -138,6 +138,7 @@ std::string editorFormJson(yaml_document_t& document, yaml_node_t* root, bool gr
         const std::string type = lower(text(root, "type")); ProxyNode defaults;
         for (const char* field : {"server", "port", "username", "password", "uuid", "cipher", "alterId"}) result += ",\"" + std::string(field) + "\":" + editorQuoted(text(root, field));
         result += ",\"dialerProxy\":" + editorQuoted(text(root, "dialer-proxy"));
+        result += ",\"packetEncoding\":" + editorQuoted(flag("xudp") ? "xudp" : lower(text(root, "packet-encoding")));
         std::string sni = text(root, "servername"); if (sni.empty()) sni = text(root, "sni");
         std::string network = text(root, "network"); if (network.empty()) network = defaults.network;
         auto* ws = yamlValue(document, root, "ws-opts"); std::string path = text(ws, "path"); if (path.empty()) path = defaults.wsPath;

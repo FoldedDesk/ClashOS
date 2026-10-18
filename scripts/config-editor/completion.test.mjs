@@ -16,6 +16,15 @@ function fixture(source,language='yaml') {
   return {result,labels:result?.options.map(x=>x.label)||[],apply(label){const option=result?.options.find(x=>x.label===label);assert(option,'Missing '+label);option.apply(view);return state.doc.toString();},undo(){assert(undo(view));return serializeDocument(state.doc,baseline,text);},text};
 }
 const nodes='proxies:\n  - {name: Public, type: ss}\n  - {name: "🇯🇵 日本 #1", type: trojan}\n';
+for(const protocol of ['vmess','vless'])for(const language of ['yaml','json'])test('XUDP encoding completion preserves valid documents and exact undo: '+protocol+' '+language,()=>{
+  const text=language==='yaml'?`proxies: [{name: Public, type: ${protocol}, packet-encoding: ¦}]`:`{"proxies":[{"name":"Public","type":"${protocol}","packet-encoding":¦}]}`;
+  const f=fixture(text,language);assert(f.labels.includes('xudp'));const changed=f.apply('xudp');
+  if(language==='json')assert.equal(JSON.parse(changed).proxies[0]['packet-encoding'],'xudp');else assert(changed.includes('packet-encoding: xudp'));
+  assert.equal(f.undo(),f.text);
+});
+for(const protocol of ['ss','trojan','http','socks5'])test('Other protocols do not offer an unsupported XUDP value: '+protocol,()=>{
+  assert(!fixture(`proxies: [{type: ${protocol}, packet-encoding: ¦}]`).labels.includes('xudp'));
+});
 for(const language of ['yaml','json'])test('Dialer references preserve exact Unicode names and support undo: '+language,()=>{
   const f=fixture(language==='yaml'?nodes+'proxy-groups: [{name: Gateway, proxies: [Public]}]\nproxy-providers: {P: {type: inline, payload: [{name: Exit, type: ss, dialer-proxy: ¦}]}}':JSON.stringify({proxies:[{name:'Public',type:'ss'},{name:'🇯🇵 日本 #1',type:'trojan'},{name:'Exit',type:'ss','dialer-proxy':'¦'}],'proxy-groups':[{name:'Gateway',proxies:['Public']}]}),language);
   for(const label of ['Public','🇯🇵 日本 #1','Gateway','DIRECT'])assert(f.labels.includes(label),label);

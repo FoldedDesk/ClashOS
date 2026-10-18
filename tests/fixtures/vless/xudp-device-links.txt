@@ -1,0 +1,6 @@
+vless://11111111-2222-4333-8444-555555555555@127.0.0.1:18097?encryption=none&type=tcp&security=none&packetEncoding=xudp#XUDP-device-TCP
+vless://11111111-2222-4333-8444-555555555555@127.0.0.1:18098?encryption=none&type=tcp&security=tls&sni=vmess.test&allowInsecure=1&packetEncoding=xudp#XUDP-device-TLS
+vless://11111111-2222-4333-8444-555555555555@127.0.0.1:18097?encryption=none&type=ws&security=none&host=cdn.test&path=%2Fvless-device&packetEncoding=xudp#XUDP-device-WS
+vless://11111111-2222-4333-8444-555555555555@127.0.0.1:18098?encryption=none&type=ws&security=tls&sni=vmess.test&allowInsecure=1&host=cdn.test&path=%2Fvless-device&packetEncoding=xudp#XUDP-device-WS-TLS
+vless://21111111-2222-4333-8444-555555555555@127.0.0.1:18097?encryption=none&type=tcp&security=none&packetEncoding=xudp#XUDP-device-wrong-UUID
+vless://11111111-2222-4333-8444-555555555555@127.0.0.1:18098?encryption=none&type=tcp&security=tls&sni=vmess.test&packetEncoding=xudp#XUDP-device-untrusted-TLS

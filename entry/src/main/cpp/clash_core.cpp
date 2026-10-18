@@ -138,6 +138,7 @@ struct ProxyNode {
     int alterId = 0;
     bool tls = false;
     std::string network = "tcp";
+    std::string packetEncoding;
     std::string wsPath = "/";
     std::map<std::string, std::string> wsHeaders;
     std::string serverName;
@@ -828,7 +829,7 @@ bool parseProxyNode(yaml_document_t& document,yaml_node_t* source,ProxyNode& nod
                     }
                 }
                 if (!valid) break;
-                for (const char* option : {"reality-opts", "flow", "packet-encoding", "fingerprint", "name-cert-verify", "client-fingerprint", "http-opts", "h2-opts", "grpc-opts", "xhttp-opts"}) {
+                for (const char* option : {"reality-opts", "flow", "fingerprint", "name-cert-verify", "client-fingerprint", "http-opts", "h2-opts", "grpc-opts", "xhttp-opts"}) {
                     yaml_node_t* configured = yamlValue(document, source, option);
                     if (configured != nullptr && (configured->type != YAML_SCALAR_NODE || !yamlText(configured).empty()))
                         node.transportError = std::string("Unsupported VLESS option: ") + option;
@@ -842,6 +843,26 @@ bool parseProxyNode(yaml_document_t& document,yaml_node_t* source,ProxyNode& nod
                     const std::string configured = value(ws, option);
                     if (!configured.empty() && configured != "0") node.transportError = std::string("Unsupported VLESS WebSocket option: ") + option;
                 }
+            }
+            if (node.type == "vmess" || node.type == "vless") {
+                const auto* encoding = yamlValue(document, source, "packet-encoding");
+                node.packetEncoding = lower(value(source, "packet-encoding"));
+                if ((encoding && encoding->type != YAML_SCALAR_NODE) ||
+                    (!node.packetEncoding.empty() && node.packetEncoding != "xudp"))
+                    node.transportError = "Unsupported UDP packet encoding";
+                for (const char* option : {"xudp", "packet-addr"}) {
+                    const auto* flag = yamlValue(document, source, option);
+                    if (!flag) continue;
+                    const auto setting = lower(yamlText(const_cast<yaml_node_t*>(flag)));
+                    if (flag->type != YAML_SCALAR_NODE || (setting != "true" && setting != "false")) {
+                        valid = false; error = std::string(option) + " must be true or false"; break;
+                    }
+                    if (setting == "true") {
+                        if (std::string(option) == "xudp") node.packetEncoding = "xudp";
+                        else node.transportError = "Unsupported UDP packet encoding: packetaddr";
+                    }
+                }
+                if (!valid) break;
             }
             if (node.type == "http" || node.type == "socks5") {
                 for (const char* option : {"tls", "udp", "skip-cert-verify"}) {
@@ -1572,8 +1593,8 @@ std::string responseFor(const std::string& method, const std::string& path, cons
     if (path.substr(0, path.find('?')) == "/clashos/ports") return proxyPortsControlLocked(method, path, body);
     if (path.substr(0, path.find('?')) == "/clashos/inbound") return inboundControlLocked(method, path, body);
     if (method == "GET" && path == "/version") {
-        return "{\"version\":\"ClashOS Core 0.44 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
-            "\",\"premium\":false,\"meta\":true,\"features\":[\"http-message-framing\",\"http-upgrade\",\"yaml-merge-keys\",\"dialer-proxy\",\"dialer-proxy-udp\",\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"shadowsocks-2022\",\"ss2022-identity-headers\",\"vmess\",\"vless\",\"trojan\",\"http-outbound\",\"socks5-outbound\",\"socks5-udp\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
+        return "{\"version\":\"ClashOS Core 0.45 native\",\"instance\":\"" + jsonEscape(g_state.instance) +
+            "\",\"premium\":false,\"meta\":true,\"features\":[\"xudp\",\"http-message-framing\",\"http-upgrade\",\"yaml-merge-keys\",\"dialer-proxy\",\"dialer-proxy-udp\",\"direct\",\"shadowsocks-aes-128-gcm\",\"shadowsocks-aes-256-gcm\",\"shadowsocks-chacha20-ietf-poly1305\",\"shadowsocks-2022\",\"ss2022-identity-headers\",\"vmess\",\"vless\",\"trojan\",\"http-outbound\",\"socks5-outbound\",\"socks5-udp\",\"tls\",\"websocket\",\"udp\",\"rules\",\"connections\",\"controller-auth\",\"lan\",\"proxy-auth\",\"inbound-acl\",\"sniffer-http\",\"sniffer-tls\",\"sniffer-quic\",\"group-icons\",\"proxy-details\",\"traffic-http\",\"traffic-ws\",\"memory-http\",\"memory-ws\",\"logs-http\",\"logs-ws\",\"connections-ws\",\"delay\",\"https-delay\",\"url-test\",\"fallback\",\"proxy-providers\",\"rule-providers\",\"rule-set\",\"mrs\",\"dns\",\"dns-query\",\"dns-listener\",\"dns-proxy-udp\",\"load-balance\",\"geoip\",\"geosite\",\"ip-asn\",\"geodata\",\"re2\"]}";
     }
     if (method == "GET" && path == "/clahsos/diagnostics") return diagnosticsJson();
     const std::string resource=path.substr(0,path.find('?'));
@@ -2437,6 +2458,7 @@ bool connectShadowsocks(const ProxyNode& node, const std::string& host, int port
 #include "vmess_protocol.inc"
 #include "trojan_protocol.inc"
 #include "vless_protocol.inc"
+#include "xudp_protocol.inc"
 #include "forward_proxy_protocol.inc"
 
 struct DialerBridge;
