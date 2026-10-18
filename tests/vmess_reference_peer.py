@@ -81,7 +81,7 @@ class Wire:
         self.conn.sendall(b'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: keep-alive, Upgrade\r\nSec-WebSocket-Accept: '+accept+b'\r\n\r\n')
         self.ws=True
 
-def decode_header(wire, alter, target_host="target.test", target_port=443, mux=False):
+def decode_header(wire, alter, target_host="target.test", target_port=443, mux=False, fresh_legacy=False):
     auth=wire.exact(16); command_key=hashlib.md5(ID+b'c48619fe-8f02-49e0-b9e9-edf763e17e21').digest()
     if alter==0:
         auth_plain=Cipher(algorithms.AES(kdf(command_key,b'AES Auth ID Encryption')[:16]),modes.ECB()).decryptor().update(auth)
@@ -98,6 +98,8 @@ def decode_header(wire, alter, target_host="target.test", target_port=443, mux=F
             raw=stamp.to_bytes(8,'big')
             if any(hmac.digest(value,raw,'md5')==auth for value in ids):found=raw;break
         assert found is not None, 'Legacy auth must use configured alternate IDs'
+        if fresh_legacy:
+            assert int.from_bytes(found, 'big') >= int(time.time()) - 1, 'Legacy request timestamp predates the rolling server cache window'
         decryptor=Cipher(algorithms.AES(command_key),modes.CFB(hashlib.md5(found*4).digest())).decryptor()
         command=decryptor.update(wire.exact(38));count=0
         if command[37]!=3:
@@ -181,6 +183,8 @@ def main():
     fd,alter,transport,failure=int(sys.argv[1]),int(sys.argv[2]),sys.argv[3],sys.argv[4]
     conn=socket.socket(fileno=fd);conn.settimeout(8)
     if 'tls' in transport:
+        if failure == 'legacy-fresh':
+            time.sleep(2.2)  # Authentication must be generated after a slow transport handshake.
         context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         directory=Path(__file__).parent/'fixtures/vmess'
         context.load_cert_chain(directory/'server.pem',directory/'server-key.pem')
@@ -195,7 +199,7 @@ def main():
     if 'ws' in transport:
         wire.upgrade(failure=='ws-accept')
         if failure=='ws-accept':return
-    command=decode_header(wire,alter)
+    command=decode_header(wire,alter,fresh_legacy=failure == 'legacy-fresh')
     request=read_request(wire,command)
     expected=[PAYLOAD[:512],PAYLOAD[-1024:]] if command[37]==2 else PAYLOAD
     assert request==expected, 'VMess request payload or datagram boundaries were not preserved'

@@ -122,7 +122,7 @@ def main():
         channel = Channel(wire)
     else:
         alter = 64 if scenario == 5 else 0
-        command = decode_header(wire, alter, mux=True)
+        command = decode_header(wire, alter, mux=True, fresh_legacy=True)
         assert (command[35] & 15) == {1: 3, 2: 4, 3: 5, 4: 5, 5: 3}[scenario]
         channel = Channel(wire, command, alter)
     if fault == 'record':

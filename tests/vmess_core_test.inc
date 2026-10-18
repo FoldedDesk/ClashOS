@@ -86,6 +86,7 @@ void vmessTests(const std::string& directory) {
     };
     for(int alter:{0,1,3})for(const std::string transport:{"tcp","ws","tls","ws-tls"})exercise(alter,transport,"auto","");
     for(const std::string cipher:{"aes-128-gcm","chacha20-poly1305","none","zero"})exercise(0,"tcp",cipher,"");
+    for(const std::string transport:{"tls","ws-tls"})exercise(64,transport,"auto","legacy-fresh");
     exercise(0,"tls","auto","tls-reject-ca");exercise(0,"tls","auto","tls-reject-host");exercise(0,"tls","auto","skip-cert");
     exercise(0,"ws","auto","ws-accept");
     for(int alter:{0,1})for(const std::string fault:{"auth","tag"})exercise(alter,"ws","auto",fault);

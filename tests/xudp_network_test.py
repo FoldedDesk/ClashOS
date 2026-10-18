@@ -342,7 +342,7 @@ def main():
             print('Owned public fixture ports: ' + json.dumps({'listeners': server.get('listeners'),
                 'reference': reference.get('listeners'), 'echoes': [echo.port for echo in echoes]}), flush=True)
             try:
-                print('Native public fixture diagnostics: ' + json.dumps(api(controller, '/logs'))[-6000:], flush=True)
+                print('Native public fixture diagnostics: ' + json.dumps(api(controller, '/clahsos/logs'))[-6000:], flush=True)
             except Exception as diagnostic_error:
                 print('Native diagnostic read failed: ' + type(diagnostic_error).__name__, flush=True)
             for log in logs:

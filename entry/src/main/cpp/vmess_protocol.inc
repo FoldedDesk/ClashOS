@@ -187,7 +187,7 @@ struct VmessSession {
         if (!node.transportError.empty()) { error = node.transportError; return false; }
         VmBytes random(64), header;
         if (!randomBytes(random)) { error = "VMess random source failed"; return false; }
-        const uint64_t timestamp = static_cast<uint64_t>(std::time(nullptr) + static_cast<int>(random[48] % 61) - 30);
+        const uint64_t timestamp = static_cast<uint64_t>(std::time(nullptr));
         if (!makeHeader(node, host, port, udp, timestamp, random, header, mux)) { error = "Unsupported VMess cipher or invalid UUID/target"; return false; }
         if (node.network != "tcp" && node.network != "ws") { error = "Unsupported VMess transport: " + node.network; return false; }
         const char* roots = nullptr;
@@ -196,6 +196,12 @@ struct VmessSession {
 #endif
         if (node.tls && !transport.channel.start(node.serverName.empty() ? node.server : node.serverName, node.skipCertVerify, error, roots)) return false;
         if (node.network == "ws" && !transport.startWebSocket(node, error)) return false;
+        // Validate before the handshake, then refresh the unsent authentication
+        // header. Legacy servers can discard older timestamp keys on rotation.
+        const uint64_t sendTimestamp = static_cast<uint64_t>(std::time(nullptr));
+        if (sendTimestamp != timestamp && !makeHeader(node, host, port, udp, sendTimestamp, random, header, mux)) {
+            error = "Cannot refresh VMess request authentication"; return false;
+        }
         if (!transport.write(header)) { error = "Cannot write VMess request header"; return false; }
         return true;
     }
